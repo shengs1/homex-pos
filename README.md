@@ -1,6 +1,7 @@
 Website POS cho cửa hàng đồ gia dụng
 
 1. Công nghệ sử dụng
+
 Frontend: Next.js, Tailwind CSS, shadcn/ui
 
 Backend: Express.js
