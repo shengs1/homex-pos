@@ -1,6 +1,7 @@
 Website POS cho cửa hàng đồ gia dụng
 
 Cấu Trúc Thư Mục:
+
 homex-pos/
 ├── frontend/                  # Project Next.js, đã chạy được localhost:3000
 ├── backend/                   # Project Express.js + TypeScript
