@@ -9,7 +9,11 @@ Backend: Express.js
 Database: PostgreSQL
 
 ORM: Prisma
+
 Authentication: JWT, bcrypt
+
 Validation: Zod
+
 Dashboard: Recharts
+
 Giao tiếp frontend/backend: RESTful API
