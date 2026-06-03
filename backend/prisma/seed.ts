@@ -118,6 +118,89 @@ async function main() {
     });
   }
 
+
+
+  // 5. Tạo sản phẩm mẫu
+  const productCount = await prisma.product.count();
+
+  if (productCount === 0) {
+    const kitchenCategory = await prisma.category.findFirst({
+      where: {
+        name: "Thiết bị nhà bếp",
+      },
+    });
+
+    const cleaningCategory = await prisma.category.findFirst({
+      where: {
+        name: "Thiết bị làm sạch",
+      },
+    });
+
+    const homeSupplier = await prisma.supplier.findFirst({
+      where: {
+        name: "Công ty Gia Dụng Việt",
+      },
+    });
+
+    const starSupplier = await prisma.supplier.findFirst({
+      where: {
+        name: "Nhà cung cấp Home Star",
+      },
+    });
+
+    if (kitchenCategory && cleaningCategory && homeSupplier && starSupplier) {
+      await prisma.product.createMany({
+        data: [
+          {
+            sku: "NOICOM001",
+            name: "Nồi cơm điện Homex 1.8L",
+            description: "Nồi cơm điện dung tích 1.8L phù hợp gia đình 3-5 người",
+            categoryId: kitchenCategory.id,
+            supplierId: homeSupplier.id,
+            costPrice: 550000,
+            salePrice: 790000,
+            stockQuantity: 20,
+            minStock: 5,
+            warrantyMonths: 12,
+            qrCode: "NOICOM001",
+            imageUrl: null,
+            status: "ACTIVE",
+          },
+          {
+            sku: "MAYXAY001",
+            name: "Máy xay sinh tố Homex",
+            description: "Máy xay sinh tố gia đình công suất 350W",
+            categoryId: kitchenCategory.id,
+            supplierId: homeSupplier.id,
+            costPrice: 420000,
+            salePrice: 650000,
+            stockQuantity: 15,
+            minStock: 4,
+            warrantyMonths: 12,
+            qrCode: "MAYXAY001",
+            imageUrl: null,
+            status: "ACTIVE",
+          },
+          {
+            sku: "HUTBUI001",
+            name: "Máy hút bụi mini Home Star",
+            description: "Máy hút bụi mini dùng cho phòng ngủ và phòng khách",
+            categoryId: cleaningCategory.id,
+            supplierId: starSupplier.id,
+            costPrice: 700000,
+            salePrice: 990000,
+            stockQuantity: 8,
+            minStock: 3,
+            warrantyMonths: 18,
+            qrCode: "HUTBUI001",
+            imageUrl: null,
+            status: "ACTIVE",
+          },
+        ],
+      });
+    }
+  }
+
   console.log("Seed dữ liệu ban đầu thành công!");
   console.log("Tài khoản demo:");
   console.log("- admin@homex.com / 123456");

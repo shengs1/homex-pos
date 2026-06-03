@@ -6,6 +6,7 @@ import authRoutes from "./routes/auth.routes";
 import testRoutes from "./routes/test.routes";
 import categoryRoutes from "./routes/category.routes";
 import supplierRoutes from "./routes/supplier.routes";
+import productRoutes from "./routes/product.routes";
 
 dotenv.config();
 
@@ -24,20 +25,24 @@ app.get("/api/health/db", async (req, res) => {
     const userCount = await prisma.user.count();
     const categoryCount = await prisma.category.count();
     const supplierCount = await prisma.supplier.count();
+    const productCount = await prisma.product.count();
 
     res.json({
+      success: true,
       message: "Kết nối database thành công",
       data: {
         roles: roleCount,
         users: userCount,
         categories: categoryCount,
         suppliers: supplierCount,
+        products: productCount,
       },
     });
   } catch (error) {
     console.error("Lỗi kết nối database:", error);
 
     res.status(500).json({
+      success: false,
       message: "Không thể kết nối database",
     });
   }
@@ -47,6 +52,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/suppliers", supplierRoutes);
+app.use("/api/products", productRoutes);
 
 const PORT = process.env.PORT || 5000;
 

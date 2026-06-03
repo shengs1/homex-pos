@@ -17,6 +17,7 @@ router.post("/login", async (req, res) => {
 
     if (!result.success) {
       return res.status(400).json({
+        success: false,
         message: result.error.issues[0]?.message || "Dữ liệu không hợp lệ",
       });
     }
@@ -32,12 +33,14 @@ router.post("/login", async (req, res) => {
 
     if (!user) {
       return res.status(401).json({
+        success: false,
         message: "Email hoặc mật khẩu không đúng",
       });
     }
 
     if (user.status !== "ACTIVE") {
       return res.status(403).json({
+        success: false,
         message: "Tài khoản đã bị khóa",
       });
     }
@@ -46,6 +49,7 @@ router.post("/login", async (req, res) => {
 
     if (!isPasswordValid) {
       return res.status(401).json({
+        success: false,
         message: "Email hoặc mật khẩu không đúng",
       });
     }
@@ -54,6 +58,7 @@ router.post("/login", async (req, res) => {
 
     if (!jwtSecret) {
       return res.status(500).json({
+        success: false,
         message: "Server chưa cấu hình JWT_SECRET",
       });
     }
@@ -71,6 +76,7 @@ router.post("/login", async (req, res) => {
     );
 
     return res.json({
+      success: true,
       message: "Đăng nhập thành công",
       data: {
         token,
@@ -86,6 +92,7 @@ router.post("/login", async (req, res) => {
     console.error("Lỗi đăng nhập:", error);
 
     return res.status(500).json({
+      success: false,
       message: "Lỗi server khi đăng nhập",
     });
   }

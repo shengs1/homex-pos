@@ -21,6 +21,7 @@ export function authenticateToken(
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({
+      success: false,
       message: "Bạn chưa đăng nhập",
     });
   }
@@ -30,6 +31,7 @@ export function authenticateToken(
 
   if (!jwtSecret) {
     return res.status(500).json({
+      success: false,
       message: "Server chưa cấu hình JWT_SECRET",
     });
   }
@@ -42,6 +44,7 @@ export function authenticateToken(
     next();
   } catch (error) {
     return res.status(401).json({
+      success: false,
       message: "Token không hợp lệ hoặc đã hết hạn",
     });
   }
@@ -52,12 +55,14 @@ export function authorizeRoles(...allowedRoles: string[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({
+        success: false,
         message: "Bạn chưa đăng nhập",
       });
     }
 
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({
+        success: false,
         message: "Bạn không có quyền truy cập chức năng này",
       });
     }
