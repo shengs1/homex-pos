@@ -7,6 +7,7 @@ import testRoutes from "./routes/test.routes";
 import categoryRoutes from "./routes/category.routes";
 import supplierRoutes from "./routes/supplier.routes";
 import productRoutes from "./routes/product.routes";
+import { errorMiddleware } from "./middlewares/error.middleware";
 
 dotenv.config();
 
@@ -53,6 +54,8 @@ app.use("/api/test", testRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/products", productRoutes);
+
+app.use(errorMiddleware);
 
 const PORT = process.env.PORT || 5000;
 
