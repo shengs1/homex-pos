@@ -1,0 +1,49 @@
+@baseUrl = http://localhost:5000
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoiYWRtaW5AaG9tZXguY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzgwNzYxNzUwLCJleHAiOjE3ODA4NDgxNTB9.citbCFmOmIUnaE9S4FUYtUTfrAt3GiA_nvblIC-W4bA
+@cashierToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjMsImVtYWlsIjoiY2FzaGllckBob21leC5jb20iLCJyb2xlIjoiQ0FTSElFUiIsImlhdCI6MTc4MDc2Mjc5NCwiZXhwIjoxNzgwODQ5MTk0fQ.is-ZEHHMCjE7puVbDTYNjEiODcamGkmZroOlCdqm22A
+@auditLogId = 1
+@userId = 1
+
+### REPORT - Summary
+GET {{baseUrl}}/api/reports/summary
+Authorization: Bearer {{adminToken}}
+
+### REPORT - Revenue
+GET {{baseUrl}}/api/reports/revenue?fromDate=2026-01-01&toDate=2026-12-31
+Authorization: Bearer {{adminToken}}
+
+### REPORT - Top products
+GET {{baseUrl}}/api/reports/top-products?limit=10
+Authorization: Bearer {{adminToken}}
+
+### REPORT - Low stock
+GET {{baseUrl}}/api/reports/low-stock
+Authorization: Bearer {{adminToken}}
+
+### REPORT - Customers
+GET {{baseUrl}}/api/reports/customers?limit=10
+Authorization: Bearer {{adminToken}}
+
+### AUDIT LOG - List
+GET {{baseUrl}}/api/audit-logs?page=1&limit=10
+Authorization: Bearer {{adminToken}}
+
+### AUDIT LOG - Detail
+GET {{baseUrl}}/api/audit-logs/{{auditLogId}}
+Authorization: Bearer {{adminToken}}
+
+### AUDIT LOG - Search by action
+GET {{baseUrl}}/api/audit-logs?search=ORDER
+Authorization: Bearer {{adminToken}}
+
+### AUDIT LOG - Filter by user
+GET {{baseUrl}}/api/audit-logs?userId={{userId}}
+Authorization: Bearer {{adminToken}}
+
+### PERMISSION TEST - Cashier cannot view report
+GET {{baseUrl}}/api/reports/summary
+Authorization: Bearer {{cashierToken}}
+
+### PERMISSION TEST - Cashier cannot view audit log
+GET {{baseUrl}}/api/audit-logs?page=1&limit=10
+Authorization: Bearer {{cashierToken}}

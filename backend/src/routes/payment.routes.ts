@@ -9,10 +9,12 @@ import {
 } from "../middlewares/auth.middleware";
 import {
   USER_ROLES,
+  ORDER_STATUS,
   PAYMENT_METHOD,
   PAYMENT_STATUS,
-  AUDIT_ACTION,
-  AUDIT_ENTITY_TYPE,
+  STOCK_TRANSACTION_TYPE,
+  WARRANTY_STATUS,
+  RECORD_STATUS,
 } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
@@ -23,6 +25,13 @@ const router = Router();
 const paymentInclude = {
   order: {
     include: {
+      user: {
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+        },
+      },
       customer: {
         select: {
           id: true,
@@ -34,18 +43,28 @@ const paymentInclude = {
           status: true,
         },
       },
-      user: {
-        select: {
-          id: true,
-          fullName: true,
-          email: true,
+      orderDetails: {
+        where: {
+          status: RECORD_STATUS.ACTIVE,
+        },
+        include: {
+          product: {
+            select: {
+              id: true,
+              sku: true,
+              name: true,
+              salePrice: true,
+              warrantyMonths: true,
+              status: true,
+            },
+          },
         },
       },
     },
   },
 } satisfies Prisma.PaymentInclude;
 
-type PaymentWithOrder = Prisma.PaymentGetPayload<{
+type PaymentWithRelations = Prisma.PaymentGetPayload<{
   include: typeof paymentInclude;
 }>;
 
@@ -63,10 +82,6 @@ const paymentStatusSchema = z.enum([
   PAYMENT_STATUS.REFUNDED,
 ]);
 
-const updatePaymentStatusSchema = z.object({
-  status: paymentStatusSchema,
-});
-
 function getPaginationValue(value: unknown, defaultValue: number) {
   const numberValue = Number(value);
 
@@ -78,13 +93,21 @@ function getPaginationValue(value: unknown, defaultValue: number) {
 }
 
 function getPositiveId(value: string, message: string) {
-  const id = Number(value);
+  const numberValue = Number(value);
 
-  if (!Number.isInteger(id) || id <= 0) {
+  if (!Number.isInteger(numberValue) || numberValue <= 0) {
     throw new AppError(message, 400);
   }
 
-  return id;
+  return numberValue;
+}
+
+function getAuthenticatedUserId(req: AuthRequest) {
+  if (!req.user || !req.user.userId) {
+    throw new AppError("Bạn chưa đăng nhập", 401);
+  }
+
+  return req.user.userId;
 }
 
 function getDateValue(value: unknown, fieldName: string) {
@@ -101,32 +124,11 @@ function getDateValue(value: unknown, fieldName: string) {
   return dateValue;
 }
 
-function getAuthenticatedUserId(req: AuthRequest) {
-  if (!req.user || !req.user.userId) {
-    throw new AppError("Bạn chưa đăng nhập", 401);
-  }
-
-  return req.user.userId;
-}
-
-function validateParseResult<T>(
-  result: { success: true; data: T } | { success: false; error: z.ZodError }
-) {
-  if (!result.success) {
-    throw new AppError(
-      result.error.issues[0]?.message || "Dữ liệu không hợp lệ",
-      400
-    );
-  }
-
-  return result.data;
-}
-
 function formatMoney(value: Prisma.Decimal | number) {
   return Number(value);
 }
 
-function formatPayment(payment: PaymentWithOrder) {
+function formatPayment(payment: PaymentWithRelations) {
   return {
     id: payment.id,
     orderId: payment.orderId,
@@ -145,8 +147,21 @@ function formatPayment(payment: PaymentWithOrder) {
       status: payment.order.status,
       createdAt: payment.order.createdAt,
       updatedAt: payment.order.updatedAt,
-      customer: payment.order.customer,
       user: payment.order.user,
+      customer: payment.order.customer,
+      orderDetails: payment.order.orderDetails.map((detail) => ({
+        id: detail.id,
+        orderId: detail.orderId,
+        productId: detail.productId,
+        quantity: detail.quantity,
+        unitPrice: formatMoney(detail.unitPrice),
+        lineTotal: formatMoney(detail.lineTotal),
+        status: detail.status,
+        product: {
+          ...detail.product,
+          salePrice: formatMoney(detail.product.salePrice),
+        },
+      })),
     },
   };
 }
@@ -250,6 +265,8 @@ router.get(
       }),
     ]);
 
+    const totalPages = Math.ceil(totalItems / limit);
+
     return res.json({
       success: true,
       message: "Lấy danh sách thanh toán thành công",
@@ -259,7 +276,7 @@ router.get(
           page,
           limit,
           totalItems,
-          totalPages: Math.ceil(totalItems / limit),
+          totalPages,
         },
       },
     });
@@ -326,77 +343,152 @@ router.get(
   })
 );
 
-// PATCH /api/payments/:id/status
+// PATCH /api/payments/:id/refund
 router.patch(
-  "/:id/status",
+  "/:id/refund",
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
     const authReq = req as AuthRequest;
     const userId = getAuthenticatedUserId(authReq);
-
     const paymentId = getPositiveId(
       String(req.params.id),
       "ID thanh toán không hợp lệ"
     );
 
-    const paymentData = validateParseResult(
-      updatePaymentStatusSchema.safeParse(req.body)
-    );
-
-    if (paymentData.status === PAYMENT_STATUS.REFUNDED) {
-      throw new AppError(
-        "Không cập nhật REFUNDED trực tiếp tại Payment. Hãy hủy đơn hàng để hệ thống hoàn kho và hoàn tiền đúng quy trình",
-        400
-      );
-    }
-
     const result = await prisma.$transaction(async (tx) => {
-      const existingPayment = await tx.payment.findUnique({
+      const payment = await tx.payment.findUnique({
         where: {
           id: paymentId,
         },
         include: {
-          order: true,
+          order: {
+            include: {
+              orderDetails: {
+                where: {
+                  status: RECORD_STATUS.ACTIVE,
+                },
+              },
+              customer: true,
+            },
+          },
         },
       });
 
-      if (!existingPayment) {
+      if (!payment) {
         throw new AppError("Không tìm thấy thanh toán", 404);
       }
 
-      if (existingPayment.status === PAYMENT_STATUS.REFUNDED) {
-        throw new AppError("Thanh toán đã hoàn tiền, không thể cập nhật", 400);
+      if (payment.status === PAYMENT_STATUS.REFUNDED) {
+        throw new AppError("Thanh toán đã được hoàn tiền trước đó", 400);
       }
 
-      const updatedPayment = await tx.payment.update({
+      if (payment.status !== PAYMENT_STATUS.PAID) {
+        throw new AppError("Chỉ được hoàn tiền thanh toán đã PAID", 400);
+      }
+
+      if (payment.order.status === ORDER_STATUS.DRAFT) {
+        throw new AppError("Đơn nháp chưa thanh toán nên không thể hoàn tiền", 400);
+      }
+
+      if (payment.order.status === ORDER_STATUS.COMPLETED) {
+        for (const detail of payment.order.orderDetails) {
+          await tx.product.update({
+            where: {
+              id: detail.productId,
+            },
+            data: {
+              stockQuantity: {
+                increment: detail.quantity,
+              },
+            },
+          });
+
+          await tx.stockTransaction.create({
+            data: {
+              productId: detail.productId,
+              userId,
+              orderId: payment.order.id,
+              type: STOCK_TRANSACTION_TYPE.RESTORE,
+              quantity: detail.quantity,
+              note: `Hoàn kho do hoàn tiền đơn ${payment.order.orderCode}`,
+            },
+          });
+        }
+
+        if (payment.order.customerId) {
+          const pointsToRemove = Math.floor(Number(payment.order.totalAmount) / 100000);
+
+          if (pointsToRemove > 0 && payment.order.customer) {
+            const newPoints = Math.max(payment.order.customer.points - pointsToRemove, 0);
+
+            await tx.customer.update({
+              where: {
+                id: payment.order.customerId,
+              },
+              data: {
+                points: newPoints,
+              },
+            });
+          }
+        }
+
+        await tx.warranty.updateMany({
+          where: {
+            orderDetail: {
+              orderId: payment.order.id,
+            },
+            status: WARRANTY_STATUS.ACTIVE,
+          },
+          data: {
+            status: WARRANTY_STATUS.CANCELLED,
+          },
+        });
+
+        await tx.order.update({
+          where: {
+            id: payment.order.id,
+          },
+          data: {
+            status: ORDER_STATUS.CANCELLED,
+          },
+        });
+      }
+
+      await tx.payment.update({
         where: {
-          id: paymentId,
+          id: payment.id,
         },
         data: {
-          status: paymentData.status,
-          paidAt:
-            paymentData.status === PAYMENT_STATUS.PAID
-              ? existingPayment.paidAt || new Date()
-              : null,
+          status: PAYMENT_STATUS.REFUNDED,
         },
-        include: paymentInclude,
       });
 
       await createAuditLog(tx, {
         userId,
-        action: AUDIT_ACTION.UPDATE_PAYMENT_STATUS,
-        entityType: AUDIT_ENTITY_TYPE.PAYMENT,
-        entityId: updatedPayment.id,
-        description: `Cập nhật trạng thái thanh toán của đơn ${existingPayment.order.orderCode} từ ${existingPayment.status} sang ${updatedPayment.status}`,
+        action: "REFUND_PAYMENT",
+        entityType: "Payment",
+        entityId: payment.id,
+        description: `Hoàn tiền thanh toán của đơn ${payment.order.orderCode}`,
       });
+
+      const updatedPayment = await tx.payment.findUnique({
+        where: {
+          id: payment.id,
+        },
+        include: paymentInclude,
+      });
+
+      if (!updatedPayment) {
+        throw new AppError("Không thể lấy thanh toán sau khi hoàn tiền", 500);
+      }
 
       return updatedPayment;
     });
 
     return res.json({
       success: true,
-      message: "Cập nhật trạng thái thanh toán thành công",
+      message: "Hoàn tiền thanh toán thành công",
       data: formatPayment(result),
     });
   })

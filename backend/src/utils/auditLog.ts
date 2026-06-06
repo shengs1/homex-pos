@@ -1,12 +1,12 @@
-import { Prisma } from "@prisma/client";
+import { AuditLog, Prisma } from "@prisma/client";
 
 type AuditLogClient = {
   auditLog: {
-    create(args: Prisma.AuditLogCreateArgs): Promise<unknown>;
+    create: (args: Prisma.AuditLogCreateArgs) => Promise<AuditLog>;
   };
 };
 
-type CreateAuditLogParams = {
+type CreateAuditLogInput = {
   userId: number;
   action: string;
   entityType: string;
@@ -16,15 +16,15 @@ type CreateAuditLogParams = {
 
 export async function createAuditLog(
   client: AuditLogClient,
-  params: CreateAuditLogParams
+  input: CreateAuditLogInput
 ) {
   return client.auditLog.create({
     data: {
-      userId: params.userId,
-      action: params.action,
-      entityType: params.entityType,
-      entityId: params.entityId,
-      description: params.description || null,
+      userId: input.userId,
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      description: input.description || null,
     },
   });
 }

@@ -1,33 +1,18 @@
 import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
-import {
-  authenticateToken,
-  authorizeRoles,
-} from "../middlewares/auth.middleware";
+import { authenticateToken, authorizeRoles } from "../middlewares/auth.middleware";
 import {
   USER_ROLES,
-  RECORD_STATUS,
   ORDER_STATUS,
   PAYMENT_STATUS,
+  RECORD_STATUS,
+  WARRANTY_STATUS,
 } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
 
 const router = Router();
-
-type DateRange = {
-  fromDate: Date | null;
-  toDate: Date | null;
-};
-
-function formatMoney(value: Prisma.Decimal | number | null | undefined) {
-  if (value === null || value === undefined) {
-    return 0;
-  }
-
-  return Number(value);
-}
 
 function getDateValue(value: unknown, fieldName: string) {
   if (!value) {
@@ -43,65 +28,44 @@ function getDateValue(value: unknown, fieldName: string) {
   return dateValue;
 }
 
-function getDateRange(query: { fromDate?: unknown; toDate?: unknown }): DateRange {
-  const fromDate = getDateValue(query.fromDate, "Ngày bắt đầu");
-  const toDate = getDateValue(query.toDate, "Ngày kết thúc");
-
-  if (toDate) {
-    toDate.setHours(23, 59, 59, 999);
-  }
-
-  if (fromDate && toDate && fromDate.getTime() > toDate.getTime()) {
-    throw new AppError("Ngày bắt đầu không được lớn hơn ngày kết thúc", 400);
-  }
-
-  return {
-    fromDate,
-    toDate,
-  };
-}
-
-function getLimitValue(value: unknown, defaultValue: number, maxValue: number) {
+function getLimitValue(value: unknown, defaultValue: number) {
   const numberValue = Number(value);
 
   if (!Number.isInteger(numberValue) || numberValue <= 0) {
     return defaultValue;
   }
 
-  return Math.min(numberValue, maxValue);
+  return Math.min(numberValue, 100);
 }
 
-function getCompletedPaidOrderWhere(dateRange: DateRange): Prisma.OrderWhereInput {
-  const where: Prisma.OrderWhereInput = {
-    status: ORDER_STATUS.COMPLETED,
-    payment: {
-      status: PAYMENT_STATUS.PAID,
-    },
-  };
-
-  if (dateRange.fromDate || dateRange.toDate) {
-    where.createdAt = {};
-
-    if (dateRange.fromDate) {
-      where.createdAt.gte = dateRange.fromDate;
-    }
-
-    if (dateRange.toDate) {
-      where.createdAt.lte = dateRange.toDate;
-    }
+function buildDateRange(fromDate: Date | null, toDate: Date | null) {
+  if (!fromDate && !toDate) {
+    return undefined;
   }
 
-  return where;
+  const range: Prisma.DateTimeFilter = {};
+
+  if (fromDate) {
+    range.gte = fromDate;
+  }
+
+  if (toDate) {
+    const endDate = new Date(toDate);
+    endDate.setHours(23, 59, 59, 999);
+    range.lte = endDate;
+  }
+
+  return range;
 }
 
-function getGroupKey(date: Date, groupBy: string) {
+function formatMoney(value: Prisma.Decimal | number | null | undefined) {
+  return Number(value || 0);
+}
+
+function getDateKey(date: Date, groupBy: "day" | "month") {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-
-  if (groupBy === "year") {
-    return `${year}`;
-  }
 
   if (groupBy === "month") {
     return `${year}-${month}`;
@@ -110,97 +74,73 @@ function getGroupKey(date: Date, groupBy: string) {
   return `${year}-${month}-${day}`;
 }
 
-function validateGroupBy(value: unknown) {
-  const groupBy = String(value || "day").trim().toLowerCase();
-
-  if (groupBy !== "day" && groupBy !== "month" && groupBy !== "year") {
-    throw new AppError("Kiểu nhóm báo cáo không hợp lệ", 400);
-  }
-
-  return groupBy;
-}
-
-function formatProductForReport(product: {
-  id: number;
-  sku: string;
-  name: string;
-  costPrice: Prisma.Decimal;
-  salePrice: Prisma.Decimal;
-  stockQuantity: number;
-  minStock: number;
-  warrantyMonths: number;
-  status: string;
-  category: {
-    id: number;
-    name: string;
-  };
-  supplier: {
-    id: number;
-    name: string;
-  };
-}) {
-  return {
-    id: product.id,
-    sku: product.sku,
-    name: product.name,
-    costPrice: formatMoney(product.costPrice),
-    salePrice: formatMoney(product.salePrice),
-    stockQuantity: product.stockQuantity,
-    minStock: product.minStock,
-    warrantyMonths: product.warrantyMonths,
-    status: product.status,
-    category: product.category,
-    supplier: product.supplier,
-  };
-}
-
-// GET /api/reports/overview?fromDate=2026-01-01&toDate=2026-12-31
+// GET /api/reports/summary?fromDate=2026-01-01&toDate=2026-12-31
 router.get(
-  "/overview",
+  "/summary",
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
-    const dateRange = getDateRange(req.query);
-    const completedPaidOrderWhere = getCompletedPaidOrderWhere(dateRange);
+    const fromDate = getDateValue(req.query.fromDate, "Ngày bắt đầu");
+    const toDate = getDateValue(req.query.toDate, "Ngày kết thúc");
+    const dateRange = buildDateRange(fromDate, toDate);
 
     const [
-      revenueAggregate,
-      completedOrderCount,
-      draftOrderCount,
-      cancelledOrderCount,
-      refundedPaymentAggregate,
-      customerCount,
-      productCount,
+      paidPaymentAgg,
+      refundedPaymentAgg,
+      totalOrders,
+      completedOrders,
+      cancelledOrders,
+      draftOrders,
+      totalCustomers,
       activeProducts,
+      lowStockProducts,
+      activeWarranties,
     ] = await prisma.$transaction([
-      prisma.order.aggregate({
-        where: completedPaidOrderWhere,
+      prisma.payment.aggregate({
+        where: {
+          status: PAYMENT_STATUS.PAID,
+          createdAt: dateRange,
+        },
         _sum: {
-          totalAmount: true,
+          amount: true,
         },
-        _avg: {
-          totalAmount: true,
-        },
-      }),
-      prisma.order.count({
-        where: completedPaidOrderWhere,
-      }),
-      prisma.order.count({
-        where: {
-          status: ORDER_STATUS.DRAFT,
-        },
-      }),
-      prisma.order.count({
-        where: {
-          status: ORDER_STATUS.CANCELLED,
+        _count: {
+          _all: true,
         },
       }),
       prisma.payment.aggregate({
         where: {
           status: PAYMENT_STATUS.REFUNDED,
+          createdAt: dateRange,
         },
         _sum: {
           amount: true,
+        },
+        _count: {
+          _all: true,
+        },
+      }),
+      prisma.order.count({
+        where: {
+          createdAt: dateRange,
+        },
+      }),
+      prisma.order.count({
+        where: {
+          status: ORDER_STATUS.COMPLETED,
+          createdAt: dateRange,
+        },
+      }),
+      prisma.order.count({
+        where: {
+          status: ORDER_STATUS.CANCELLED,
+          createdAt: dateRange,
+        },
+      }),
+      prisma.order.count({
+        where: {
+          status: ORDER_STATUS.DRAFT,
+          createdAt: dateRange,
         },
       }),
       prisma.customer.count({
@@ -213,62 +153,42 @@ router.get(
           status: RECORD_STATUS.ACTIVE,
         },
       }),
-      prisma.product.findMany({
+      prisma.product.count({
         where: {
           status: RECORD_STATUS.ACTIVE,
+          stockQuantity: {
+            lte: prisma.product.fields.minStock,
+          },
         },
-        select: {
-          costPrice: true,
-          salePrice: true,
-          stockQuantity: true,
-          minStock: true,
+      }),
+      prisma.warranty.count({
+        where: {
+          status: WARRANTY_STATUS.ACTIVE,
         },
       }),
     ]);
 
-    let inventoryCostValue = 0;
-    let inventorySaleValue = 0;
-    let lowStockProductCount = 0;
-
-    for (const product of activeProducts) {
-      inventoryCostValue += Number(product.costPrice) * product.stockQuantity;
-      inventorySaleValue += Number(product.salePrice) * product.stockQuantity;
-
-      if (product.stockQuantity <= product.minStock) {
-        lowStockProductCount += 1;
-      }
-    }
-
-    const totalRevenue = formatMoney(revenueAggregate._sum.totalAmount);
-    const refundedAmount = formatMoney(refundedPaymentAggregate._sum.amount);
+    const grossRevenue = formatMoney(paidPaymentAgg._sum.amount);
+    const refundedAmount = formatMoney(refundedPaymentAgg._sum.amount);
+    const netRevenue = grossRevenue - refundedAmount;
 
     return res.json({
       success: true,
       message: "Lấy báo cáo tổng quan thành công",
       data: {
-        revenue: {
-          totalRevenue,
-          refundedAmount,
-          netRevenue: totalRevenue - refundedAmount,
-          averageOrderValue: formatMoney(revenueAggregate._avg.totalAmount),
-        },
-        orders: {
-          completed: completedOrderCount,
-          draft: draftOrderCount,
-          cancelled: cancelledOrderCount,
-        },
-        customers: {
-          active: customerCount,
-        },
-        products: {
-          active: productCount,
-          lowStock: lowStockProductCount,
-        },
-        inventory: {
-          costValue: inventoryCostValue,
-          saleValue: inventorySaleValue,
-          estimatedProfitValue: inventorySaleValue - inventoryCostValue,
-        },
+        grossRevenue,
+        refundedAmount,
+        netRevenue,
+        paidPayments: paidPaymentAgg._count._all,
+        refundedPayments: refundedPaymentAgg._count._all,
+        totalOrders,
+        completedOrders,
+        cancelledOrders,
+        draftOrders,
+        totalCustomers,
+        activeProducts,
+        lowStockProducts,
+        activeWarranties,
       },
     });
   })
@@ -280,14 +200,25 @@ router.get(
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
-    const dateRange = getDateRange(req.query);
-    const groupBy = validateGroupBy(req.query.groupBy);
+    const fromDate = getDateValue(req.query.fromDate, "Ngày bắt đầu");
+    const toDate = getDateValue(req.query.toDate, "Ngày kết thúc");
+    const groupByParam = String(req.query.groupBy || "day").trim().toLowerCase();
 
-    const orders = await prisma.order.findMany({
-      where: getCompletedPaidOrderWhere(dateRange),
+    if (groupByParam !== "day" && groupByParam !== "month") {
+      throw new AppError("groupBy chỉ được là day hoặc month", 400);
+    }
+
+    const groupBy = groupByParam as "day" | "month";
+    const dateRange = buildDateRange(fromDate, toDate);
+
+    const payments = await prisma.payment.findMany({
+      where: {
+        status: PAYMENT_STATUS.PAID,
+        createdAt: dateRange,
+      },
       select: {
         id: true,
-        totalAmount: true,
+        amount: true,
         createdAt: true,
       },
       orderBy: {
@@ -295,32 +226,25 @@ router.get(
       },
     });
 
-    const reportMap = new Map<
-      string,
-      {
-        period: string;
-        revenue: number;
-        orderCount: number;
-      }
-    >();
+    const map = new Map<string, { revenue: number; paymentCount: number }>();
 
-    for (const order of orders) {
-      const period = getGroupKey(order.createdAt, groupBy);
-      const current = reportMap.get(period) || {
-        period,
+    for (const payment of payments) {
+      const key = getDateKey(payment.createdAt, groupBy);
+      const current = map.get(key) || {
         revenue: 0,
-        orderCount: 0,
+        paymentCount: 0,
       };
 
-      current.revenue += Number(order.totalAmount);
-      current.orderCount += 1;
-      reportMap.set(period, current);
+      current.revenue += Number(payment.amount);
+      current.paymentCount += 1;
+
+      map.set(key, current);
     }
 
-    const items = Array.from(reportMap.values()).map((item) => ({
-      ...item,
-      averageOrderValue:
-        item.orderCount > 0 ? item.revenue / item.orderCount : 0,
+    const items = Array.from(map.entries()).map(([period, value]) => ({
+      period,
+      revenue: value.revenue,
+      paymentCount: value.paymentCount,
     }));
 
     return res.json({
@@ -340,61 +264,74 @@ router.get(
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
-    const dateRange = getDateRange(req.query);
-    const limit = getLimitValue(req.query.limit, 10, 100);
+    const fromDate = getDateValue(req.query.fromDate, "Ngày bắt đầu");
+    const toDate = getDateValue(req.query.toDate, "Ngày kết thúc");
+    const limit = getLimitValue(req.query.limit, 10);
+    const dateRange = buildDateRange(fromDate, toDate);
 
-    const orderDetails = await prisma.orderDetail.findMany({
+    const groupedItems = await prisma.orderDetail.groupBy({
+      by: ["productId"],
       where: {
         status: RECORD_STATUS.ACTIVE,
-        order: getCompletedPaidOrderWhere(dateRange),
+        order: {
+          status: ORDER_STATUS.COMPLETED,
+          createdAt: dateRange,
+        },
       },
-      include: {
-        product: {
-          include: {
-            category: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-            supplier: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
+      _sum: {
+        quantity: true,
+        lineTotal: true,
+      },
+      orderBy: {
+        _sum: {
+          quantity: "desc",
+        },
+      },
+      take: limit,
+    });
+
+    const productIds = groupedItems.map((item) => item.productId);
+
+    const products = await prisma.product.findMany({
+      where: {
+        id: {
+          in: productIds,
+        },
+      },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        salePrice: true,
+        stockQuantity: true,
+        minStock: true,
+        status: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
           },
         },
       },
     });
 
-    const productMap = new Map<
-      number,
-      {
-        product: ReturnType<typeof formatProductForReport>;
-        totalQuantity: number;
-        totalRevenue: number;
-        orderLineCount: number;
-      }
-    >();
+    const items = groupedItems.map((groupedItem) => {
+      const product = products.find(
+        (productItem) => productItem.id === groupedItem.productId
+      );
 
-    for (const detail of orderDetails) {
-      const current = productMap.get(detail.productId) || {
-        product: formatProductForReport(detail.product),
-        totalQuantity: 0,
-        totalRevenue: 0,
-        orderLineCount: 0,
+      return {
+        productId: groupedItem.productId,
+        product: product
+          ? {
+              ...product,
+              salePrice: formatMoney(product.salePrice),
+            }
+          : null,
+        totalQuantity: groupedItem._sum.quantity || 0,
+        totalRevenue: formatMoney(groupedItem._sum.lineTotal),
       };
-
-      current.totalQuantity += detail.quantity;
-      current.totalRevenue += Number(detail.lineTotal);
-      current.orderLineCount += 1;
-      productMap.set(detail.productId, current);
-    }
-
-    const items = Array.from(productMap.values())
-      .sort((a, b) => b.totalQuantity - a.totalQuantity)
-      .slice(0, limit);
+    });
 
     return res.json({
       success: true,
@@ -406,17 +343,98 @@ router.get(
   })
 );
 
-// GET /api/reports/low-stock?limit=50
+// GET /api/reports/top-customers?fromDate=2026-01-01&toDate=2026-12-31&limit=10
+router.get(
+  "/top-customers",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const fromDate = getDateValue(req.query.fromDate, "Ngày bắt đầu");
+    const toDate = getDateValue(req.query.toDate, "Ngày kết thúc");
+    const limit = getLimitValue(req.query.limit, 10);
+    const dateRange = buildDateRange(fromDate, toDate);
+
+    const groupedItems = await prisma.order.groupBy({
+      by: ["customerId"],
+      where: {
+        customerId: {
+          not: null,
+        },
+        status: ORDER_STATUS.COMPLETED,
+        createdAt: dateRange,
+      },
+      _sum: {
+        totalAmount: true,
+      },
+      _count: {
+        _all: true,
+      },
+      orderBy: {
+        _sum: {
+          totalAmount: "desc",
+        },
+      },
+      take: limit,
+    });
+
+    const customerIds = groupedItems
+      .map((item) => item.customerId)
+      .filter((customerId): customerId is number => typeof customerId === "number");
+
+    const customers = await prisma.customer.findMany({
+      where: {
+        id: {
+          in: customerIds,
+        },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        phone: true,
+        email: true,
+        address: true,
+        points: true,
+        status: true,
+      },
+    });
+
+    const items = groupedItems.map((groupedItem) => {
+      const customer = customers.find(
+        (customerItem) => customerItem.id === groupedItem.customerId
+      );
+
+      return {
+        customerId: groupedItem.customerId,
+        customer: customer || null,
+        totalOrders: groupedItem._count._all,
+        totalSpent: formatMoney(groupedItem._sum.totalAmount),
+      };
+    });
+
+    return res.json({
+      success: true,
+      message: "Lấy báo cáo khách hàng mua nhiều thành công",
+      data: {
+        items,
+      },
+    });
+  })
+);
+
+// GET /api/reports/low-stock?limit=20
 router.get(
   "/low-stock",
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
-    const limit = getLimitValue(req.query.limit, 50, 200);
+    const limit = getLimitValue(req.query.limit, 20);
 
     const products = await prisma.product.findMany({
       where: {
         status: RECORD_STATUS.ACTIVE,
+        stockQuantity: {
+          lte: prisma.product.fields.minStock,
+        },
       },
       include: {
         category: {
@@ -429,21 +447,33 @@ router.get(
           select: {
             id: true,
             name: true,
+            phone: true,
           },
         },
       },
-      orderBy: {
-        stockQuantity: "asc",
-      },
+      orderBy: [
+        {
+          stockQuantity: "asc",
+        },
+        {
+          createdAt: "desc",
+        },
+      ],
+      take: limit,
     });
 
-    const items = products
-      .filter((product) => product.stockQuantity <= product.minStock)
-      .slice(0, limit)
-      .map((product) => ({
-        ...formatProductForReport(product),
-        missingQuantity: Math.max(product.minStock - product.stockQuantity, 0),
-      }));
+    const items = products.map((product) => ({
+      id: product.id,
+      sku: product.sku,
+      name: product.name,
+      category: product.category,
+      supplier: product.supplier,
+      salePrice: formatMoney(product.salePrice),
+      costPrice: formatMoney(product.costPrice),
+      stockQuantity: product.stockQuantity,
+      minStock: product.minStock,
+      status: product.status,
+    }));
 
     return res.json({
       success: true,
@@ -455,69 +485,72 @@ router.get(
   })
 );
 
-// GET /api/reports/customers?fromDate=2026-01-01&toDate=2026-12-31&limit=10
+// GET /api/reports/customers?limit=10
 router.get(
   "/customers",
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
-    const dateRange = getDateRange(req.query);
-    const limit = getLimitValue(req.query.limit, 10, 100);
+    const limitValue = Number(req.query.limit || 10);
 
-    const orders = await prisma.order.findMany({
+    const limit =
+      Number.isInteger(limitValue) && limitValue > 0
+        ? Math.min(limitValue, 100)
+        : 10;
+
+    const customers = await prisma.customer.findMany({
       where: {
-        ...getCompletedPaidOrderWhere(dateRange),
-        customerId: {
-          not: null,
-        },
+        status: RECORD_STATUS.ACTIVE,
       },
       include: {
-        customer: true,
+        orders: {
+          where: {
+            status: ORDER_STATUS.COMPLETED,
+          },
+          select: {
+            id: true,
+            orderCode: true,
+            totalAmount: true,
+            createdAt: true,
+          },
+        },
       },
     });
 
-    const customerMap = new Map<
-      number,
-      {
-        customer: {
-          id: number;
-          fullName: string;
-          phone: string;
-          email: string | null;
-          address: string | null;
-          points: number;
-          status: string;
+    const reportItems = customers
+      .map((customer) => {
+        const totalOrders = customer.orders.length;
+
+        const totalSpent = customer.orders.reduce((sum, order) => {
+          return sum + Number(order.totalAmount);
+        }, 0);
+
+        const latestOrder = customer.orders.sort(
+          (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+        )[0];
+
+        return {
+          id: customer.id,
+          fullName: customer.fullName,
+          phone: customer.phone,
+          email: customer.email,
+          address: customer.address,
+          points: customer.points,
+          status: customer.status,
+          totalOrders,
+          totalSpent,
+          latestOrder: latestOrder
+            ? {
+                id: latestOrder.id,
+                orderCode: latestOrder.orderCode,
+                totalAmount: Number(latestOrder.totalAmount),
+                createdAt: latestOrder.createdAt,
+              }
+            : null,
+          createdAt: customer.createdAt,
+          updatedAt: customer.updatedAt,
         };
-        totalOrders: number;
-        totalSpent: number;
-      }
-    >();
-
-    for (const order of orders) {
-      if (!order.customer) {
-        continue;
-      }
-
-      const current = customerMap.get(order.customer.id) || {
-        customer: {
-          id: order.customer.id,
-          fullName: order.customer.fullName,
-          phone: order.customer.phone,
-          email: order.customer.email,
-          address: order.customer.address,
-          points: order.customer.points,
-          status: order.customer.status,
-        },
-        totalOrders: 0,
-        totalSpent: 0,
-      };
-
-      current.totalOrders += 1;
-      current.totalSpent += Number(order.totalAmount);
-      customerMap.set(order.customer.id, current);
-    }
-
-    const items = Array.from(customerMap.values())
+      })
       .sort((a, b) => b.totalSpent - a.totalSpent)
       .slice(0, limit);
 
@@ -525,104 +558,7 @@ router.get(
       success: true,
       message: "Lấy báo cáo khách hàng thành công",
       data: {
-        items,
-      },
-    });
-  })
-);
-
-// GET /api/reports/inventory-summary
-router.get(
-  "/inventory-summary",
-  authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN),
-  catchAsync(async (req, res) => {
-    const products = await prisma.product.findMany({
-      where: {
-        status: RECORD_STATUS.ACTIVE,
-      },
-      include: {
-        category: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        supplier: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-      },
-    });
-
-    let totalQuantity = 0;
-    let totalCostValue = 0;
-    let totalSaleValue = 0;
-    let lowStockCount = 0;
-    let outOfStockCount = 0;
-
-    const categoryMap = new Map<
-      number,
-      {
-        categoryId: number;
-        categoryName: string;
-        productCount: number;
-        totalQuantity: number;
-        costValue: number;
-        saleValue: number;
-      }
-    >();
-
-    for (const product of products) {
-      const costValue = Number(product.costPrice) * product.stockQuantity;
-      const saleValue = Number(product.salePrice) * product.stockQuantity;
-
-      totalQuantity += product.stockQuantity;
-      totalCostValue += costValue;
-      totalSaleValue += saleValue;
-
-      if (product.stockQuantity <= product.minStock) {
-        lowStockCount += 1;
-      }
-
-      if (product.stockQuantity === 0) {
-        outOfStockCount += 1;
-      }
-
-      const currentCategory = categoryMap.get(product.categoryId) || {
-        categoryId: product.categoryId,
-        categoryName: product.category.name,
-        productCount: 0,
-        totalQuantity: 0,
-        costValue: 0,
-        saleValue: 0,
-      };
-
-      currentCategory.productCount += 1;
-      currentCategory.totalQuantity += product.stockQuantity;
-      currentCategory.costValue += costValue;
-      currentCategory.saleValue += saleValue;
-      categoryMap.set(product.categoryId, currentCategory);
-    }
-
-    return res.json({
-      success: true,
-      message: "Lấy báo cáo tổng hợp tồn kho thành công",
-      data: {
-        summary: {
-          productCount: products.length,
-          totalQuantity,
-          totalCostValue,
-          totalSaleValue,
-          estimatedProfitValue: totalSaleValue - totalCostValue,
-          lowStockCount,
-          outOfStockCount,
-        },
-        byCategory: Array.from(categoryMap.values()).sort(
-          (a, b) => b.saleValue - a.saleValue
-        ),
+        items: reportItems,
       },
     });
   })

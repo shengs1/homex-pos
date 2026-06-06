@@ -1,0 +1,69 @@
+@baseUrl = http://localhost:5000
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoiYWRtaW5AaG9tZXguY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzgwNzYxNzUwLCJleHAiOjE3ODA4NDgxNTB9.citbCFmOmIUnaE9S4FUYtUTfrAt3GiA_nvblIC-W4bA
+@cashierToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjMsImVtYWlsIjoiY2FzaGllckBob21leC5jb20iLCJyb2xlIjoiQ0FTSElFUiIsImlhdCI6MTc4MDc2Mjc5NCwiZXhwIjoxNzgwODQ5MTk0fQ.is-ZEHHMCjE7puVbDTYNjEiODcamGkmZroOlCdqm22A
+@productId = 1
+@customerId = 1
+@orderId = 7
+
+### ORDER - Create draft with customer
+POST {{baseUrl}}/api/orders/draft
+Content-Type: application/json
+Authorization: Bearer {{cashierToken}}
+
+{
+  "customerId": {{customerId}},
+  "items": [
+    {
+      "productId": {{productId}},
+      "quantity": 2
+    }
+  ]
+}
+
+### ORDER - List draft orders
+GET {{baseUrl}}/api/orders?page=1&limit=10&status=DRAFT
+Authorization: Bearer {{cashierToken}}
+
+### ORDER - Detail
+GET {{baseUrl}}/api/orders/{{orderId}}
+Authorization: Bearer {{cashierToken}}
+
+### ORDER - Update draft
+PUT {{baseUrl}}/api/orders/{{orderId}}/draft
+Content-Type: application/json
+Authorization: Bearer {{cashierToken}}
+
+{
+  "customerId": {{customerId}},
+  "items": [
+    {
+      "productId": {{productId}},
+      "quantity": 3
+    }
+  ]
+}
+
+### ORDER - Checkout draft
+PATCH {{baseUrl}}/api/orders/{{orderId}}/checkout
+Content-Type: application/json
+Authorization: Bearer {{cashierToken}}
+
+{
+  "paymentMethod": "CASH"
+}
+
+### ORDER - List completed orders
+GET {{baseUrl}}/api/orders?page=1&limit=10&status=COMPLETED
+Authorization: Bearer {{cashierToken}}
+
+### ORDER - Cancel order by ADMIN
+PATCH {{baseUrl}}/api/orders/{{orderId}}/cancel
+Authorization: Bearer {{adminToken}}
+
+### ORDER - List cancelled orders
+GET {{baseUrl}}/api/orders?page=1&limit=10&status=CANCELLED
+Authorization: Bearer {{adminToken}}
+
+### PERMISSION TEST - Cashier cannot cancel order
+PATCH {{baseUrl}}/api/orders/{{orderId}}/cancel
+Authorization: Bearer {{cashierToken}}

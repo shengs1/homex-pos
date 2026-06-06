@@ -1,0 +1,61 @@
+@baseUrl = http://localhost:5000
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoiYWRtaW5AaG9tZXguY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzgwNzYxNzUwLCJleHAiOjE3ODA4NDgxNTB9.citbCFmOmIUnaE9S4FUYtUTfrAt3GiA_nvblIC-W4bA
+@cashierToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjMsImVtYWlsIjoiY2FzaGllckBob21leC5jb20iLCJyb2xlIjoiQ0FTSElFUiIsImlhdCI6MTc4MDc2Mjc5NCwiZXhwIjoxNzgwODQ5MTk0fQ.is-ZEHHMCjE7puVbDTYNjEiODcamGkmZroOlCdqm22A
+@orderId = 1
+@orderDetailId = 8
+@paymentId = 1
+@warrantyId = 1
+@warrantyCode = BH202606070008149869
+
+### WARRANTY - List
+GET {{baseUrl}}/api/warranties?page=1&limit=10
+Authorization: Bearer {{cashierToken}}
+
+### WARRANTY - Detail
+GET {{baseUrl}}/api/warranties/{{warrantyId}}
+Authorization: Bearer {{cashierToken}}
+
+### WARRANTY - Find by code
+GET {{baseUrl}}/api/warranties/code/{{warrantyCode}}
+Authorization: Bearer {{cashierToken}}
+
+### WARRANTY - Create manually by ADMIN
+POST {{baseUrl}}/api/warranties
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "orderDetailId": {{orderDetailId}}
+}
+
+### WARRANTY - Cancel by ADMIN
+PATCH {{baseUrl}}/api/warranties/{{warrantyId}}/cancel
+Authorization: Bearer {{adminToken}}
+
+### WARRANTY - Restore by ADMIN
+PATCH {{baseUrl}}/api/warranties/{{warrantyId}}/restore
+Authorization: Bearer {{adminToken}}
+
+### WARRANTY - Expire by ADMIN
+PATCH {{baseUrl}}/api/warranties/{{warrantyId}}/expire
+Authorization: Bearer {{adminToken}}
+
+### PAYMENT - List
+GET {{baseUrl}}/api/payments?page=1&limit=10
+Authorization: Bearer {{cashierToken}}
+
+### PAYMENT - Detail
+GET {{baseUrl}}/api/payments/{{paymentId}}
+Authorization: Bearer {{cashierToken}}
+
+### PAYMENT - Get by order
+GET {{baseUrl}}/api/payments/order/{{orderId}}
+Authorization: Bearer {{cashierToken}}
+
+### PAYMENT - Refund by ADMIN
+PATCH {{baseUrl}}/api/payments/{{paymentId}}/refund
+Authorization: Bearer {{adminToken}}
+
+### PERMISSION TEST - Cashier cannot refund
+PATCH {{baseUrl}}/api/payments/{{paymentId}}/refund
+Authorization: Bearer {{cashierToken}}

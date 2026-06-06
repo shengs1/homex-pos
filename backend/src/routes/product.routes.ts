@@ -34,10 +34,50 @@ type ProductWithRelations = Prisma.ProductGetPayload<{
   include: typeof productInclude;
 }>;
 
-const productStatusSchema = z.enum([
-  RECORD_STATUS.ACTIVE,
-  RECORD_STATUS.INACTIVE,
-]);
+const optionalDescriptionSchema = z.preprocess(
+  (value) => {
+    if (typeof value === "string" && value.trim() === "") {
+      return undefined;
+    }
+
+    return value;
+  },
+  z
+    .string()
+    .trim()
+    .max(500, "Mô tả không được vượt quá 500 ký tự")
+    .optional()
+);
+
+const optionalQrCodeSchema = z.preprocess(
+  (value) => {
+    if (typeof value === "string" && value.trim() === "") {
+      return undefined;
+    }
+
+    return value;
+  },
+  z
+    .string()
+    .trim()
+    .max(100, "Mã QR không được vượt quá 100 ký tự")
+    .optional()
+);
+
+const optionalImageUrlSchema = z.preprocess(
+  (value) => {
+    if (typeof value === "string" && value.trim() === "") {
+      return undefined;
+    }
+
+    return value;
+  },
+  z
+    .string()
+    .trim()
+    .max(500, "Đường dẫn hình ảnh không được vượt quá 500 ký tự")
+    .optional()
+);
 
 const baseProductSchema = z.object({
   sku: z
@@ -53,11 +93,7 @@ const baseProductSchema = z.object({
     .min(1, "Tên sản phẩm không được để trống")
     .max(150, "Tên sản phẩm không được vượt quá 150 ký tự"),
 
-  description: z
-    .string()
-    .trim()
-    .max(500, "Mô tả không được vượt quá 500 ký tự")
-    .optional(),
+  description: optionalDescriptionSchema,
 
   categoryId: z.coerce
     .number()
@@ -91,17 +127,9 @@ const baseProductSchema = z.object({
     .min(0, "Thời hạn bảo hành không được âm")
     .optional(),
 
-  qrCode: z
-    .string()
-    .trim()
-    .max(100, "Mã QR không được vượt quá 100 ký tự")
-    .optional(),
+  qrCode: optionalQrCodeSchema,
 
-  imageUrl: z
-    .string()
-    .trim()
-    .max(500, "Đường dẫn hình ảnh không được vượt quá 500 ký tự")
-    .optional(),
+  imageUrl: optionalImageUrlSchema,
 });
 
 const createProductSchema = baseProductSchema.refine(
@@ -112,14 +140,13 @@ const createProductSchema = baseProductSchema.refine(
   }
 );
 
-const updateProductSchema = baseProductSchema
-  .extend({
-    status: productStatusSchema,
-  })
-  .refine((data) => data.salePrice >= data.costPrice, {
+const updateProductSchema = baseProductSchema.refine(
+  (data) => data.salePrice >= data.costPrice,
+  {
     message: "Giá bán phải lớn hơn hoặc bằng giá nhập",
     path: ["salePrice"],
-  });
+  }
+);
 
 function formatProduct(product: ProductWithRelations) {
   return {
@@ -261,7 +288,7 @@ async function checkDuplicateQrCode(qrCode: string, ignoredProductId?: number) {
 router.get(
   "/",
   authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.MANAGER),
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
   catchAsync(async (req, res) => {
     const page = getPaginationValue(req.query.page, 1);
     const limit = Math.min(getPaginationValue(req.query.limit, 10), 100);
@@ -371,11 +398,210 @@ router.get(
   })
 );
 
+// GET /api/products/:id
+router.get(
+  "/:id",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const productId = getProductId(String(req.params.id));
+
+    const product = await prisma.product.findUnique({
+      where: {
+        id: productId,
+      },
+      include: productInclude,
+    });
+
+    if (!product) {
+      throw new AppError("Không tìm thấy sản phẩm", 404);
+    }
+
+    return res.json({
+      success: true,
+      message: "Lấy chi tiết sản phẩm thành công",
+      data: formatProduct(product),
+    });
+  })
+);
+
+// POST /api/products
+router.post(
+  "/",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const productData = validateParseResult(
+      createProductSchema.safeParse(req.body)
+    );
+
+    const {
+      sku,
+      name,
+      description,
+      categoryId,
+      supplierId,
+      costPrice,
+      salePrice,
+      stockQuantity,
+      minStock,
+      warrantyMonths,
+      qrCode,
+      imageUrl,
+    } = productData;
+
+    await checkCategoryAndSupplier(categoryId, supplierId);
+    await checkDuplicateSku(sku);
+
+    const finalQrCode = qrCode || sku;
+
+    await checkDuplicateQrCode(finalQrCode);
+
+    const product = await prisma.product.create({
+      data: {
+        sku,
+        name,
+        description: description || null,
+        categoryId,
+        supplierId,
+        costPrice,
+        salePrice,
+        stockQuantity: stockQuantity ?? 0,
+        minStock: minStock ?? 0,
+        warrantyMonths: warrantyMonths ?? 0,
+        qrCode: finalQrCode,
+        imageUrl: imageUrl || null,
+        status: RECORD_STATUS.ACTIVE,
+      },
+      include: productInclude,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Thêm sản phẩm thành công",
+      data: formatProduct(product),
+    });
+  })
+);
+
+// PUT /api/products/:id
+router.put(
+  "/:id",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const productId = getProductId(String(req.params.id));
+
+    const productData = validateParseResult(
+      updateProductSchema.safeParse(req.body)
+    );
+
+    const existingProduct = await prisma.product.findUnique({
+      where: {
+        id: productId,
+      },
+    });
+
+    if (!existingProduct) {
+      throw new AppError("Không tìm thấy sản phẩm", 404);
+    }
+
+    const {
+      sku,
+      name,
+      description,
+      categoryId,
+      supplierId,
+      costPrice,
+      salePrice,
+      stockQuantity,
+      minStock,
+      warrantyMonths,
+      qrCode,
+      imageUrl,
+    } = productData;
+
+    await checkCategoryAndSupplier(categoryId, supplierId);
+    await checkDuplicateSku(sku, productId);
+
+    const finalQrCode = qrCode || sku;
+
+    await checkDuplicateQrCode(finalQrCode, productId);
+
+    const updatedProduct = await prisma.product.update({
+      where: {
+        id: productId,
+      },
+      data: {
+        sku,
+        name,
+        description: description || null,
+        categoryId,
+        supplierId,
+        costPrice,
+        salePrice,
+        stockQuantity: stockQuantity ?? existingProduct.stockQuantity,
+        minStock: minStock ?? existingProduct.minStock,
+        warrantyMonths: warrantyMonths ?? existingProduct.warrantyMonths,
+        qrCode: finalQrCode,
+        imageUrl: imageUrl || null,
+      },
+      include: productInclude,
+    });
+
+    return res.json({
+      success: true,
+      message: "Cập nhật sản phẩm thành công",
+      data: formatProduct(updatedProduct),
+    });
+  })
+);
+
+// DELETE /api/products/:id
+router.delete(
+  "/:id",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const productId = getProductId(String(req.params.id));
+
+    const existingProduct = await prisma.product.findUnique({
+      where: {
+        id: productId,
+      },
+    });
+
+    if (!existingProduct) {
+      throw new AppError("Không tìm thấy sản phẩm", 404);
+    }
+
+    if (existingProduct.status === RECORD_STATUS.INACTIVE) {
+      throw new AppError("Sản phẩm đã ngừng hoạt động trước đó", 400);
+    }
+
+    const deletedProduct = await prisma.product.update({
+      where: {
+        id: productId,
+      },
+      data: {
+        status: RECORD_STATUS.INACTIVE,
+      },
+      include: productInclude,
+    });
+
+    return res.json({
+      success: true,
+      message: "Xóa sản phẩm thành công",
+      data: formatProduct(deletedProduct),
+    });
+  })
+);
+
 // PATCH /api/products/:id/restore
 router.patch(
   "/:id/restore",
   authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.MANAGER),
+  authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
     const productId = getProductId(String(req.params.id));
 
@@ -422,200 +648,6 @@ router.patch(
       success: true,
       message: "Khôi phục sản phẩm thành công",
       data: formatProduct(restoredProduct),
-    });
-  })
-);
-
-// GET /api/products/:id
-router.get(
-  "/:id",
-  authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN),
-  catchAsync(async (req, res) => {
-    const productId = getProductId(String(req.params.id));
-
-    const product = await prisma.product.findUnique({
-      where: {
-        id: productId,
-      },
-      include: productInclude,
-    });
-
-    if (!product) {
-      throw new AppError("Không tìm thấy sản phẩm", 404);
-    }
-
-    return res.json({
-      success: true,
-      message: "Lấy chi tiết sản phẩm thành công",
-      data: formatProduct(product),
-    });
-  })
-);
-
-// POST /api/products
-router.post(
-  "/",
-  authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.MANAGER),
-  catchAsync(async (req, res) => {
-    const productData = validateParseResult(createProductSchema.safeParse(req.body));
-
-    const {
-      sku,
-      name,
-      description,
-      categoryId,
-      supplierId,
-      costPrice,
-      salePrice,
-      stockQuantity,
-      minStock,
-      warrantyMonths,
-      qrCode,
-      imageUrl,
-    } = productData;
-
-    await checkCategoryAndSupplier(categoryId, supplierId);
-    await checkDuplicateSku(sku);
-
-    const finalQrCode = qrCode || sku;
-    await checkDuplicateQrCode(finalQrCode);
-
-    const product = await prisma.product.create({
-      data: {
-        sku,
-        name,
-        description: description || null,
-        categoryId,
-        supplierId,
-        costPrice,
-        salePrice,
-        stockQuantity: stockQuantity ?? 0,
-        minStock: minStock ?? 0,
-        warrantyMonths: warrantyMonths ?? 0,
-        qrCode: finalQrCode,
-        imageUrl: imageUrl || null,
-        status: RECORD_STATUS.ACTIVE,
-      },
-      include: productInclude,
-    });
-
-    return res.status(201).json({
-      success: true,
-      message: "Thêm sản phẩm thành công",
-      data: formatProduct(product),
-    });
-  })
-);
-
-// PUT /api/products/:id
-router.put(
-  "/:id",
-  authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.MANAGER),
-  catchAsync(async (req, res) => {
-    const productId = getProductId(String(req.params.id));
-    const productData = validateParseResult(updateProductSchema.safeParse(req.body));
-
-    const existingProduct = await prisma.product.findUnique({
-      where: {
-        id: productId,
-      },
-    });
-
-    if (!existingProduct) {
-      throw new AppError("Không tìm thấy sản phẩm", 404);
-    }
-
-    const {
-      sku,
-      name,
-      description,
-      categoryId,
-      supplierId,
-      costPrice,
-      salePrice,
-      stockQuantity,
-      minStock,
-      warrantyMonths,
-      qrCode,
-      imageUrl,
-      status,
-    } = productData;
-
-    await checkCategoryAndSupplier(categoryId, supplierId);
-    await checkDuplicateSku(sku, productId);
-
-    const finalQrCode = qrCode || sku;
-    await checkDuplicateQrCode(finalQrCode, productId);
-
-    const updatedProduct = await prisma.product.update({
-      where: {
-        id: productId,
-      },
-      data: {
-        sku,
-        name,
-        description: description || null,
-        categoryId,
-        supplierId,
-        costPrice,
-        salePrice,
-        stockQuantity,
-        minStock,
-        warrantyMonths,
-        qrCode: finalQrCode,
-        imageUrl: imageUrl || null,
-        status,
-      },
-      include: productInclude,
-    });
-
-    return res.json({
-      success: true,
-      message: "Cập nhật sản phẩm thành công",
-      data: formatProduct(updatedProduct),
-    });
-  })
-);
-
-// DELETE /api/products/:id
-router.delete(
-  "/:id",
-  authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.MANAGER),
-  catchAsync(async (req, res) => {
-    const productId = getProductId(String(req.params.id));
-
-    const existingProduct = await prisma.product.findUnique({
-      where: {
-        id: productId,
-      },
-    });
-
-    if (!existingProduct) {
-      throw new AppError("Không tìm thấy sản phẩm", 404);
-    }
-
-    if (existingProduct.status === RECORD_STATUS.INACTIVE) {
-      throw new AppError("Sản phẩm đã ngừng hoạt động trước đó", 400);
-    }
-
-    const deletedProduct = await prisma.product.update({
-      where: {
-        id: productId,
-      },
-      data: {
-        status: RECORD_STATUS.INACTIVE,
-      },
-      include: productInclude,
-    });
-
-    return res.json({
-      success: true,
-      message: "Xóa sản phẩm thành công",
-      data: formatProduct(deletedProduct),
     });
   })
 );

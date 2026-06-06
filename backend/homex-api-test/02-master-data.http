@@ -1,0 +1,206 @@
+@baseUrl = http://localhost:5000
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoiYWRtaW5AaG9tZXguY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzgwNzYxNzUwLCJleHAiOjE3ODA4NDgxNTB9.citbCFmOmIUnaE9S4FUYtUTfrAt3GiA_nvblIC-W4bA
+@cashierToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjMsImVtYWlsIjoiY2FzaGllckBob21leC5jb20iLCJyb2xlIjoiQ0FTSElFUiIsImlhdCI6MTc4MDc2Mjc5NCwiZXhwIjoxNzgwODQ5MTk0fQ.is-ZEHHMCjE7puVbDTYNjEiODcamGkmZroOlCdqm22A
+@categoryId = 1
+@supplierId = 1
+@productId = 1
+@customerId = 1
+@userId = 2
+
+### CATEGORY - Create
+POST {{baseUrl}}/api/categories
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "Thiết bị nhà bếp REST",
+  "description": "Danh mục test bằng REST Client"
+}
+
+### CATEGORY - List
+GET {{baseUrl}}/api/categories?page=1&limit=10&search=bếp&status=ACTIVE
+Authorization: Bearer {{adminToken}}
+
+### CATEGORY - Detail
+GET {{baseUrl}}/api/categories/{{categoryId}}
+Authorization: Bearer {{adminToken}}
+
+### CATEGORY - Update
+PUT {{baseUrl}}/api/categories/{{categoryId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "Thiết bị bếp gia đình REST",
+  "description": "Cập nhật danh mục test"
+}
+
+### CATEGORY - Soft delete
+DELETE {{baseUrl}}/api/categories/{{categoryId}}
+Authorization: Bearer {{adminToken}}
+
+### CATEGORY - Restore
+PATCH {{baseUrl}}/api/categories/{{categoryId}}/restore
+Authorization: Bearer {{adminToken}}
+
+### SUPPLIER - Create
+POST {{baseUrl}}/api/suppliers
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "Công ty Gia Dụng Việt REST",
+  "phone": "0909000001",
+  "email": "supplier.rest@homex.com",
+  "address": "TP. Hồ Chí Minh"
+}
+
+### SUPPLIER - List
+GET {{baseUrl}}/api/suppliers?page=1&limit=10&search=Việt&status=ACTIVE
+Authorization: Bearer {{adminToken}}
+
+### SUPPLIER - Detail
+GET {{baseUrl}}/api/suppliers/{{supplierId}}
+Authorization: Bearer {{adminToken}}
+
+### SUPPLIER - Update
+PUT {{baseUrl}}/api/suppliers/{{supplierId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "name": "Công ty Gia Dụng Việt Updated REST",
+  "phone": "0909000001",
+  "email": "supplier.rest.updated@homex.com",
+  "address": "Quận 1, TP. Hồ Chí Minh"
+}
+
+### SUPPLIER - Soft delete
+DELETE {{baseUrl}}/api/suppliers/{{supplierId}}
+Authorization: Bearer {{adminToken}}
+
+### SUPPLIER - Restore
+PATCH {{baseUrl}}/api/suppliers/{{supplierId}}/restore
+Authorization: Bearer {{adminToken}}
+
+### PRODUCT - Create
+POST {{baseUrl}}/api/products
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "sku": "REST-NOI-COM-001",
+  "name": "Nồi cơm điện REST 1.8L",
+  "description": "Nồi cơm điện test bằng REST Client",
+  "categoryId": {{categoryId}},
+  "supplierId": {{supplierId}},
+  "costPrice": 500000,
+  "salePrice": 750000,
+  "stockQuantity": 10,
+  "minStock": 3,
+  "warrantyMonths": 12,
+  "qrCode": "REST-NOI-COM-001",
+  "imageUrl": ""
+}
+
+### PRODUCT - List
+GET {{baseUrl}}/api/products?page=1&limit=10&search=nồi&status=ACTIVE
+Authorization: Bearer {{adminToken}}
+
+### PRODUCT - Detail
+GET {{baseUrl}}/api/products/{{productId}}
+Authorization: Bearer {{adminToken}}
+
+### PRODUCT - Update
+PUT {{baseUrl}}/api/products/{{productId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "sku": "REST-NOI-COM-001",
+  "name": "Nồi cơm điện REST Updated 1.8L",
+  "description": "Cập nhật sản phẩm test",
+  "categoryId": {{categoryId}},
+  "supplierId": {{supplierId}},
+  "costPrice": 520000,
+  "salePrice": 790000,
+  "stockQuantity": 10,
+  "minStock": 3,
+  "warrantyMonths": 12,
+  "qrCode": "REST-NOI-COM-001",
+  "imageUrl": ""
+}
+
+### PRODUCT - Soft delete
+DELETE {{baseUrl}}/api/products/{{productId}}
+Authorization: Bearer {{adminToken}}
+
+### PRODUCT - Restore
+PATCH {{baseUrl}}/api/products/{{productId}}/restore
+Authorization: Bearer {{adminToken}}
+
+### CUSTOMER - Create by CASHIER
+POST {{baseUrl}}/api/customers
+Content-Type: application/json
+Authorization: Bearer {{cashierToken}}
+
+{
+  "fullName": "Nguyễn Văn An REST",
+  "phone": "0901234567",
+  "email": "an.rest@example.com",
+  "address": "Quận 3, TP. Hồ Chí Minh"
+}
+
+### CUSTOMER - List
+GET {{baseUrl}}/api/customers?page=1&limit=10&search=An&status=ACTIVE
+Authorization: Bearer {{cashierToken}}
+
+### CUSTOMER - Detail
+GET {{baseUrl}}/api/customers/{{customerId}}
+Authorization: Bearer {{cashierToken}}
+
+### CUSTOMER - Update by ADMIN
+PUT {{baseUrl}}/api/customers/{{customerId}}
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "fullName": "Nguyễn Văn An REST Updated",
+  "phone": "0901234567",
+  "email": "an.rest.updated@example.com",
+  "address": "Quận 10, TP. Hồ Chí Minh",
+  "points": 0
+}
+
+### CUSTOMER - Soft delete by ADMIN
+DELETE {{baseUrl}}/api/customers/{{customerId}}
+Authorization: Bearer {{adminToken}}
+
+### CUSTOMER - Restore by ADMIN
+PATCH {{baseUrl}}/api/customers/{{customerId}}/restore
+Authorization: Bearer {{adminToken}}
+
+### USER - Create cashier by ADMIN
+POST {{baseUrl}}/api/users
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "fullName": "Cashier REST",
+  "email": "cashier.rest@homex.com",
+  "password": "123456",
+  "role": "CASHIER"
+}
+
+### USER - List
+GET {{baseUrl}}/api/users?page=1&limit=10&role=CASHIER&status=ACTIVE
+Authorization: Bearer {{adminToken}}
+
+### USER - Change password
+PATCH {{baseUrl}}/api/users/{{userId}}/change-password
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "newPassword": "123456789"
+}

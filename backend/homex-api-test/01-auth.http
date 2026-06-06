@@ -1,0 +1,27 @@
+@baseUrl = http://localhost:5000
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoiYWRtaW5AaG9tZXguY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzgwNzYxNzUwLCJleHAiOjE3ODA4NDgxNTB9.citbCFmOmIUnaE9S4FUYtUTfrAt3GiA_nvblIC-W4bA
+@cashierToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjMsImVtYWlsIjoiY2FzaGllckBob21leC5jb20iLCJyb2xlIjoiQ0FTSElFUiIsImlhdCI6MTc4MDc2Mjc5NCwiZXhwIjoxNzgwODQ5MTk0fQ.is-ZEHHMCjE7puVbDTYNjEiODcamGkmZroOlCdqm22A
+
+### Login ADMIN
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@homex.com",
+  "password": "123456"
+}
+
+### Login CASHIER
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "cashier@homex.com",
+  "password": "123456"
+}
+
+### Health Check
+GET {{baseUrl}}/api/health
+
+### Database Health Check
+GET {{baseUrl}}/api/health/db

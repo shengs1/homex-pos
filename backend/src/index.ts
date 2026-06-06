@@ -36,12 +36,14 @@ app.get("/api/health/db", async (req, res) => {
     const supplierCount = await prisma.supplier.count();
     const productCount = await prisma.product.count();
     const customerCount = await prisma.customer.count();
-    const stockTransactionCount = await prisma.stockTransaction.count();
     const orderCount = await prisma.order.count();
     const orderDetailCount = await prisma.orderDetail.count();
-    const warrantyCount = await prisma.warranty.count();
     const paymentCount = await prisma.payment.count();
+    const stockTransactionCount = await prisma.stockTransaction.count();
+    const warrantyCount = await prisma.warranty.count();
     const auditLogCount = await prisma.auditLog.count();
+    
+    
 
     res.json({
       success: true,
@@ -53,10 +55,10 @@ app.get("/api/health/db", async (req, res) => {
         suppliers: supplierCount,
         products: productCount,
         customers: customerCount,
-        stockTransactions: stockTransactionCount,
         orders: orderCount,
         orderDetails: orderDetailCount,
         payments: paymentCount,
+        stockTransactions: stockTransactionCount,
         warranties: warrantyCount,
         auditLogs: auditLogCount,
       },
@@ -71,6 +73,18 @@ app.get("/api/health/db", async (req, res) => {
   }
 });
 
+app.get("/api/health", (req, res) => {
+  return res.json({
+    success: true,
+    message: "Homex POS API đang hoạt động",
+    data: {
+      app: "Homex POS Backend",
+      status: "OK",
+      timestamp: new Date().toISOString(),
+    },
+  });
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/test", testRoutes);
 app.use("/api/categories", categoryRoutes);
@@ -81,6 +95,9 @@ app.use("/api/inventory", inventoryRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/warranties", warrantyRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/reports", reportRoutes);
+app.use("/api/audit-logs", auditLogRoutes);
 app.use(errorMiddleware);
 
 const PORT = process.env.PORT || 5000;

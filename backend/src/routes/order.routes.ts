@@ -15,8 +15,6 @@ import {
   PAYMENT_STATUS,
   STOCK_TRANSACTION_TYPE,
   WARRANTY_STATUS,
-  AUDIT_ACTION,
-  AUDIT_ENTITY_TYPE,
 } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
@@ -56,6 +54,16 @@ const orderInclude = {
           salePrice: true,
           warrantyMonths: true,
           status: true,
+        },
+      },
+      warranty: {
+        select: {
+          id: true,
+          warrantyCode: true,
+          startDate: true,
+          endDate: true,
+          status: true,
+          createdAt: true,
         },
       },
     },
@@ -172,6 +180,7 @@ function formatOrder(order: OrderWithRelations) {
         ...detail.product,
         salePrice: formatMoney(detail.product.salePrice),
       },
+      warranty: detail.warranty,
     })),
     payment: order.payment
       ? {
@@ -202,6 +211,26 @@ function generateOrderCode() {
   return `HD${year}${month}${date}${hour}${minute}${second}${randomNumber}`;
 }
 
+function generateWarrantyCode() {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const date = String(now.getDate()).padStart(2, "0");
+  const hour = String(now.getHours()).padStart(2, "0");
+  const minute = String(now.getMinutes()).padStart(2, "0");
+  const second = String(now.getSeconds()).padStart(2, "0");
+  const randomNumber = Math.floor(Math.random() * 9000) + 1000;
+
+  return `BH${year}${month}${date}${hour}${minute}${second}${randomNumber}`;
+}
+
+function addMonths(date: Date, months: number) {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return result;
+}
+
 async function getUniqueOrderCode(tx: Prisma.TransactionClient) {
   let orderCode = generateOrderCode();
 
@@ -222,26 +251,6 @@ async function getUniqueOrderCode(tx: Prisma.TransactionClient) {
   throw new AppError("Không thể tạo mã đơn hàng, vui lòng thử lại", 500);
 }
 
-function addMonths(date: Date, months: number) {
-  const result = new Date(date);
-  result.setMonth(result.getMonth() + months);
-  return result;
-}
-
-function generateWarrantyCode() {
-  const now = new Date();
-
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const date = String(now.getDate()).padStart(2, "0");
-  const hour = String(now.getHours()).padStart(2, "0");
-  const minute = String(now.getMinutes()).padStart(2, "0");
-  const second = String(now.getSeconds()).padStart(2, "0");
-  const randomNumber = Math.floor(Math.random() * 9000) + 1000;
-
-  return `BH${year}${month}${date}${hour}${minute}${second}${randomNumber}`;
-}
-
 async function getUniqueWarrantyCode(tx: Prisma.TransactionClient) {
   let warrantyCode = generateWarrantyCode();
 
@@ -260,64 +269,6 @@ async function getUniqueWarrantyCode(tx: Prisma.TransactionClient) {
   }
 
   throw new AppError("Không thể tạo mã bảo hành, vui lòng thử lại", 500);
-}
-
-async function createWarrantiesForOrder(
-  tx: Prisma.TransactionClient,
-  order: {
-    id: number;
-    orderCode: string;
-    customerId: number | null;
-    orderDetails: {
-      id: number;
-      productId: number;
-      quantity: number;
-    }[];
-  },
-  products: {
-    id: number;
-    warrantyMonths: number;
-  }[]
-) {
-  if (!order.customerId) {
-    return;
-  }
-
-  const startDate = new Date();
-
-  for (const detail of order.orderDetails) {
-    const product = products.find(
-      (productItem) => productItem.id === detail.productId
-    );
-
-    if (!product || product.warrantyMonths <= 0) {
-      continue;
-    }
-
-    const existingWarranty = await tx.warranty.findUnique({
-      where: {
-        orderDetailId: detail.id,
-      },
-    });
-
-    if (existingWarranty) {
-      continue;
-    }
-
-    const warrantyCode = await getUniqueWarrantyCode(tx);
-    const endDate = addMonths(startDate, product.warrantyMonths);
-
-    await tx.warranty.create({
-      data: {
-        warrantyCode,
-        orderDetailId: detail.id,
-        customerId: order.customerId,
-        startDate,
-        endDate,
-        status: WARRANTY_STATUS.ACTIVE,
-      },
-    });
-  }
 }
 
 function mergeDuplicateItems(
@@ -598,6 +549,14 @@ router.post(
         },
       });
 
+      await createAuditLog(tx, {
+        userId,
+        action: "CREATE_DRAFT_ORDER",
+        entityType: "Order",
+        entityId: createdOrder.id,
+        description: `Tạo đơn nháp ${createdOrder.orderCode}`,
+      });
+
       return getFullOrder(tx, createdOrder.id);
     });
 
@@ -615,6 +574,8 @@ router.put(
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
   catchAsync(async (req, res) => {
+    const authReq = req as AuthRequest;
+    const userId = getAuthenticatedUserId(authReq);
     const orderId = getOrderId(String(req.params.id));
     const orderData = validateParseResult(draftOrderSchema.safeParse(req.body));
 
@@ -671,6 +632,14 @@ router.put(
         },
       });
 
+      await createAuditLog(tx, {
+        userId,
+        action: "UPDATE_DRAFT_ORDER",
+        entityType: "Order",
+        entityId: orderId,
+        description: `Cập nhật đơn nháp ${existingOrder.orderCode}`,
+      });
+
       return getFullOrder(tx, orderId);
     });
 
@@ -717,10 +686,7 @@ router.patch(
       }
 
       if (order.status !== ORDER_STATUS.DRAFT) {
-        throw new AppError(
-          "Chỉ được thanh toán đơn hàng đang ở trạng thái nháp",
-          400
-        );
+        throw new AppError("Chỉ được thanh toán đơn hàng đang ở trạng thái nháp", 400);
       }
 
       if (order.payment) {
@@ -828,11 +794,40 @@ router.patch(
             },
           });
         }
+
+        for (const detail of order.orderDetails) {
+          const product = products.find(
+            (productItem) => productItem.id === detail.productId
+          );
+
+          if (product && product.warrantyMonths > 0) {
+            const existingWarranty = await tx.warranty.findUnique({
+              where: {
+                orderDetailId: detail.id,
+              },
+            });
+
+            if (!existingWarranty) {
+              const startDate = new Date();
+              const endDate = addMonths(startDate, product.warrantyMonths);
+              const warrantyCode = await getUniqueWarrantyCode(tx);
+
+              await tx.warranty.create({
+                data: {
+                  warrantyCode,
+                  orderDetailId: detail.id,
+                  customerId: order.customerId,
+                  startDate,
+                  endDate,
+                  status: WARRANTY_STATUS.ACTIVE,
+                },
+              });
+            }
+          }
+        }
       }
 
-      await createWarrantiesForOrder(tx, order, products);
-
-      const updatedOrder = await tx.order.update({
+      await tx.order.update({
         where: {
           id: order.id,
         },
@@ -843,9 +838,9 @@ router.patch(
 
       await createAuditLog(tx, {
         userId,
-        action: AUDIT_ACTION.CHECKOUT_ORDER,
-        entityType: AUDIT_ENTITY_TYPE.ORDER,
-        entityId: updatedOrder.id,
+        action: "CHECKOUT_ORDER",
+        entityType: "Order",
+        entityId: order.id,
         description: `Thanh toán đơn hàng ${order.orderCode}`,
       });
 
@@ -901,6 +896,14 @@ router.patch(
           data: {
             status: ORDER_STATUS.CANCELLED,
           },
+        });
+
+        await createAuditLog(tx, {
+          userId,
+          action: "CANCEL_DRAFT_ORDER",
+          entityType: "Order",
+          entityId: order.id,
+          description: `Hủy đơn nháp ${order.orderCode}`,
         });
 
         return getFullOrder(tx, order.id);
@@ -959,6 +962,18 @@ router.patch(
         }
       }
 
+      await tx.warranty.updateMany({
+        where: {
+          orderDetail: {
+            orderId: order.id,
+          },
+          status: WARRANTY_STATUS.ACTIVE,
+        },
+        data: {
+          status: WARRANTY_STATUS.CANCELLED,
+        },
+      });
+
       if (order.payment) {
         await tx.payment.update({
           where: {
@@ -977,6 +992,14 @@ router.patch(
         data: {
           status: ORDER_STATUS.CANCELLED,
         },
+      });
+
+      await createAuditLog(tx, {
+        userId,
+        action: "CANCEL_COMPLETED_ORDER",
+        entityType: "Order",
+        entityId: order.id,
+        description: `Hủy đơn đã hoàn thành ${order.orderCode}`,
       });
 
       return getFullOrder(tx, order.id);

@@ -1,0 +1,49 @@
+@baseUrl = http://localhost:5000
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjEsImVtYWlsIjoiYWRtaW5AaG9tZXguY29tIiwicm9sZSI6IkFETUlOIiwiaWF0IjoxNzgwNzYxNzUwLCJleHAiOjE3ODA4NDgxNTB9.citbCFmOmIUnaE9S4FUYtUTfrAt3GiA_nvblIC-W4bA
+@cashierToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjMsImVtYWlsIjoiY2FzaGllckBob21leC5jb20iLCJyb2xlIjoiQ0FTSElFUiIsImlhdCI6MTc4MDc2Mjc5NCwiZXhwIjoxNzgwODQ5MTk0fQ.is-ZEHHMCjE7puVbDTYNjEiODcamGkmZroOlCdqm22A
+@productId = 1
+
+### INVENTORY - Import stock
+POST {{baseUrl}}/api/inventory/import
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "productId": {{productId}},
+  "quantity": 20,
+  "note": "Nhập kho test bằng REST Client"
+}
+
+### INVENTORY - Adjust stock
+POST {{baseUrl}}/api/inventory/adjust
+Content-Type: application/json
+Authorization: Bearer {{adminToken}}
+
+{
+  "productId": {{productId}},
+  "newQuantity": 25,
+  "note": "Kiểm kho test bằng REST Client"
+}
+
+### INVENTORY - Transactions
+GET {{baseUrl}}/api/inventory/transactions?page=1&limit=10
+Authorization: Bearer {{adminToken}}
+
+### INVENTORY - Transactions by product
+GET {{baseUrl}}/api/inventory/transactions?productId={{productId}}
+Authorization: Bearer {{adminToken}}
+
+### INVENTORY - Low stock
+GET {{baseUrl}}/api/inventory/low-stock?page=1&limit=10
+Authorization: Bearer {{adminToken}}
+
+### PERMISSION TEST - Cashier cannot import stock
+POST {{baseUrl}}/api/inventory/import
+Content-Type: application/json
+Authorization: Bearer {{cashierToken}}
+
+{
+  "productId": {{productId}},
+  "quantity": 5,
+  "note": "Request này phải bị chặn quyền"
+}
