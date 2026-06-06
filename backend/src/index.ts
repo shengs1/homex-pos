@@ -10,6 +10,11 @@ import productRoutes from "./routes/product.routes";
 import customerRoutes from "./routes/customer.routes";
 import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
+import userRoutes from "./routes/user.routes";
+import warrantyRoutes from "./routes/warranty.routes";
+import paymentRoutes from "./routes/payment.routes";
+import reportRoutes from "./routes/report.routes";
+import auditLogRoutes from "./routes/audit-log.routes";
 import { errorMiddleware } from "./middlewares/error.middleware";
 
 dotenv.config();
@@ -34,7 +39,9 @@ app.get("/api/health/db", async (req, res) => {
     const stockTransactionCount = await prisma.stockTransaction.count();
     const orderCount = await prisma.order.count();
     const orderDetailCount = await prisma.orderDetail.count();
+    const warrantyCount = await prisma.warranty.count();
     const paymentCount = await prisma.payment.count();
+    const auditLogCount = await prisma.auditLog.count();
 
     res.json({
       success: true,
@@ -50,6 +57,8 @@ app.get("/api/health/db", async (req, res) => {
         orders: orderCount,
         orderDetails: orderDetailCount,
         payments: paymentCount,
+        warranties: warrantyCount,
+        auditLogs: auditLogCount,
       },
     });
   } catch (error) {
@@ -70,7 +79,8 @@ app.use("/api/products", productRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api/orders", orderRoutes);
-
+app.use("/api/users", userRoutes);
+app.use("/api/warranties", warrantyRoutes);
 app.use(errorMiddleware);
 
 const PORT = process.env.PORT || 5000;

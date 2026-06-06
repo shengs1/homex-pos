@@ -205,6 +205,7 @@ model Warranty {
   endDate       DateTime
   status        WarrantyStatus @default(ACTIVE)
   createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @default(now()) @updatedAt
 
   orderDetail OrderDetail @relation(fields: [orderDetailId], references: [id])
   customer    Customer    @relation(fields: [customerId], references: [id])

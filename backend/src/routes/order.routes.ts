@@ -14,9 +14,13 @@ import {
   PAYMENT_METHOD,
   PAYMENT_STATUS,
   STOCK_TRANSACTION_TYPE,
+  WARRANTY_STATUS,
+  AUDIT_ACTION,
+  AUDIT_ENTITY_TYPE,
 } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
+import { createAuditLog } from "../utils/auditLog";
 
 const router = Router();
 
@@ -216,6 +220,104 @@ async function getUniqueOrderCode(tx: Prisma.TransactionClient) {
   }
 
   throw new AppError("Không thể tạo mã đơn hàng, vui lòng thử lại", 500);
+}
+
+function addMonths(date: Date, months: number) {
+  const result = new Date(date);
+  result.setMonth(result.getMonth() + months);
+  return result;
+}
+
+function generateWarrantyCode() {
+  const now = new Date();
+
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const date = String(now.getDate()).padStart(2, "0");
+  const hour = String(now.getHours()).padStart(2, "0");
+  const minute = String(now.getMinutes()).padStart(2, "0");
+  const second = String(now.getSeconds()).padStart(2, "0");
+  const randomNumber = Math.floor(Math.random() * 9000) + 1000;
+
+  return `BH${year}${month}${date}${hour}${minute}${second}${randomNumber}`;
+}
+
+async function getUniqueWarrantyCode(tx: Prisma.TransactionClient) {
+  let warrantyCode = generateWarrantyCode();
+
+  for (let index = 0; index < 5; index++) {
+    const existingWarranty = await tx.warranty.findUnique({
+      where: {
+        warrantyCode,
+      },
+    });
+
+    if (!existingWarranty) {
+      return warrantyCode;
+    }
+
+    warrantyCode = generateWarrantyCode();
+  }
+
+  throw new AppError("Không thể tạo mã bảo hành, vui lòng thử lại", 500);
+}
+
+async function createWarrantiesForOrder(
+  tx: Prisma.TransactionClient,
+  order: {
+    id: number;
+    orderCode: string;
+    customerId: number | null;
+    orderDetails: {
+      id: number;
+      productId: number;
+      quantity: number;
+    }[];
+  },
+  products: {
+    id: number;
+    warrantyMonths: number;
+  }[]
+) {
+  if (!order.customerId) {
+    return;
+  }
+
+  const startDate = new Date();
+
+  for (const detail of order.orderDetails) {
+    const product = products.find(
+      (productItem) => productItem.id === detail.productId
+    );
+
+    if (!product || product.warrantyMonths <= 0) {
+      continue;
+    }
+
+    const existingWarranty = await tx.warranty.findUnique({
+      where: {
+        orderDetailId: detail.id,
+      },
+    });
+
+    if (existingWarranty) {
+      continue;
+    }
+
+    const warrantyCode = await getUniqueWarrantyCode(tx);
+    const endDate = addMonths(startDate, product.warrantyMonths);
+
+    await tx.warranty.create({
+      data: {
+        warrantyCode,
+        orderDetailId: detail.id,
+        customerId: order.customerId,
+        startDate,
+        endDate,
+        status: WARRANTY_STATUS.ACTIVE,
+      },
+    });
+  }
 }
 
 function mergeDuplicateItems(
@@ -615,7 +717,10 @@ router.patch(
       }
 
       if (order.status !== ORDER_STATUS.DRAFT) {
-        throw new AppError("Chỉ được thanh toán đơn hàng đang ở trạng thái nháp", 400);
+        throw new AppError(
+          "Chỉ được thanh toán đơn hàng đang ở trạng thái nháp",
+          400
+        );
       }
 
       if (order.payment) {
@@ -725,13 +830,23 @@ router.patch(
         }
       }
 
-      await tx.order.update({
+      await createWarrantiesForOrder(tx, order, products);
+
+      const updatedOrder = await tx.order.update({
         where: {
           id: order.id,
         },
         data: {
           status: ORDER_STATUS.COMPLETED,
         },
+      });
+
+      await createAuditLog(tx, {
+        userId,
+        action: AUDIT_ACTION.CHECKOUT_ORDER,
+        entityType: AUDIT_ENTITY_TYPE.ORDER,
+        entityId: updatedOrder.id,
+        description: `Thanh toán đơn hàng ${order.orderCode}`,
       });
 
       return getFullOrder(tx, order.id);
