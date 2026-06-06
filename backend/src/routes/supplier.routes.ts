@@ -87,7 +87,7 @@ async function checkDuplicateSupplierName(name: string, ignoredSupplierId?: numb
 router.get(
   "/",
   authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.MANAGER),
+  authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
     const suppliers = await prisma.supplier.findMany({
       orderBy: {

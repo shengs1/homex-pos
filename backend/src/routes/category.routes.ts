@@ -80,7 +80,7 @@ async function checkDuplicateCategoryName(name: string, ignoredCategoryId?: numb
 router.get(
   "/",
   authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.MANAGER),
+  authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
     const categories = await prisma.category.findMany({
       orderBy: {

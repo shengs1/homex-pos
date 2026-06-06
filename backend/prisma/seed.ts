@@ -6,22 +6,13 @@ const prisma = new PrismaClient();
 async function main() {
   const passwordHash = await bcrypt.hash("123456", 10);
 
-  // 1. Tạo 3 vai trò
+  // 1. Tạo 2 vai trò
   const adminRole = await prisma.role.upsert({
     where: { name: "ADMIN" },
     update: {},
     create: {
       name: "ADMIN",
       description: "Chủ cửa hàng, quản lý toàn bộ hệ thống",
-    },
-  });
-
-  const managerRole = await prisma.role.upsert({
-    where: { name: "MANAGER" },
-    update: {},
-    create: {
-      name: "MANAGER",
-      description: "Quản lý cửa hàng, sản phẩm, kho và hóa đơn",
     },
   });
 
@@ -34,10 +25,35 @@ async function main() {
     },
   });
 
-  // 2. Tạo 3 tài khoản demo
+  // 2. Dọn role MANAGER cũ nếu database đã từng seed trước đó
+  const oldManagerRole = await prisma.role.findUnique({
+    where: { name: "MANAGER" },
+  });
+
+  if (oldManagerRole) {
+    await prisma.user.updateMany({
+      where: {
+        roleId: oldManagerRole.id,
+      },
+      data: {
+        roleId: adminRole.id,
+      },
+    });
+
+    await prisma.role.delete({
+      where: {
+        id: oldManagerRole.id,
+      },
+    });
+  }
+
+  // 3. Tạo 2 tài khoản demo
   await prisma.user.upsert({
     where: { email: "admin@homex.com" },
-    update: {},
+    update: {
+      roleId: adminRole.id,
+      status: "ACTIVE",
+    },
     create: {
       fullName: "Admin Homex",
       email: "admin@homex.com",
@@ -48,20 +64,11 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { email: "manager@homex.com" },
-    update: {},
-    create: {
-      fullName: "Quản lý Homex",
-      email: "manager@homex.com",
-      passwordHash,
-      roleId: managerRole.id,
+    where: { email: "cashier@homex.com" },
+    update: {
+      roleId: cashierRole.id,
       status: "ACTIVE",
     },
-  });
-
-  await prisma.user.upsert({
-    where: { email: "cashier@homex.com" },
-    update: {},
     create: {
       fullName: "Nhân viên bán hàng",
       email: "cashier@homex.com",
@@ -204,7 +211,6 @@ async function main() {
   console.log("Seed dữ liệu ban đầu thành công!");
   console.log("Tài khoản demo:");
   console.log("- admin@homex.com / 123456");
-  console.log("- manager@homex.com / 123456");
   console.log("- cashier@homex.com / 123456");
 }
 

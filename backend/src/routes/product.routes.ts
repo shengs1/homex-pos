@@ -430,7 +430,7 @@ router.patch(
 router.get(
   "/:id",
   authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.MANAGER),
+  authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
     const productId = getProductId(String(req.params.id));
 

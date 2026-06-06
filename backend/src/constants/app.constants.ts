@@ -1,6 +1,5 @@
 export const USER_ROLES = {
   ADMIN: "ADMIN",
-  MANAGER: "MANAGER",
   CASHIER: "CASHIER",
 } as const;
 
@@ -10,19 +9,21 @@ export const RECORD_STATUS = {
 } as const;
 
 export const ORDER_STATUS = {
-  PENDING: "PENDING",
+  DRAFT: "DRAFT",
   COMPLETED: "COMPLETED",
-  CANCELED: "CANCELED",
+  CANCELLED: "CANCELLED",
 } as const;
 
 export const PAYMENT_STATUS = {
-  UNPAID: "UNPAID",
   PAID: "PAID",
+  PENDING: "PENDING",
+  FAILED: "FAILED",
   REFUNDED: "REFUNDED",
 } as const;
 
 export const PAYMENT_METHOD = {
   CASH: "CASH",
-  BANK_TRANSFER: "BANK_TRANSFER",
-  MIXED: "MIXED",
+  CARD: "CARD",
+  TRANSFER: "TRANSFER",
+  WALLET: "WALLET",
 } as const;

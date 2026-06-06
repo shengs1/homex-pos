@@ -123,8 +123,11 @@ model Product {
 model Customer {
   id        Int      @id @default(autoincrement())
   fullName  String
-  phone     String?
+  phone     String   @unique
+  email     String?
   address   String?
+  points    Int      @default(0)
+  status    String   @default("ACTIVE")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
