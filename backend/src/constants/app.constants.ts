@@ -27,3 +27,10 @@ export const PAYMENT_METHOD = {
   TRANSFER: "TRANSFER",
   WALLET: "WALLET",
 } as const;
+
+export const STOCK_TRANSACTION_TYPE = {
+  IMPORT: "IMPORT",
+  SALE: "SALE",
+  ADJUSTMENT: "ADJUSTMENT",
+  RESTORE: "RESTORE",
+} as const;

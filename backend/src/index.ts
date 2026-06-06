@@ -8,6 +8,7 @@ import categoryRoutes from "./routes/category.routes";
 import supplierRoutes from "./routes/supplier.routes";
 import productRoutes from "./routes/product.routes";
 import customerRoutes from "./routes/customer.routes";
+import inventoryRoutes from "./routes/inventory.routes";
 import { errorMiddleware } from "./middlewares/error.middleware";
 
 dotenv.config();
@@ -29,6 +30,7 @@ app.get("/api/health/db", async (req, res) => {
     const supplierCount = await prisma.supplier.count();
     const productCount = await prisma.product.count();
     const customerCount = await prisma.customer.count();
+    const stockTransactionCount = await prisma.stockTransaction.count();
 
     res.json({
       success: true,
@@ -40,6 +42,7 @@ app.get("/api/health/db", async (req, res) => {
         suppliers: supplierCount,
         products: productCount,
         customers: customerCount,
+        stockTransactions: stockTransactionCount,
       },
     });
   } catch (error) {
@@ -58,6 +61,7 @@ app.use("/api/categories", categoryRoutes);
 app.use("/api/suppliers", supplierRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/customers", customerRoutes);
+app.use("/api/inventory", inventoryRoutes);
 
 app.use(errorMiddleware);
 
