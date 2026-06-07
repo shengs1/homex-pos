@@ -1,0 +1,81 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Edit, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { RoleGuard } from "@/components/auth/role-guard";
+import { ActionMenu } from "@/components/shared/action-menu";
+import { DataTable, Td, Th } from "@/components/shared/data-table";
+import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
+import { PageHeader } from "@/components/shared/page-header";
+import { PaginationControls } from "@/components/shared/pagination-controls";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { useLanguage } from "@/contexts/language-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
+import { getApiErrorMessage } from "@/lib/api";
+import { formatDateTime, formatNumber } from "@/lib/format";
+import { customerService } from "@/services/homex.service";
+import type { Pagination } from "@/types/api";
+import type { Customer } from "@/types/domain";
+
+const formSchema = z.object({ fullName: z.string().trim().min(1, "Họ tên không được để trống"), phone: z.string().trim().min(1, "SĐT không được để trống"), email: z.string().trim().email("Email không hợp lệ").optional().or(z.literal("")), address: z.string().trim().optional() });
+type FormValues = z.infer<typeof formSchema>;
+
+export default function CustomersPage() {
+  const { t } = useLanguage();
+  const user = useCurrentUser();
+  const isAdmin = user?.role === "ADMIN";
+  const [items, setItems] = useState<Customer[]>([]);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("ACTIVE");
+  const [editingItem, setEditingItem] = useState<Customer | null>(null);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: { fullName: "", phone: "", email: "", address: "" } });
+
+  async function loadData(currentPage = page) {
+    try { setIsLoading(true); setErrorMessage(""); const data = await customerService.list({ page: currentPage, limit: 10, search, status }); setItems(data.items); setPagination(data.pagination); }
+    catch (error) { setErrorMessage(getApiErrorMessage(error)); }
+    finally { setIsLoading(false); }
+  }
+
+  useEffect(() => { loadData(page); }, [page, status]);
+  function openCreateForm() { setEditingItem(null); form.reset({ fullName: "", phone: "", email: "", address: "" }); setIsFormOpen(true); }
+  function openEditForm(item: Customer) { setEditingItem(item); form.reset({ fullName: item.fullName, phone: item.phone, email: item.email || "", address: item.address || "" }); setIsFormOpen(true); window.scrollTo({ top: 0, behavior: "smooth" }); }
+
+  async function onSubmit(values: FormValues) {
+    try { setErrorMessage(""); setSuccessMessage(""); if (editingItem) { await customerService.update(editingItem.id, values); setSuccessMessage(t("message.updated")); } else { await customerService.create(values); setSuccessMessage(t("message.created")); } setIsFormOpen(false); await loadData(page); }
+    catch (error) { setErrorMessage(getApiErrorMessage(error)); }
+  }
+  async function handleDelete(item: Customer) { if (!isAdmin || !window.confirm(t("customers.deleteConfirm", { name: item.fullName }))) return; try { await customerService.remove(item.id); setSuccessMessage(t("message.deleted")); await loadData(page); } catch (error) { setErrorMessage(getApiErrorMessage(error)); } }
+  async function handleRestore(item: Customer) { if (!isAdmin || !window.confirm(t("customers.restoreConfirm", { name: item.fullName }))) return; try { await customerService.restore(item.id); setSuccessMessage(t("message.restored")); await loadData(page); } catch (error) { setErrorMessage(getApiErrorMessage(error)); } }
+  function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setPage(1); loadData(1); }
+
+  return (
+    <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
+      <div className="space-y-6">
+        <PageHeader title={t("customers.title")} description={t("customers.description")}><Button onClick={openCreateForm}><Plus className="h-4 w-4" />{t("customers.add")}</Button></PageHeader>
+        <ErrorState message={errorMessage} />
+        {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+        <Card><CardContent className="pt-6"><form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[1fr_180px_auto]"><Input placeholder={t("customers.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} /><Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="ACTIVE">{t("status.ACTIVE")}</option><option value="INACTIVE">{t("status.INACTIVE")}</option><option value="">{t("common.all")}</option></Select><Button type="submit">{t("common.search")}</Button></form></CardContent></Card>
+        {isFormOpen ? <Card><CardHeader><CardTitle>{editingItem ? t("customers.updateTitle") : t("customers.createTitle")}</CardTitle></CardHeader><CardContent><form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2"><div className="space-y-2"><Label>{t("customers.fullName")}</Label><Input {...form.register("fullName")} />{form.formState.errors.fullName ? <p className="text-sm text-destructive">{form.formState.errors.fullName.message}</p> : null}</div><div className="space-y-2"><Label>{t("common.phone")}</Label><Input {...form.register("phone")} />{form.formState.errors.phone ? <p className="text-sm text-destructive">{form.formState.errors.phone.message}</p> : null}</div><div className="space-y-2"><Label>{t("common.email")}</Label><Input {...form.register("email")} />{form.formState.errors.email ? <p className="text-sm text-destructive">{form.formState.errors.email.message}</p> : null}</div><div className="space-y-2 md:col-span-2"><Label>{t("customers.address")}</Label><Textarea {...form.register("address")} /></div><div className="flex gap-2 md:col-span-2"><Button type="submit" disabled={form.formState.isSubmitting}>{editingItem ? t("common.saveChanges") : t("common.createNew")}</Button><Button variant="outline" onClick={() => setIsFormOpen(false)}>{t("common.cancel")}</Button></div></form></CardContent></Card> : null}
+        {isLoading ? <LoadingState /> : null}
+        {!isLoading && items.length === 0 ? <EmptyState /> : null}
+        {!isLoading && items.length > 0 ? <DataTable><thead><tr><Th>{t("common.id")}</Th><Th>{t("customers.title")}</Th><Th>{t("common.phone")}</Th><Th>{t("common.email")}</Th><Th>{t("customers.points")}</Th><Th>{t("common.status")}</Th><Th>{t("common.updatedAt")}</Th><Th className="text-right">{t("common.actions")}</Th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><Td>{item.id}</Td><Td><div className="font-medium">{item.fullName}</div><div className="text-xs text-muted-foreground">{item.address || "-"}</div></Td><Td>{item.phone}</Td><Td>{item.email || "-"}</Td><Td>{formatNumber(item.points)}</Td><Td><StatusBadge status={item.status} /></Td><Td>{formatDateTime(item.updatedAt)}</Td><Td className="text-right">{isAdmin ? <ActionMenu label={t("common.actions")} items={[{ label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(item) }, item.status === "ACTIVE" ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(item), variant: "destructive" } : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(item) }]} /> : "-"}</Td></tr>)}</tbody></DataTable> : null}
+        <PaginationControls pagination={pagination} onPageChange={setPage} />
+      </div>
+    </RoleGuard>
+  );
+}

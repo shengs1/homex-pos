@@ -88,6 +88,7 @@ model Supplier {
   id        Int           @id @default(autoincrement())
   name      String
   phone     String?
+  email     String?
   address   String?
   status    ProductStatus @default(ACTIVE)
   createdAt DateTime      @default(now())

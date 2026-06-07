@@ -1,0 +1,59 @@
+import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
+import { clearAuthStorage, getAuthToken } from "@/lib/auth";
+import type { ApiError } from "@/types/api";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+export const api = axios.create({
+  baseURL: API_URL,
+  timeout: 15000,
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
+
+api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const token = getAuthToken();
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: AxiosError<ApiError>) => {
+    const status = error.response?.status;
+
+    if (status === 401 && typeof window !== "undefined") {
+      clearAuthStorage();
+      window.dispatchEvent(new Event("homex-pos:unauthorized"));
+
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login?expired=1";
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export function getApiErrorMessage(error: unknown) {
+  if (axios.isAxiosError<ApiError>(error)) {
+    if (error.response?.data?.message) {
+      return error.response.data.message;
+    }
+
+    if (error.code === "ECONNABORTED") {
+      return "Kết nối quá thời gian. Vui lòng thử lại.";
+    }
+
+    if (!error.response) {
+      return "Không thể kết nối đến backend. Hãy kiểm tra server API.";
+    }
+  }
+
+  return "Có lỗi xảy ra. Vui lòng thử lại.";
+}

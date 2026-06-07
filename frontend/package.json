@@ -9,9 +9,20 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@hookform/resolvers": "latest",
+    "@tanstack/react-table": "^8.21.3",
+    "axios": "latest",
+    "class-variance-authority": "latest",
+    "clsx": "latest",
+    "lucide-react": "latest",
     "next": "16.2.6",
+    "qrcode.react": "^4.2.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-hook-form": "latest",
+    "recharts": "latest",
+    "tailwind-merge": "latest",
+    "zod": "latest"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
