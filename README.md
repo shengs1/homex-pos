@@ -1,98 +1,205 @@
-Website POS cho cửa hàng đồ gia dụng
+# HomeX POS
+
+Website POS quản lý bán hàng cho cửa hàng đồ gia dụng Homex. Dự án được xây dựng theo mô hình tách riêng Frontend và Backend, hỗ trợ bán hàng tại quầy, quản lý sản phẩm, kho hàng, khách hàng, hóa đơn, thanh toán, bảo hành, báo cáo và nhật ký hệ thống.
 
 ---
 
-## 📂 Cấu Trúc Tổng Quan Hệ Thống
+## 📂 Cấu trúc dự án
 
 ```text
 homex-pos/
-├── docs/                  # Tài liệu phân tích thiết kế & sơ đồ hệ thống
-├── frontend/              # Mã nguồn giao diện người dùng (Next.js + TS)
-│   ├── app/               # Định nghĩa các trang giao diện (Pages & Routes)
-│   ├── components/        # Thành phần UI dùng chung (UI Components, Layout)
-│   └── services/          # Các hàm xử lý gọi API sang Backend
-└── backend/               # Mã nguồn xử lý logic & API (Express.js + TS)
-    ├── prisma/            # Cấu hình Database, Migrations & Seed dữ liệu mẫu
+├── docs/                 # Tài liệu phân tích, thiết kế và báo cáo tiến độ
+├── frontend/             # Giao diện người dùng - Next.js App Router
+│   ├── app/              # Các route/page chính của hệ thống
+│   ├── components/       # UI components, layout, guard, table dùng chung
+│   ├── contexts/         # Context quản lý ngôn ngữ, trạng thái dùng chung
+│   ├── lib/              # Helper, format, auth, axios config
+│   ├── services/         # Hàm gọi API tập trung
+│   └── types/            # TypeScript types
+└── backend/              # RESTful API - Express.js + TypeScript
+    ├── prisma/           # Prisma schema, migrations, seed data
     └── src/
-        ├── middlewares/   # Bộ lọc trung gian (Xác thực, Bắt lỗi toàn cục)
-        ├── routes/        # Định nghĩa các tuyến đường API
-        └── utils/         # Hàm tiện ích bổ trợ hệ thống
-
+        ├── routes/       # API routes theo từng module
+        ├── middlewares/  # Auth, phân quyền, xử lý lỗi
+        ├── utils/        # Helper xử lý lỗi, async wrapper, audit log
+        └── lib/          # Prisma client
 ```
 
 ---
 
-## 🔐 Phân Hệ Backend (`backend/`)
+## 🛠️ Công nghệ sử dụng
 
-### 1. Danh sách API Routes (`src/routes/`)
+### Frontend
 
-| API Route | Chức năng chính |
-| --- | --- |
-| `auth` / `user` | Đăng nhập, đăng ký, cấp lại token & Quản lý nhân viên |
-| `product` / `category` | Quản lý hàng hóa, giá cả, mã vạch & Danh mục sản phẩm |
-| `inventory` / `supplier` | Quản lý xuất-nhập kho, tồn kho & Đối tác cung ứng |
-| `order` / `payment` | Xử lý giỏ hàng, hóa đơn lẻ tại quầy & Phương thức thanh toán |
-| `customer` / `warranty` | Quản lý thông tin khách hàng, tích điểm & Phiếu bảo hành |
-| `report` / `audit-log` | Thống kê doanh thu, lợi nhuận & Nhật ký thao tác hệ thống |
-| `test` | Endpoint nội bộ phục vụ kiểm thử |
+* Next.js App Router
+* TypeScript
+* Tailwind CSS
+* shadcn/ui
+* TanStack Table
+* Recharts
+* Axios
+* Zod
+* react-hook-form
 
-### 2. Thành phần Core
+### Backend
 
-* **Middlewares**:
-* `auth.middleware.ts`: Xác thực Token JWT và phân quyền truy cập.
-* `error.middleware.ts`: Gom và chuẩn hóa toàn bộ lỗi hệ thống tập trung.
+* Express.js
+* TypeScript
+* PostgreSQL
+* Prisma ORM
+* Zod
+* JWT
+* bcrypt
 
+### Công cụ kiểm thử
 
-* **Utils**:
-* `catchAsync.ts`: Triệt tiêu khối `try-catch` lặp lại trong các Controller.
-* `auditLog.ts`: Tự động lưu vết lịch sử thao tác dữ liệu của người dùng vào DB.
-
-
-
----
-
-## 💻 Phân Hệ Frontend (`frontend/`)
-
-### 1. Các Trang Giao Diện (`app/`)
-
-| Cụm chức năng | Router chính | Chức năng trên UI |
-| --- | --- | --- |
-| Xác thực** | `(auth)/login` | Màn hình đăng nhập hệ thống |
-| Bán hàng & Đơn hàng | `pos` / `orders` | Giao diện tính tiền tại quầy & Danh sách hóa đơn |
-| Quản lý sản phẩm | `products` / `categories` | Quản lý danh mục, giá bán và thuộc tính hàng hóa |
-| Kho & Nhà cung ứng | `inventory` / `suppliers` | Giao diện theo dõi tồn kho & Nhập hàng từ đối tác |
-| Khách hàng & Bảo hành | `customers` / `warranties` | Hồ sơ khách hàng, hạng thành viên & Tra cứu bảo hành |
-| Báo cáo & Giám sát | `reports` / `audit-logs` / `users` | Biểu đồ doanh thu, lịch sử hệ thống & Quản lý nhân sự |
-| Điều hướng bảo mật | `unauthorized` | Màn hình chặn quyền khi truy cập trái phép |
-
-### 2. Kiến trúc Giao diện & Kết nối API
-
-* Phân quyền (Guard): `components/auth/role-guard.tsx` kiểm tra vai trò người dùng (Admin/Cashier) trước khi render trang.
-* Hiển thị dữ liệu: Tích hợp bộ thư viện mạnh mẽ `tanstack-data-table.tsx` hỗ trợ lọc nâng cao, phân trang và tìm kiếm nhanh.
-* Cơ chế kết nối: Toàn bộ các logic gọi API đều được tập trung xử lý thông qua `services/homex.service.ts` để đảm bảo tính đồng bộ dữ liệu.
+* REST Client trong Visual Studio Code
+* Prisma Studio
 
 ---
 
-## 🚀 Hướng Dẫn Cài Đặt Nhanh
+## 🔐 Phân quyền hệ thống
 
-### 1. Cài đặt Backend
+Hệ thống hiện sử dụng 2 vai trò chính:
+
+| Vai trò   | Quyền sử dụng                                                                  |
+| --------- | ------------------------------------------------------------------------------ |
+| `ADMIN`   | Quản trị toàn bộ hệ thống, dữ liệu, kho hàng, báo cáo, người dùng và audit log |
+| `CASHIER` | Bán hàng POS, quản lý đơn hàng, khách hàng và tra cứu bảo hành                 |
+
+Frontend có xử lý ẩn/hiện sidebar theo vai trò và chặn truy cập URL trái quyền.
+
+---
+
+## 🔧 Backend Modules
+
+| Module    | Chức năng chính                                                 |
+| --------- | --------------------------------------------------------------- |
+| Auth      | Đăng nhập JWT, xác thực token, kiểm tra user active             |
+| Category  | Quản lý danh mục, tìm kiếm, phân trang, xóa mềm, khôi phục      |
+| Supplier  | Quản lý nhà cung cấp, tìm kiếm, phân trang, xóa mềm, khôi phục  |
+| Product   | Quản lý sản phẩm, SKU/QR, tồn kho thấp, ảnh, xóa mềm, khôi phục |
+| Customer  | Quản lý khách hàng, tìm kiếm, điểm tích lũy                     |
+| Inventory | Nhập kho, điều chỉnh kho, lịch sử biến động kho                 |
+| Order     | Tạo đơn nháp, cập nhật giỏ hàng, checkout, hủy đơn              |
+| Payment   | Danh sách thanh toán, chi tiết, tìm theo đơn, hoàn tiền         |
+| Warranty  | Tự động tạo bảo hành, tra cứu mã, tạo thủ công, hủy, khôi phục  |
+| Report    | Tổng quan, doanh thu, top sản phẩm, tồn kho thấp, khách hàng    |
+| User      | Tạo, sửa, khóa, khôi phục và đổi mật khẩu tài khoản             |
+| Audit Log | Ghi nhận và lọc lịch sử thao tác hệ thống                       |
+
+---
+
+## 🌐 API Routes chính
+
+| Route             | Chức năng             |
+| ----------------- | --------------------- |
+| `/api/auth`       | Đăng nhập và xác thực |
+| `/api/categories` | Quản lý danh mục      |
+| `/api/suppliers`  | Quản lý nhà cung cấp  |
+| `/api/products`   | Quản lý sản phẩm      |
+| `/api/customers`  | Quản lý khách hàng    |
+| `/api/inventory`  | Quản lý kho hàng      |
+| `/api/orders`     | Quản lý đơn hàng POS  |
+| `/api/payments`   | Quản lý thanh toán    |
+| `/api/warranties` | Quản lý bảo hành      |
+| `/api/reports`    | Báo cáo thống kê      |
+| `/api/users`      | Quản lý người dùng    |
+| `/api/audit-logs` | Nhật ký hệ thống      |
+
+---
+
+## 💻 Frontend Pages
+
+| Trang           | Chức năng                                                        |
+| --------------- | ---------------------------------------------------------------- |
+| `/login`        | Đăng nhập hệ thống                                               |
+| `/dashboard`    | Tổng quan theo vai trò ADMIN/CASHIER                             |
+| `/pos`          | Bán hàng tại quầy, giỏ hàng, tạo draft, checkout                 |
+| `/orders`       | Danh sách đơn hàng, chi tiết, hủy đơn, tiếp tục thanh toán draft |
+| `/customers`    | Quản lý và tìm kiếm khách hàng                                   |
+| `/warranties`   | Danh sách, tra cứu và tạo bảo hành                               |
+| `/products`     | Quản lý sản phẩm, QR, nhập dữ liệu mẫu, import JSON/CSV          |
+| `/categories`   | Quản lý danh mục                                                 |
+| `/suppliers`    | Quản lý nhà cung cấp                                             |
+| `/inventory`    | Nhập kho, điều chỉnh kho, lịch sử kho                            |
+| `/payments`     | Quản lý thanh toán và hoàn tiền                                  |
+| `/reports`      | Báo cáo doanh thu, top sản phẩm, khách hàng                      |
+| `/users`        | Quản lý tài khoản nhân viên                                      |
+| `/audit-logs`   | Lịch sử thao tác hệ thống                                        |
+| `/unauthorized` | Trang thông báo không có quyền truy cập                          |
+
+---
+
+## ✨ Chức năng Frontend nổi bật
+
+* Giao diện quản trị bằng Tailwind CSS và shadcn/ui.
+* Data Table sử dụng TanStack Table.
+* Sidebar phân quyền theo `ADMIN` và `CASHIER`.
+* Axios client tự gắn token và xử lý token hết hạn.
+* POS có giỏ hàng, tạo đơn nháp, checkout và phục hồi đơn nháp.
+* Sản phẩm có ảnh, QR code, nhập dữ liệu mẫu, import JSON/CSV.
+* Biểu đồ doanh thu và top sản phẩm bằng Recharts.
+* Hỗ trợ chuyển đổi ngôn ngữ VI/EN.
+* Chuẩn hóa định dạng ngày tháng theo `dd/mm/yyyy`.
+* Xử lý loading, error message, logout và redirect.
+
+---
+
+## 🚀 Cài đặt và chạy dự án
+
+### 1. Chạy Backend
 
 ```bash
 cd backend
 npm install
-# Cấu hình file .env cho DATABASE_URL
 npx prisma migrate dev
+npx prisma db seed
 npm run dev
-
 ```
 
-### 2. Cài đặt Frontend
+Backend chạy tại:
+
+```text
+http://localhost:5000
+```
+
+### 2. Chạy Frontend
 
 ```bash
 cd frontend
 npm install
-# Cấu hình file .env.local cho API URL
 npm run dev
-
 ```
 
+Frontend chạy tại:
+
+```text
+http://localhost:3000
+```
+
+### 3. Cấu hình môi trường
+
+Backend cần file `.env`:
+
+```env
+DATABASE_URL="postgresql://..."
+JWT_SECRET="your_jwt_secret"
+```
+
+Frontend cần file `.env.local`:
+
+```env
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+```
+
+---
+
+## 👤 Tài khoản demo
+
+| Vai trò | Email               | Mật khẩu |
+| ------- | ------------------- | -------- |
+| ADMIN   | `admin@homex.com`   | `123456` |
+| CASHIER | `cashier@homex.com` | `123456` |
+
+---
