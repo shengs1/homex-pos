@@ -161,12 +161,27 @@ export const inventoryService = {
   adjustStock: (body: { productId: number; newQuantity: number; note?: string }) => postData<StockTransaction>("/inventory/adjust", body),
 };
 
+export type OrderLinePayload = { productId: number; quantity: number };
+
+export type DraftOrderPayload = {
+  customerId?: number;
+  discountAmount?: number;
+  promotionCode?: string;
+  items: OrderLinePayload[];
+};
+
+export type CheckoutOrderPayload = {
+  paymentMethod: string;
+  discountAmount?: number;
+  promotionCode?: string;
+};
+
 export const orderService = {
   list: (params?: ListParams) => getPaginatedDataByIdAsc<Order>("/orders", params),
   detail: (id: number) => getData<Order>(`/orders/${id}`),
-  createDraft: (body: { customerId?: number; items: { productId: number; quantity: number }[] }) => postData<Order>("/orders/draft", body),
-  updateDraft: (id: number, body: { customerId?: number; items: { productId: number; quantity: number }[] }) => putData<Order>(`/orders/${id}/draft`, body),
-  checkout: (id: number, body: { paymentMethod: string }) => patchData<Order>(`/orders/${id}/checkout`, body),
+  createDraft: (body: DraftOrderPayload) => postData<Order>("/orders/draft", body),
+  updateDraft: (id: number, body: DraftOrderPayload) => putData<Order>(`/orders/${id}/draft`, body),
+  checkout: (id: number, body: CheckoutOrderPayload) => patchData<Order>(`/orders/${id}/checkout`, body),
   cancel: (id: number) => patchData<Order>(`/orders/${id}/cancel`),
 };
 

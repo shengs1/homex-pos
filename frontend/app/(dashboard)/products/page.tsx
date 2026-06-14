@@ -23,7 +23,7 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/contexts/language-context";
 import { getApiErrorMessage } from "@/lib/api";
-import { parseProductImportFileContent } from "@/lib/demo-products";
+import { buildDemoProductPayloads, parseProductImportFileContent, resolveRealProductImageFromProductName, REAL_PRODUCT_FALLBACK_IMAGE } from "@/lib/demo-products";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { categoryService, productService, supplierService, type ProductPayload } from "@/services/homex.service";
@@ -46,17 +46,6 @@ const formSchema = z.object({
 });
 
 type FormValues = z.infer<typeof formSchema>;
-
-type ProductTemplate = {
-  categoryCode: "KIT" | "DGD" | "HOM";
-  brandCode: string;
-  modelPrefix: string;
-  name: string;
-  description: string;
-  baseCost: number;
-  warrantyMonths: number;
-  categoryKeywords: string[];
-};
 
 type ProductActionItem = {
   label: string;
@@ -84,8 +73,8 @@ const emptyForm: FormValues = {
 
 const jsonStructureExample = `[
   {
-    "sku": "DGD-SH-NC18",
-    "name": "Nồi cơm điện Homex 1.8L",
+    "sku": "KIT-SH-NC000001",
+    "name": "Nồi cơm điện 1.8L Homex NC000001",
     "categoryId": 1,
     "supplierId": 1,
     "costPrice": 520000,
@@ -93,262 +82,16 @@ const jsonStructureExample = `[
     "stockQuantity": 30,
     "minStock": 5,
     "warrantyMonths": 24,
-    "imageUrl": "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?auto=format&fit=crop&w=900&q=80",
+    "imageUrl": "/assets/real-products/rice-cooker.jpg",
     "imageBase64": "data:image/png;base64,..."
   }
 ]`;
 
 const csvStructureExample = `sku,name,categoryId,supplierId,costPrice,salePrice,stockQuantity,minStock,warrantyMonths,imageUrl
-DGD-SH-NC18,Nồi cơm điện Homex 1.8L,1,1,520000,750000,30,5,24,https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?auto=format&fit=crop&w=900&q=80`;
-
-const productTemplates: ProductTemplate[] = [
-  {
-    categoryCode: "KIT",
-    brandCode: "SH",
-    modelPrefix: "NC",
-    name: "Nồi cơm điện cao tần Homex",
-    description: "Nồi cơm điện nhà bếp, phù hợp demo quầy POS đồ gia dụng.",
-    baseCost: 520000,
-    warrantyMonths: 24,
-    categoryKeywords: ["bep", "kitchen", "noi", "nha bep"],
-  },
-  {
-    categoryCode: "KIT",
-    brandCode: "KG",
-    modelPrefix: "AS",
-    name: "Ấm siêu tốc inox Homex",
-    description: "Ấm siêu tốc dùng cho khu vực bếp, SKU có cấu trúc rõ ràng.",
-    baseCost: 210000,
-    warrantyMonths: 12,
-    categoryKeywords: ["bep", "kitchen", "am", "binh", "nha bep"],
-  },
-  {
-    categoryCode: "KIT",
-    brandCode: "PN",
-    modelPrefix: "BT",
-    name: "Bếp điện từ đôi Homex",
-    description: "Bếp điện từ đôi cho căn hộ và cửa hàng gia dụng.",
-    baseCost: 890000,
-    warrantyMonths: 24,
-    categoryKeywords: ["bep", "kitchen", "dien tu", "nha bep"],
-  },
-  {
-    categoryCode: "KIT",
-    brandCode: "EL",
-    modelPrefix: "LN",
-    name: "Lò nướng gia đình Homex",
-    description: "Lò nướng dung tích lớn cho gia đình và cửa hàng gia dụng.",
-    baseCost: 980000,
-    warrantyMonths: 24,
-    categoryKeywords: ["bep", "kitchen", "lo nuong", "nha bep"],
-  },
-  {
-    categoryCode: "KIT",
-    brandCode: "KG",
-    modelPrefix: "CH",
-    name: "Chảo chống dính sâu lòng Homex",
-    description: "Chảo chống dính dùng hằng ngày trong gia đình.",
-    baseCost: 180000,
-    warrantyMonths: 12,
-    categoryKeywords: ["bep", "kitchen", "chao", "dung cu", "nha bep"],
-  },
-  {
-    categoryCode: "DGD",
-    brandCode: "LG",
-    modelPrefix: "ML",
-    name: "Máy lọc không khí phòng ngủ Homex",
-    description: "Máy lọc không khí cho phòng ngủ và phòng khách.",
-    baseCost: 1380000,
-    warrantyMonths: 24,
-    categoryKeywords: ["dien", "gia dung", "appliance", "may", "loc", "electric"],
-  },
-  {
-    categoryCode: "DGD",
-    brandCode: "EL",
-    modelPrefix: "HB",
-    name: "Máy hút bụi cầm tay Homex",
-    description: "Máy hút bụi cầm tay cho vệ sinh gia đình.",
-    baseCost: 820000,
-    warrantyMonths: 18,
-    categoryKeywords: ["dien", "gia dung", "appliance", "may", "hut", "electric"],
-  },
-  {
-    categoryCode: "DGD",
-    brandCode: "SH",
-    modelPrefix: "QT",
-    name: "Quạt cây điều khiển từ xa Homex",
-    description: "Quạt cây điện gia dụng có điều khiển từ xa.",
-    baseCost: 450000,
-    warrantyMonths: 18,
-    categoryKeywords: ["dien", "gia dung", "quat", "fan", "electric"],
-  },
-  {
-    categoryCode: "HOM",
-    brandCode: "LC",
-    modelPrefix: "TH",
-    name: "Thảm sàn phòng khách Homex",
-    description: "Thảm sàn mềm, dễ vệ sinh, dùng cho phòng khách hoặc phòng ngủ.",
-    baseCost: 240000,
-    warrantyMonths: 6,
-    categoryKeywords: ["home", "noi that", "tham", "gia dung"],
-  },
-  {
-    categoryCode: "HOM",
-    brandCode: "HM",
-    modelPrefix: "TR",
-    name: "Thùng rác inox đạp chân Homex",
-    description: "Thùng rác inox dùng cho phòng bếp hoặc phòng khách.",
-    baseCost: 210000,
-    warrantyMonths: 6,
-    categoryKeywords: ["ve sinh", "home", "clean", "rac", "thung", "gia dung"],
-  },
-  {
-    categoryCode: "HOM",
-    brandCode: "LC",
-    modelPrefix: "KD",
-    name: "Kệ để đồ đa năng Homex",
-    description: "Kệ để đồ gia đình, tối ưu không gian nhà ở.",
-    baseCost: 260000,
-    warrantyMonths: 6,
-    categoryKeywords: ["ke", "do", "home", "noi that", "gia dung"],
-  },
-];
-
-const productImagePools = {
-  riceCooker: [
-    "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1585515320310-259814833e62?auto=format&fit=crop&w=900&q=80",
-  ],
-  electricKettle: [
-    "https://images.unsplash.com/photo-1570222094114-d054a817e56b?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=900&q=80",
-  ],
-  inductionCooker: [
-    "https://images.unsplash.com/photo-1556911220-bff31c812dba?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1585659722983-3a675dabf23d?auto=format&fit=crop&w=900&q=80",
-  ],
-  oven: [
-    "https://images.unsplash.com/photo-1556911073-38141963c9e0?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=900&q=80",
-  ],
-  airPurifier: [
-    "https://images.unsplash.com/photo-1605648916361-9bc12ad6a569?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1614218015954-642c0c8f283f?auto=format&fit=crop&w=900&q=80",
-  ],
-  vacuumCleaner: [
-    "https://images.unsplash.com/photo-1558317374-067fb5f30001?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1527515637462-cff94eecc1ac?auto=format&fit=crop&w=900&q=80",
-  ],
-  pan: [
-    "https://images.unsplash.com/photo-1556909114-4e9c8380c515?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1584990347449-a0f2b0ce6e94?auto=format&fit=crop&w=900&q=80",
-  ],
-  trashCan: [
-    "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1620503374956-c942862f0372?auto=format&fit=crop&w=900&q=80",
-  ],
-  shelf: [
-    "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1594026112284-02bb6f3352fe?auto=format&fit=crop&w=900&q=80",
-  ],
-  floorMat: [
-    "https://images.unsplash.com/photo-1600166898405-da9535204843?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&w=900&q=80",
-  ],
-  fan: [
-    "https://images.unsplash.com/photo-1609081219090-a6d81d3085bf?auto=format&fit=crop&w=900&q=80",
-    "https://images.unsplash.com/photo-1585771724684-38269d6639fd?auto=format&fit=crop&w=900&q=80",
-  ],
-  fallback: [
-    "https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?auto=format&fit=crop&w=900&q=80",
-  ],
-};
-
-function normalizeText(value: string) {
-  return value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-}
+KIT-SH-NC000001,Nồi cơm điện 1.8L Homex NC000001,1,1,520000,750000,30,5,24,/assets/real-products/rice-cooker.jpg`;
 
 function sortByIdAsc<T extends { id: number }>(items: T[]) {
   return [...items].sort((a, b) => a.id - b.id);
-}
-
-function pickStaticUrl(urls: string[], index: number) {
-  return urls[index % urls.length];
-}
-
-function resolveProductImageUrlByName(productName: string, index = 0) {
-  const name = normalizeText(productName);
-
-  if (name.includes("tham")) return pickStaticUrl(productImagePools.floorMat, index);
-  if (name.includes("lo nuong")) return pickStaticUrl(productImagePools.oven, index);
-  if (name.includes("am sieu toc")) return pickStaticUrl(productImagePools.electricKettle, index);
-  if (name.includes("bep dien tu")) return pickStaticUrl(productImagePools.inductionCooker, index);
-  if (name.includes("noi com")) return pickStaticUrl(productImagePools.riceCooker, index);
-  if (name.includes("may loc khong khi")) return pickStaticUrl(productImagePools.airPurifier, index);
-  if (name.includes("may hut bui")) return pickStaticUrl(productImagePools.vacuumCleaner, index);
-  if (name.includes("chao chong dinh")) return pickStaticUrl(productImagePools.pan, index);
-  if (name.includes("thung rac")) return pickStaticUrl(productImagePools.trashCan, index);
-  if (name.includes("ke")) return pickStaticUrl(productImagePools.shelf, index);
-  if (name.includes("quat cay")) return pickStaticUrl(productImagePools.fan, index);
-
-  return pickStaticUrl(productImagePools.fallback, index);
-}
-
-function findCategoryForTemplate(template: ProductTemplate, categories: Category[], index: number) {
-  const activeCategories = categories.filter((category) => category.status === "ACTIVE");
-  const matchedCategory = activeCategories.find((category) => {
-    const categoryName = normalizeText(category.name);
-    return template.categoryKeywords.some((keyword) => categoryName.includes(normalizeText(keyword)));
-  });
-
-  return matchedCategory || activeCategories[index % activeCategories.length];
-}
-
-function buildModelCode(template: ProductTemplate, index: number, batchSeed: number) {
-  const modelNumber = batchSeed + index + 1;
-  return `${template.modelPrefix}${String(modelNumber).padStart(4, "0")}`;
-}
-
-function buildDemoProductPayloads(categories: Category[], suppliers: Supplier[], total = 150, batchSeed = 1000): ProductPayload[] {
-  const activeCategories = categories.filter((category) => category.status === "ACTIVE");
-  const activeSuppliers = suppliers.filter((supplier) => supplier.status === "ACTIVE");
-
-  if (activeCategories.length === 0 || activeSuppliers.length === 0) return [];
-
-  return Array.from({ length: total }, (_, index) => {
-    const template = productTemplates[index % productTemplates.length];
-    const modelCode = buildModelCode(template, index, batchSeed);
-    const sku = `${template.categoryCode}-${template.brandCode}-${modelCode}`;
-    const productName = `${template.name} ${modelCode}`;
-    const category = findCategoryForTemplate(template, activeCategories, index);
-    const supplier = activeSuppliers[index % activeSuppliers.length];
-    const costPrice = template.baseCost + (index % 12) * 17000 + Math.floor(index / 12) * 9000;
-    const salePrice = Math.round((costPrice * 1.32) / 1000) * 1000;
-
-    return {
-      sku,
-      name: productName,
-      description: `${template.description} SKU được ghép theo công thức ${template.categoryCode}-${template.brandCode}-${modelCode}, không dùng chuỗi ngẫu nhiên.`,
-      categoryId: category.id,
-      supplierId: supplier.id,
-      costPrice,
-      salePrice,
-      stockQuantity: 15 + (index % 55),
-      minStock: 5 + (index % 7),
-      warrantyMonths: template.warrantyMonths,
-      qrCode: sku,
-      imageUrl: resolveProductImageUrlByName(productName, index),
-    };
-  });
-}
-
-function buildProductImageFallback(productName: string) {
-  const title = encodeURIComponent(productName.slice(0, 34));
-  return `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='180' viewBox='0 0 240 180'><rect width='240' height='180' rx='18' fill='%23eff6ff'/><rect x='18' y='18' width='204' height='144' rx='14' fill='%23dbeafe'/><text x='120' y='84' font-size='16' font-family='Arial' font-weight='700' fill='%231e3a8a' text-anchor='middle'>Homex POS</text><text x='120' y='112' font-size='12' font-family='Arial' fill='%23475569' text-anchor='middle'>${title}</text></svg>`;
-}
-
-function handleProductImageError(event: SyntheticEvent<HTMLImageElement>, productName: string) {
-  event.currentTarget.src = buildProductImageFallback(productName);
 }
 
 function ProductActionMenu({ label, items }: { label: string; items: ProductActionItem[] }) {
@@ -412,6 +155,11 @@ export default function ProductsPage() {
   const selectedIds = useMemo(() => Object.keys(rowSelection).filter((key) => rowSelection[key]).map((key) => Number(key)), [rowSelection]);
   const selectedCount = selectedIds.length;
   const currentImageUrl = form.watch("imageUrl");
+
+  function handleProductImageError(event: SyntheticEvent<HTMLImageElement>, _productName?: string) {
+    event.currentTarget.onerror = null;
+    event.currentTarget.src = REAL_PRODUCT_FALLBACK_IMAGE;
+  }
 
   useEffect(() => {
     try {
@@ -503,7 +251,7 @@ export default function ProductsPage() {
     try {
       setErrorMessage("");
       setSuccessMessage("");
-      const payload = { ...values, qrCode: values.qrCode || values.sku, imageUrl: values.imageUrl || resolveProductImageUrlByName(values.name) };
+      const payload = { ...values, qrCode: values.qrCode || values.sku, imageUrl: values.imageUrl || resolveRealProductImageFromProductName(values.name) };
       if (editingItem) {
         await productService.update(editingItem.id, payload);
         setSuccessMessage(t("message.updated"));
@@ -656,7 +404,7 @@ export default function ProductsPage() {
       const payloads = parseProductImportFileContent(content).slice(0, 200).map((payload, index) => ({
         ...payload,
         qrCode: payload.qrCode || payload.sku,
-        imageUrl: payload.imageUrl || resolveProductImageUrlByName(payload.name, index),
+        imageUrl: payload.imageUrl || resolveRealProductImageFromProductName(payload.name),
       }));
 
       if (payloads.length === 0) {
@@ -883,11 +631,12 @@ export default function ProductsPage() {
       header: t("common.image"),
       cell: ({ row }) => (
         <div className="mx-auto h-11 w-11 overflow-hidden rounded-lg border bg-muted">
-          {row.original.imageUrl ? (
-            <img src={row.original.imageUrl} alt={row.original.name} className="h-full w-full object-cover" onError={(event) => handleProductImageError(event, row.original.name)} />
-          ) : (
-            <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">{t("common.notAvailable")}</div>
-          )}
+          <img
+            src={row.original.imageUrl || REAL_PRODUCT_FALLBACK_IMAGE}
+            alt={row.original.name}
+            className="h-full w-full object-cover"
+            onError={(event) => handleProductImageError(event, row.original.name)}
+          />
         </div>
       ),
       meta: { headerClassName: "px-2 text-center whitespace-nowrap", cellClassName: "px-2" },
@@ -1170,7 +919,7 @@ export default function ProductsPage() {
           <div className="space-y-4">
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
               <p className="font-semibold">Hướng dẫn ảnh khi import</p>
-              <p>Trường <code>imageUrl</code> có thể là URL CDN hoặc chuỗi Base64 dạng <code>data:image/png;base64,...</code>. Nếu bỏ trống, hệ thống sẽ tự map ảnh theo tên sản phẩm.</p>
+              <p>Trường <code>imageUrl</code> nên dùng ảnh thật cố định trong project, ví dụ <code>/assets/real-products/rice-cooker.jpg</code>, hoặc chuỗi Base64 dạng <code>data:image/png;base64,...</code>. Không dùng link random online như <code>source.unsplash.com</code>. Nếu bỏ trống, hệ thống sẽ dùng ảnh fallback cục bộ.</p>
             </div>
             <div>
               <p className="mb-2 text-sm font-semibold">{t("products.jsonExample")}</p>

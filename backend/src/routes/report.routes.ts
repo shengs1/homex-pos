@@ -14,18 +14,60 @@ import { catchAsync } from "../utils/catchAsync";
 
 const router = Router();
 
+const VIETNAM_TIMEZONE_OFFSET_MS = 7 * 60 * 60 * 1000;
+
+function getDateOnlyParts(value: string) {
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+  };
+}
+
+function createVietnamStartOfDayUtcDate(year: number, month: number, day: number) {
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0) - VIETNAM_TIMEZONE_OFFSET_MS);
+}
+
 function getDateValue(value: unknown, fieldName: string) {
   if (!value) {
     return null;
   }
 
-  const dateValue = new Date(String(value));
+  const rawValue = String(value);
+  const dateOnlyParts = getDateOnlyParts(rawValue);
+
+  if (dateOnlyParts) {
+    const dateValue = createVietnamStartOfDayUtcDate(
+      dateOnlyParts.year,
+      dateOnlyParts.month,
+      dateOnlyParts.day
+    );
+
+    Object.defineProperty(dateValue, "__isVietnamDateOnly", {
+      value: true,
+      enumerable: false,
+    });
+
+    return dateValue;
+  }
+
+  const dateValue = new Date(rawValue);
 
   if (Number.isNaN(dateValue.getTime())) {
     throw new AppError(`${fieldName} không hợp lệ`, 400);
   }
 
   return dateValue;
+}
+
+function isVietnamDateOnly(dateValue: Date) {
+  return Boolean((dateValue as Date & { __isVietnamDateOnly?: boolean }).__isVietnamDateOnly);
 }
 
 function getLimitValue(value: unknown, defaultValue: number) {
@@ -50,9 +92,13 @@ function buildDateRange(fromDate: Date | null, toDate: Date | null) {
   }
 
   if (toDate) {
-    const endDate = new Date(toDate);
-    endDate.setHours(23, 59, 59, 999);
-    range.lte = endDate;
+    if (isVietnamDateOnly(toDate)) {
+      range.lte = new Date(toDate.getTime() + 24 * 60 * 60 * 1000 - 1);
+    } else {
+      const endDate = new Date(toDate);
+      endDate.setHours(23, 59, 59, 999);
+      range.lte = endDate;
+    }
   }
 
   return range;
@@ -63,9 +109,10 @@ function formatMoney(value: Prisma.Decimal | number | null | undefined) {
 }
 
 function getDateKey(date: Date, groupBy: "day" | "month") {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+  const vietnamDate = new Date(date.getTime() + VIETNAM_TIMEZONE_OFFSET_MS);
+  const year = vietnamDate.getUTCFullYear();
+  const month = String(vietnamDate.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(vietnamDate.getUTCDate()).padStart(2, "0");
 
   if (groupBy === "month") {
     return `${year}-${month}`;

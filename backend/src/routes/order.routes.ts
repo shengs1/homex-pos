@@ -102,11 +102,33 @@ const draftOrderSchema = z.object({
     .positive("ID khách hàng không hợp lệ")
     .optional(),
 
+  discountAmount: z.coerce
+    .number()
+    .min(0, "Số tiền giảm giá không hợp lệ")
+    .optional(),
+
+  promotionCode: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .optional(),
+
   items: z.array(orderItemSchema).min(1, "Đơn hàng phải có ít nhất 1 sản phẩm"),
 });
 
 const checkoutOrderSchema = z.object({
   paymentMethod: paymentMethodSchema,
+
+  discountAmount: z.coerce
+    .number()
+    .min(0, "Số tiền giảm giá không hợp lệ")
+    .optional(),
+
+  promotionCode: z
+    .string()
+    .trim()
+    .transform((value) => value.toUpperCase())
+    .optional(),
 });
 
 function getPaginationValue(value: unknown, defaultValue: number) {
@@ -152,6 +174,74 @@ function validateParseResult<T>(
 
 function formatMoney(value: Prisma.Decimal | number) {
   return Number(value);
+}
+
+function calculatePromotionDiscount(
+  promotion: { discountType: string; discountValue: Prisma.Decimal | number },
+  subtotal: number
+) {
+  const discountValue = Number(promotion.discountValue);
+
+  if (promotion.discountType === "PERCENT") {
+    return Math.floor((subtotal * discountValue) / 100);
+  }
+
+  return Math.floor(discountValue);
+}
+
+async function validateAndUsePromotion(
+  tx: Prisma.TransactionClient,
+  promotionCode: string | undefined,
+  subtotal: number
+) {
+  const normalizedCode = String(promotionCode || "").trim().toUpperCase();
+
+  if (!normalizedCode) {
+    return { discountAmount: 0, promotionId: null as number | null };
+  }
+
+  const promotion = await tx.promotion.findUnique({
+    where: {
+      code: normalizedCode,
+    },
+  });
+
+  if (!promotion || promotion.status !== "ACTIVE") {
+    throw new AppError("Mã giảm giá không hợp lệ", 400);
+  }
+
+  if (new Date(promotion.expiredAt).getTime() < Date.now()) {
+    throw new AppError("Mã giảm giá đã hết hạn", 400);
+  }
+
+  const usageLimit = promotion.usageLimit ? Number(promotion.usageLimit) : 0;
+  const usedCount = Number(promotion.usedCount || 0);
+
+  if (usageLimit > 0 && usedCount >= usageLimit) {
+    throw new AppError("Mã giảm giá đã hết lượt sử dụng", 400);
+  }
+
+  if (subtotal < Number(promotion.minOrderAmount || 0)) {
+    throw new AppError("Đơn hàng chưa đạt giá trị tối thiểu để áp dụng mã", 400);
+  }
+
+  const discountAmount = Math.min(calculatePromotionDiscount(promotion, subtotal), subtotal);
+
+  await tx.promotion.update({
+    where: {
+      id: promotion.id,
+    },
+    data: {
+      usedCount: {
+        increment: 1,
+      },
+    },
+  });
+
+  return {
+    discountAmount,
+    promotionId: promotion.id,
+  };
 }
 
 function formatOrder(order: OrderWithRelations) {
@@ -707,6 +797,23 @@ router.patch(
         }
       }
 
+      const orderSubtotal = Number(order.totalAmount);
+      const promotionResult = await validateAndUsePromotion(
+        tx,
+        checkoutData.promotionCode,
+        orderSubtotal
+      );
+
+      const manualDiscountAmount = checkoutData.promotionCode
+        ? 0
+        : Math.min(Math.max(Number(checkoutData.discountAmount || 0), 0), orderSubtotal);
+
+      const finalDiscountAmount = checkoutData.promotionCode
+        ? promotionResult.discountAmount
+        : manualDiscountAmount;
+
+      const finalAmount = Math.max(orderSubtotal - finalDiscountAmount, 0);
+
       const productIds = order.orderDetails.map((detail) => detail.productId);
 
       const products = await tx.product.findMany({
@@ -773,14 +880,14 @@ router.patch(
         data: {
           orderId: order.id,
           method: checkoutData.paymentMethod,
-          amount: order.totalAmount,
+          amount: finalAmount,
           status: PAYMENT_STATUS.PAID,
           paidAt: new Date(),
         },
       });
 
       if (order.customerId) {
-        const earnedPoints = Math.floor(Number(order.totalAmount) / 100000);
+        const earnedPoints = Math.floor(finalAmount / 100000);
 
         if (earnedPoints > 0) {
           await tx.customer.update({
@@ -832,6 +939,7 @@ router.patch(
           id: order.id,
         },
         data: {
+          totalAmount: finalAmount,
           status: ORDER_STATUS.COMPLETED,
         },
       });
@@ -859,7 +967,7 @@ router.patch(
 router.patch(
   "/:id/cancel",
   authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN),
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
   catchAsync(async (req, res) => {
     const authReq = req as AuthRequest;
     const userId = getAuthenticatedUserId(authReq);
@@ -911,6 +1019,10 @@ router.patch(
 
       if (order.status !== ORDER_STATUS.COMPLETED) {
         throw new AppError("Trạng thái đơn hàng không hợp lệ để hủy", 400);
+      }
+
+      if (authReq.user?.role !== USER_ROLES.ADMIN) {
+        throw new AppError("Bạn không có quyền hủy đơn hàng đã hoàn tất", 403);
       }
 
       for (const detail of order.orderDetails) {

@@ -44,6 +44,8 @@ type CreateValues = z.infer<typeof createSchema>;
 type UpdateValues = z.infer<typeof updateSchema>;
 type PasswordValues = z.infer<typeof passwordSchema>;
 
+const PAGE_SIZE = 10;
+
 export default function UsersPage() {
   const { t } = useLanguage();
   const [items, setItems] = useState<UserAccount[]>([]);
@@ -69,7 +71,7 @@ export default function UsersPage() {
     try {
       setIsLoading(true);
       setErrorMessage("");
-      const data = await userService.list({ page: currentPage, limit: 10, search, role, status });
+      const data = await userService.list({ page: currentPage, limit: PAGE_SIZE, search, role, status });
       setItems(data.items);
       setPagination(data.pagination);
     } catch (error) {
@@ -255,11 +257,11 @@ export default function UsersPage() {
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
         {!isLoading && items.length > 0 ? (
           <DataTable>
-            <thead><tr><Th>{t("common.id")}</Th><Th>{t("users.fullName")}</Th><Th>{t("common.email")}</Th><Th>{t("common.role")}</Th><Th>{t("common.status")}</Th><Th>{t("common.createdAt")}</Th><Th className="text-right">{t("common.actions")}</Th></tr></thead>
+            <thead><tr><Th className="w-[90px] whitespace-nowrap">{t("common.no")}</Th><Th>{t("users.fullName")}</Th><Th>{t("common.email")}</Th><Th>{t("common.role")}</Th><Th>{t("common.status")}</Th><Th>{t("common.createdAt")}</Th><Th className="w-[96px] whitespace-nowrap text-right">{t("common.actions")}</Th></tr></thead>
             <tbody>
-              {items.map((item) => (
+              {items.map((item, index) => (
                 <tr key={item.id}>
-                  <Td>{item.id}</Td>
+                  <Td className="font-medium">{(page - 1) * PAGE_SIZE + index + 1}</Td>
                   <Td className="font-medium">{item.fullName}</Td>
                   <Td>{item.email}</Td>
                   <Td>{item.role.name}</Td>

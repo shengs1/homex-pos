@@ -15,6 +15,7 @@ import warrantyRoutes from "./routes/warranty.routes";
 import paymentRoutes from "./routes/payment.routes";
 import reportRoutes from "./routes/report.routes";
 import auditLogRoutes from "./routes/audit-log.routes";
+import promotionRoutes from "./routes/promotion.routes";
 import { errorMiddleware } from "./middlewares/error.middleware";
 
 dotenv.config();
@@ -98,6 +99,7 @@ app.use("/api/warranties", warrantyRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
+app.use("/api/promotions", promotionRoutes);
 app.use(errorMiddleware);
 
 const PORT = process.env.PORT || 5000;

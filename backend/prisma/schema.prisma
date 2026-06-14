@@ -223,3 +223,29 @@ model AuditLog {
 
   user User @relation(fields: [userId], references: [id])
 }
+
+enum PromotionDiscountType {
+  AMOUNT
+  PERCENT
+}
+
+enum PromotionStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Promotion {
+  id             Int                   @id @default(autoincrement())
+  code           String                @unique
+  discountType   PromotionDiscountType
+  discountValue  Float
+  minOrderAmount Float                 @default(0)
+  usageLimit     Int?
+  usedCount      Int                   @default(0)
+  expiredAt      DateTime
+  status         PromotionStatus       @default(ACTIVE)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@map("promotions")
+}

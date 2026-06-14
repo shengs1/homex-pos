@@ -23,6 +23,8 @@ import { auditLogService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
 import type { AuditLog } from "@/types/domain";
 
+const PAGE_SIZE = 10;
+
 function DateTimeCell({ value }: { value: string | Date | null | undefined }) {
   const parts = formatDateTimePartsVN(value);
 
@@ -66,7 +68,7 @@ export default function AuditLogsPage() {
 
       const data = await auditLogService.list({
         page: currentPage,
-        limit: 10,
+        limit: PAGE_SIZE,
         search,
         action,
         entityType,
@@ -121,7 +123,7 @@ export default function AuditLogsPage() {
             <form onSubmit={handleSearchSubmit} className="space-y-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-12">
                 <Input
-                  placeholder="Tìm hành động, đối tượng, mô tả..."
+                  placeholder={t("audit.searchPlaceholder")}
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
                   className="h-12 xl:col-span-4"
@@ -143,7 +145,7 @@ export default function AuditLogsPage() {
 
                 <Input
                   type="number"
-                  placeholder="Mã đối tượng"
+                  placeholder={t("audit.userIdFilter")}
                   value={userId}
                   onChange={(event) => setUserId(event.target.value)}
                   className="h-12 xl:col-span-2"
@@ -152,7 +154,7 @@ export default function AuditLogsPage() {
 
               <div className="flex flex-wrap items-end gap-4">
                 <DateFilterInput
-                  label="Từ ngày"
+                  label={t("reports.fromDate")}
                   value={fromDate}
                   onChange={setFromDate}
                   className="w-full md:w-[220px]"
@@ -160,7 +162,7 @@ export default function AuditLogsPage() {
                 />
 
                 <DateFilterInput
-                  label="Đến ngày"
+                  label={t("reports.toDate")}
                   value={toDate}
                   onChange={setToDate}
                   className="w-full md:w-[220px]"
@@ -182,21 +184,21 @@ export default function AuditLogsPage() {
           <DataTable>
             <thead>
               <tr>
-                <Th>{t("common.id")}</Th>
+                <Th className="w-[90px] whitespace-nowrap">{t("common.no")}</Th>
                 <Th>{t("audit.user")}</Th>
                 <Th>{t("audit.action")}</Th>
                 <Th>{t("audit.entityType")}</Th>
                 <Th>{t("audit.entityId")}</Th>
                 <Th>{t("audit.descriptionField")}</Th>
                 <Th>{t("common.createdAt")}</Th>
-                <Th className="text-right">{t("common.actions")}</Th>
+                <Th className="w-[96px] whitespace-nowrap text-right">{t("common.actions")}</Th>
               </tr>
             </thead>
 
             <tbody>
-              {items.map((item) => (
+              {items.map((item, index) => (
                 <tr key={item.id}>
-                  <Td>{item.id}</Td>
+                  <Td className="font-medium">{(page - 1) * PAGE_SIZE + index + 1}</Td>
                   <Td>{item.user?.fullName || item.userId}</Td>
                   <Td className="font-medium">{item.action}</Td>
                   <Td>{item.entityType}</Td>

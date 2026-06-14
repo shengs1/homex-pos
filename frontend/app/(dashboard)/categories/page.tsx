@@ -24,6 +24,8 @@ import { categoryService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
 import type { Category } from "@/types/domain";
 
+const PAGE_SIZE = 10;
+
 const formSchema = z.object({ name: z.string().trim().min(1, "Tên không được để trống"), description: z.string().trim().optional() });
 type FormValues = z.infer<typeof formSchema>;
 
@@ -45,7 +47,7 @@ export default function CategoriesPage() {
     try {
       setIsLoading(true);
       setErrorMessage("");
-      const data = await categoryService.list({ page: currentPage, limit: 10, search, status });
+      const data = await categoryService.list({ page: currentPage, limit: PAGE_SIZE, search, status });
       setItems(data.items);
       setPagination(data.pagination);
     } catch (error) {
@@ -92,7 +94,7 @@ export default function CategoriesPage() {
       {isFormOpen ? <Card><CardHeader><CardTitle>{editingItem ? t("categories.updateTitle") : t("categories.createTitle")}</CardTitle></CardHeader><CardContent><form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2"><div className="space-y-2"><Label>{t("categories.name")}</Label><Input {...form.register("name")} />{form.formState.errors.name ? <p className="text-sm text-destructive">{form.formState.errors.name.message}</p> : null}</div><div className="space-y-2 md:col-span-2"><Label>{t("categories.descriptionField")}</Label><Textarea {...form.register("description")} /></div><div className="flex gap-2 md:col-span-2"><Button type="submit" disabled={form.formState.isSubmitting}>{editingItem ? t("common.saveChanges") : t("common.createNew")}</Button><Button variant="outline" onClick={() => setIsFormOpen(false)}>{t("common.cancel")}</Button></div></form></CardContent></Card> : null}
       {isLoading ? <LoadingState /> : null}
       {!isLoading && items.length === 0 ? <EmptyState /> : null}
-      {!isLoading && items.length > 0 ? <DataTable><thead><tr><Th>{t("common.id")}</Th><Th>{t("common.name")}</Th><Th>{t("categories.descriptionField")}</Th><Th>{t("common.status")}</Th><Th>{t("common.updatedAt")}</Th><Th className="text-right">{t("common.actions")}</Th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><Td>{item.id}</Td><Td className="font-medium">{item.name}</Td><Td>{item.description || "-"}</Td><Td><StatusBadge status={item.status} /></Td><Td>{formatDateTime(item.updatedAt)}</Td><Td className="text-right"><ActionMenu label={t("common.actions")} items={[{ label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(item) }, item.status === "ACTIVE" ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(item), variant: "destructive" } : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(item) }]} /></Td></tr>)}</tbody></DataTable> : null}
+      {!isLoading && items.length > 0 ? <DataTable><thead><tr><Th className="w-[90px] whitespace-nowrap">{t("common.no")}</Th><Th>{t("common.name")}</Th><Th>{t("categories.descriptionField")}</Th><Th>{t("common.status")}</Th><Th>{t("common.updatedAt")}</Th><Th className="text-right">{t("common.actions")}</Th></tr></thead><tbody>{items.map((item, index) => <tr key={item.id}><Td className="font-medium">{(page - 1) * PAGE_SIZE + index + 1}</Td><Td className="font-medium">{item.name}</Td><Td>{item.description || "-"}</Td><Td><StatusBadge status={item.status} /></Td><Td>{formatDateTime(item.updatedAt)}</Td><Td className="text-right"><ActionMenu label={t("common.actions")} items={[{ label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(item) }, item.status === "ACTIVE" ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(item), variant: "destructive" } : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(item) }]} /></Td></tr>)}</tbody></DataTable> : null}
       <PaginationControls pagination={pagination} onPageChange={setPage} />
     </div>
   );

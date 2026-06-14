@@ -24,6 +24,8 @@ import { supplierService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
 import type { Supplier } from "@/types/domain";
 
+const PAGE_SIZE = 10;
+
 const formSchema = z.object({ name: z.string().trim().min(1, "Tên không được để trống"), phone: z.string().trim().min(1, "SĐT không được để trống"), email: z.string().trim().email("Email không hợp lệ").optional().or(z.literal("")), address: z.string().trim().optional() });
 type FormValues = z.infer<typeof formSchema>;
 
@@ -42,7 +44,7 @@ export default function SuppliersPage() {
   const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: { name: "", phone: "", email: "", address: "" } });
 
   async function loadData(currentPage = page) {
-    try { setIsLoading(true); setErrorMessage(""); const data = await supplierService.list({ page: currentPage, limit: 10, search, status }); setItems(data.items); setPagination(data.pagination); }
+    try { setIsLoading(true); setErrorMessage(""); const data = await supplierService.list({ page: currentPage, limit: PAGE_SIZE, search, status }); setItems(data.items); setPagination(data.pagination); }
     catch (error) { setErrorMessage(getApiErrorMessage(error)); }
     finally { setIsLoading(false); }
   }
@@ -68,7 +70,7 @@ export default function SuppliersPage() {
       {isFormOpen ? <Card><CardHeader><CardTitle>{editingItem ? t("suppliers.updateTitle") : t("suppliers.createTitle")}</CardTitle></CardHeader><CardContent><form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2"><div className="space-y-2"><Label>{t("suppliers.name")}</Label><Input {...form.register("name")} />{form.formState.errors.name ? <p className="text-sm text-destructive">{form.formState.errors.name.message}</p> : null}</div><div className="space-y-2"><Label>{t("suppliers.phone")}</Label><Input {...form.register("phone")} />{form.formState.errors.phone ? <p className="text-sm text-destructive">{form.formState.errors.phone.message}</p> : null}</div><div className="space-y-2"><Label>{t("common.email")}</Label><Input {...form.register("email")} />{form.formState.errors.email ? <p className="text-sm text-destructive">{form.formState.errors.email.message}</p> : null}</div><div className="space-y-2 md:col-span-2"><Label>{t("suppliers.address")}</Label><Textarea {...form.register("address")} /></div><div className="flex gap-2 md:col-span-2"><Button type="submit" disabled={form.formState.isSubmitting}>{editingItem ? t("common.saveChanges") : t("common.createNew")}</Button><Button variant="outline" onClick={() => setIsFormOpen(false)}>{t("common.cancel")}</Button></div></form></CardContent></Card> : null}
       {isLoading ? <LoadingState /> : null}
       {!isLoading && items.length === 0 ? <EmptyState /> : null}
-      {!isLoading && items.length > 0 ? <DataTable><thead><tr><Th>{t("common.id")}</Th><Th>{t("common.name")}</Th><Th>{t("common.phone")}</Th><Th>{t("common.email")}</Th><Th>{t("suppliers.address")}</Th><Th>{t("common.status")}</Th><Th>{t("common.updatedAt")}</Th><Th className="text-right">{t("common.actions")}</Th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><Td>{item.id}</Td><Td className="font-medium">{item.name}</Td><Td>{item.phone || "-"}</Td><Td>{item.email || "-"}</Td><Td>{item.address || "-"}</Td><Td><StatusBadge status={item.status} /></Td><Td>{formatDateTime(item.updatedAt)}</Td><Td className="text-right"><ActionMenu label={t("common.actions")} items={[{ label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(item) }, item.status === "ACTIVE" ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(item), variant: "destructive" } : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(item) }]} /></Td></tr>)}</tbody></DataTable> : null}
+      {!isLoading && items.length > 0 ? <DataTable><thead><tr><Th className="w-[90px] whitespace-nowrap">{t("common.no")}</Th><Th>{t("common.name")}</Th><Th>{t("common.phone")}</Th><Th>{t("common.email")}</Th><Th>{t("suppliers.address")}</Th><Th>{t("common.status")}</Th><Th>{t("common.updatedAt")}</Th><Th className="text-right">{t("common.actions")}</Th></tr></thead><tbody>{items.map((item, index) => <tr key={item.id}><Td className="font-medium">{(page - 1) * PAGE_SIZE + index + 1}</Td><Td className="font-medium">{item.name}</Td><Td>{item.phone || "-"}</Td><Td>{item.email || "-"}</Td><Td>{item.address || "-"}</Td><Td><StatusBadge status={item.status} /></Td><Td>{formatDateTime(item.updatedAt)}</Td><Td className="text-right"><ActionMenu label={t("common.actions")} items={[{ label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(item) }, item.status === "ACTIVE" ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(item), variant: "destructive" } : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(item) }]} /></Td></tr>)}</tbody></DataTable> : null}
       <PaginationControls pagination={pagination} onPageChange={setPage} />
     </div>
   );

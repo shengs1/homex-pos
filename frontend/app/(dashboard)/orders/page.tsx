@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, PlayCircle, XCircle } from "lucide-react";
+import { Eye, PlayCircle, Printer, XCircle } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
+import { useLanguage } from "@/contexts/language-context";
 import { ActionMenu } from "@/components/shared/action-menu";
 import { DataTable, Td, Th } from "@/components/shared/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
@@ -14,51 +15,63 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { useLanguage } from "@/contexts/language-context";
-import { useCurrentUser } from "@/hooks/use-current-user";
 import { getApiErrorMessage } from "@/lib/api";
-import { formatDateTimePartsVN } from "@/lib/date-format";
 import { formatCurrency } from "@/lib/format";
 import { orderService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
 import type { Order } from "@/types/domain";
 
-function DateTimeCell({ value }: { value: string | Date | null | undefined }) {
-  const parts = formatDateTimePartsVN(value);
-
-  return (
-    <div className="leading-6">
-      <div>{parts.time}</div>
-      <div>{parts.date}</div>
-    </div>
-  );
-}
-
-const POS_RESUME_DRAFT_ORDER_ID_KEY = "homex_pos_resume_draft_order_id";
-
 const PAGE_SIZE = 10;
 const FETCH_PAGE_SIZE = 100;
+const POS_RESUME_DRAFT_ORDER_ID_KEY = "homex_pos_resume_draft_order_id";
 
-type OrderListFilters = {
+type OrderFilters = {
   search: string;
   status: string;
 };
 
-function getCreatedAtTime(value: string | Date | undefined | null) {
+function getTimestamp(value: string | Date | null | undefined) {
   if (!value) return 0;
   const time = new Date(value).getTime();
   return Number.isNaN(time) ? 0 : time;
 }
 
-function sortByCreatedAtDesc<T extends { id: number; createdAt?: string | Date | null }>(items: T[]) {
+function pad(value: number) {
+  return String(value).padStart(2, "0");
+}
+
+function formatDateTimeParts(value: string | Date | null | undefined) {
+  if (!value) {
+    return {
+      time: "-",
+      date: "-",
+    };
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return {
+      time: "-",
+      date: "-",
+    };
+  }
+
+  return {
+    time: `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+    date: `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}`,
+  };
+}
+
+function sortOrdersByCreatedAtDesc(items: Order[]) {
   return [...items].sort((a, b) => {
-    const timeDiff = getCreatedAtTime(b.createdAt) - getCreatedAtTime(a.createdAt);
+    const timeDiff = getTimestamp(b.createdAt) - getTimestamp(a.createdAt);
     if (timeDiff !== 0) return timeDiff;
     return b.id - a.id;
   });
 }
 
-async function fetchAllOrdersForCreatedAtDesc(filters: OrderListFilters) {
+async function fetchAllOrders(filters: OrderFilters) {
   const baseParams = {
     search: filters.search,
     status: filters.status,
@@ -84,11 +97,17 @@ async function fetchAllOrdersForCreatedAtDesc(filters: OrderListFilters) {
   return firstPage.items.concat(remainingPages.flatMap((pageData) => pageData.items));
 }
 
+function getOrderCustomerName(order: Order) {
+  return order.customer?.fullName || "Khách lẻ";
+}
+
+function getOrderCashierName(order: Order) {
+  return order.user?.fullName || `#${order.userId}`;
+}
+
 export default function OrdersPage() {
   const router = useRouter();
   const { t } = useLanguage();
-  const user = useCurrentUser();
-  const isAdmin = user?.role === "ADMIN";
   const detailRef = useRef<HTMLDivElement | null>(null);
   const [items, setItems] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -98,16 +117,27 @@ export default function OrdersPage() {
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-  function scrollToDetail() { window.setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80); }
+  const selectedOrderPayment = selectedOrder?.payment || null;
+  const selectedOrderWarranties = useMemo(() => {
+    return selectedOrder?.orderDetails.flatMap((detail) => (detail.warranty ? [detail.warranty] : [])) || [];
+  }, [selectedOrder]);
+
+  function scrollToDetail() {
+    window.setTimeout(() => {
+      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  }
 
   async function loadData(currentPage = page) {
     try {
       setIsLoading(true);
       setErrorMessage("");
+      setSuccessMessage("");
 
-      const allOrders = await fetchAllOrdersForCreatedAtDesc({ search, status });
-      const sortedOrders = sortByCreatedAtDesc(allOrders);
+      const allOrders = await fetchAllOrders({ search, status });
+      const sortedOrders = sortOrdersByCreatedAtDesc(allOrders);
       const startIndex = (currentPage - 1) * PAGE_SIZE;
       const pageItems = sortedOrders.slice(startIndex, startIndex + PAGE_SIZE);
       const totalItems = sortedOrders.length;
@@ -128,23 +158,55 @@ export default function OrdersPage() {
   }
 
   async function loadDetail(id: number) {
-    try { setErrorMessage(""); const data = await orderService.detail(id); setSelectedOrder(data); scrollToDetail(); }
-    catch (error) { setErrorMessage(getApiErrorMessage(error)); }
+    try {
+      setErrorMessage("");
+      setSuccessMessage("");
+      const detail = await orderService.detail(id);
+      setSelectedOrder(detail);
+      scrollToDetail();
+      return detail;
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
+      return null;
+    }
   }
 
-  async function handleCancel(order: Order) {
-    if (!isAdmin || !window.confirm(t("orders.cancelConfirm", { code: order.orderCode }))) return;
-    try { await orderService.cancel(order.id); await loadData(page); await loadDetail(order.id); }
-    catch (error) { setErrorMessage(getApiErrorMessage(error)); }
+  async function handlePrintInvoice(order: Order) {
+    const detail = await loadDetail(order.id);
+    if (!detail) return;
+
+    window.setTimeout(() => {
+      window.print();
+    }, 250);
+  }
+
+  async function handleCancelOrder(order: Order) {
+    const confirmed = window.confirm(t("orders.cancelConfirm", { code: order.orderCode }));
+    if (!confirmed) return;
+
+    try {
+      setErrorMessage("");
+      setSuccessMessage("");
+      await orderService.cancel(order.id);
+      setSuccessMessage(t("orders.cancelSuccess", { code: order.orderCode }));
+      await loadData(page);
+
+      if (selectedOrder?.id === order.id) {
+        await loadDetail(order.id);
+      }
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
+    }
   }
 
   async function handleContinuePayment(order: Order) {
     try {
       setErrorMessage("");
+      setSuccessMessage("");
       const detail = await orderService.detail(order.id);
 
       if (detail.status !== "DRAFT") {
-        setErrorMessage("Chỉ đơn hàng nháp mới được tiếp tục thanh toán.");
+        setErrorMessage(t("orders.onlyDraftCanContinue"));
         return;
       }
 
@@ -155,20 +217,245 @@ export default function OrdersPage() {
     }
   }
 
-  useEffect(() => { loadData(page); }, [page, status]);
-  function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setPage(1); loadData(1); }
+  useEffect(() => {
+    loadData(page);
+  }, [page, status]);
+
+  function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPage(1);
+    loadData(1);
+  }
 
   return (
     <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
       <div className="space-y-6">
-        <PageHeader title={t("orders.title")} description={t("orders.description")} />
+        <PageHeader
+          title={t("orders.title")}
+          description={t("orders.description")}
+        />
+
         <ErrorState message={errorMessage} />
-        <Card><CardContent className="pt-6"><form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[1fr_200px_auto]"><Input placeholder={t("orders.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} /><Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="">{t("common.allStatus")}</option><option value="DRAFT">{t("status.DRAFT")}</option><option value="COMPLETED">{t("status.COMPLETED")}</option><option value="CANCELLED">{t("status.CANCELLED")}</option></Select><Button type="submit">{t("common.search")}</Button></form></CardContent></Card>
+        {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+
+        <Card>
+          <CardContent className="pt-6">
+            <form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_auto]">
+              <Input
+                placeholder={t("orders.searchPlaceholder")}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+
+              <Select
+                value={status}
+                onChange={(event) => {
+                  setStatus(event.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">{t("common.allStatus")}</option>
+                <option value="DRAFT">{t("status.DRAFT")}</option>
+                <option value="COMPLETED">{t("status.COMPLETED")}</option>
+                <option value="CANCELLED">{t("status.CANCELLED")}</option>
+              </Select>
+
+              <Button type="submit">{t("common.search")}</Button>
+            </form>
+          </CardContent>
+        </Card>
+
         {isLoading ? <LoadingState /> : null}
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
-        {!isLoading && items.length > 0 ? <DataTable><thead><tr><Th>{t("orders.orderCode")}</Th><Th>{t("orders.customer")}</Th><Th>{t("orders.cashier")}</Th><Th>{t("orders.total")}</Th><Th>{t("common.status")}</Th><Th>{t("orders.createdAt")}</Th><Th className="text-right">{t("common.actions")}</Th></tr></thead><tbody>{items.map((item) => <tr key={item.id}><Td className="font-medium">{item.orderCode}</Td><Td>{item.customer?.fullName || t("customers.retail")}</Td><Td>{item.user?.fullName || item.userId}</Td><Td>{formatCurrency(item.totalAmount)}</Td><Td><StatusBadge status={item.status} /></Td><Td><DateTimeCell value={item.createdAt} /></Td><Td className="text-right"><ActionMenu label={t("common.actions")} items={[{ label: t("common.detail"), icon: <Eye className="h-4 w-4" />, onClick: () => loadDetail(item.id) }, ...(item.status === "DRAFT" ? [{ label: "Tiếp tục thanh toán", icon: <PlayCircle className="h-4 w-4" />, onClick: () => handleContinuePayment(item) }] : []), ...(isAdmin ? [{ label: t("common.cancel"), icon: <XCircle className="h-4 w-4" />, onClick: () => handleCancel(item), variant: "destructive" as const, disabled: item.status === "CANCELLED" }] : [])]} /></Td></tr>)}</tbody></DataTable> : null}
+
+        {!isLoading && items.length > 0 ? (
+          <DataTable noHorizontalScroll>
+            <colgroup>
+              <col className="w-[18%]" />
+              <col className="w-[16%]" />
+              <col className="w-[15%]" />
+              <col className="w-[14%]" />
+              <col className="w-[13%]" />
+              <col className="w-[14%]" />
+              <col className="w-[10%]" />
+            </colgroup>
+            <thead>
+              <tr>
+                <Th>{t("orders.orderCode")}</Th>
+                <Th>{t("orders.customer")}</Th>
+                <Th>{t("orders.cashier")}</Th>
+                <Th>{t("orders.total")}</Th>
+                <Th>{t("common.status")}</Th>
+                <Th>{t("common.createdAt")}</Th>
+                <Th className="text-right">{t("common.actions")}</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((order) => {
+                const dateTime = formatDateTimeParts(order.createdAt);
+
+                return (
+                  <tr key={order.id}>
+                    <Td>
+                      <div className="truncate font-medium" title={order.orderCode}>
+                        {order.orderCode}
+                      </div>
+                    </Td>
+                    <Td>
+                      <div className="truncate" title={getOrderCustomerName(order)}>
+                        {getOrderCustomerName(order)}
+                      </div>
+                    </Td>
+                    <Td>
+                      <div className="truncate" title={getOrderCashierName(order)}>
+                        {getOrderCashierName(order)}
+                      </div>
+                    </Td>
+                    <Td className="font-medium">{formatCurrency(order.totalAmount)}</Td>
+                    <Td><StatusBadge status={order.status} /></Td>
+                    <Td>
+                      <div className="leading-tight">
+                        <div>{dateTime.time}</div>
+                        <div>{dateTime.date}</div>
+                      </div>
+                    </Td>
+                    <Td className="text-right">
+                      <ActionMenu
+                        label={t("common.actions")}
+                        items={[
+                          {
+                            label: t("common.detail"),
+                            icon: <Eye className="h-4 w-4" />,
+                            onClick: () => loadDetail(order.id),
+                          },
+                          ...(order.status === "DRAFT"
+                            ? [
+                                {
+                                  label: t("orders.continuePayment"),
+                                  icon: <PlayCircle className="h-4 w-4" />,
+                                  onClick: () => handleContinuePayment(order),
+                                },
+                              ]
+                            : []),
+                          {
+                            label: t("orders.printInvoice"),
+                            icon: <Printer className="h-4 w-4" />,
+                            onClick: () => handlePrintInvoice(order),
+                          },
+                          {
+                            label: t("orders.cancelOrder"),
+                            icon: <XCircle className="h-4 w-4" />,
+                            onClick: () => handleCancelOrder(order),
+                            variant: "destructive",
+                            disabled: order.status === "CANCELLED",
+                          },
+                        ]}
+                      />
+                    </Td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </DataTable>
+        ) : null}
+
         <PaginationControls pagination={pagination} onPageChange={setPage} />
-        <div ref={detailRef}>{selectedOrder ? <Card><CardHeader><CardTitle>{t("orders.detailTitle", { code: selectedOrder.orderCode })}</CardTitle></CardHeader><CardContent className="space-y-6"><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4"><div><p className="text-sm font-semibold">{t("orders.customer")}</p><p>{selectedOrder.customer?.fullName || t("customers.retail")}</p></div><div><p className="text-sm font-semibold">{t("orders.cashier")}</p><p>{selectedOrder.user?.fullName || selectedOrder.userId}</p></div><div><p className="text-sm font-semibold">{t("orders.total")}</p><p>{formatCurrency(selectedOrder.totalAmount)}</p></div><div><p className="text-sm font-semibold">{t("common.status")}</p><StatusBadge status={selectedOrder.status} /></div></div><div><h3 className="mb-3 font-semibold">{t("orders.items")}</h3><DataTable noHorizontalScroll><colgroup><col className="w-[45%]" /><col className="w-[15%]" /><col className="w-[20%]" /><col className="w-[20%]" /></colgroup><thead><tr><Th>{t("products.product")}</Th><Th>{t("inventory.quantity")}</Th><Th>{t("products.salePrice")}</Th><Th>{t("orders.total")}</Th></tr></thead><tbody>{selectedOrder.orderDetails.map((detail) => <tr key={detail.id}><Td><div className="break-words font-medium">{detail.product?.name || detail.productId}</div><div className="truncate text-xs text-muted-foreground">{detail.product?.sku || "-"}</div></Td><Td>{detail.quantity}</Td><Td>{formatCurrency(detail.unitPrice)}</Td><Td>{formatCurrency(detail.lineTotal)}</Td></tr>)}</tbody></DataTable></div><div className="grid gap-4 md:grid-cols-2"><Card><CardHeader><CardTitle>{t("orders.payment")}</CardTitle></CardHeader><CardContent>{selectedOrder.payment ? <div className="space-y-2"><p>{t(`paymentMethod.${selectedOrder.payment.method}`)}</p><p>{formatCurrency(selectedOrder.payment.amount)}</p><StatusBadge status={selectedOrder.payment.status} /></div> : <p className="text-sm text-muted-foreground">{t("orders.noPayment")}</p>}</CardContent></Card><Card><CardHeader><CardTitle>{t("orders.warranty")}</CardTitle></CardHeader><CardContent className="space-y-2">{selectedOrder.orderDetails.flatMap((detail) => detail.warranty ? [detail.warranty] : []).length === 0 ? <p className="text-sm text-muted-foreground">-</p> : selectedOrder.orderDetails.map((detail) => detail.warranty ? <div key={detail.warranty.id} className="rounded-lg border p-3"><p className="font-medium">{detail.warranty.warrantyCode}</p><StatusBadge status={detail.warranty.status} /></div> : null)}</CardContent></Card></div></CardContent></Card> : null}</div>
+
+        <div ref={detailRef} className="print:block">
+          {selectedOrder ? (
+            <Card className="print:border-0 print:shadow-none">
+              <CardHeader>
+                <CardTitle>{t("orders.detailTitle", { code: selectedOrder.orderCode })}</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <p className="text-sm font-semibold">{t("orders.customer")}</p>
+                    <p>{getOrderCustomerName(selectedOrder)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{t("orders.cashier")}</p>
+                    <p>{getOrderCashierName(selectedOrder)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{t("orders.total")}</p>
+                    <p>{formatCurrency(selectedOrder.totalAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">{t("common.status")}</p>
+                    <StatusBadge status={selectedOrder.status} />
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="mb-3 font-semibold">{t("orders.items")}</h3>
+                  <DataTable noHorizontalScroll>
+                    <colgroup>
+                      <col className="w-[45%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[20%]" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <Th>{t("products.product")}</Th>
+                        <Th>{t("reports.quantity")}</Th>
+                        <Th>{t("orders.unitPrice")}</Th>
+                        <Th>{t("orders.lineTotal")}</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedOrder.orderDetails.map((detail) => (
+                        <tr key={detail.id}>
+                          <Td>
+                            <div className="break-words font-medium">{detail.product?.name || `Sản phẩm #${detail.productId}`}</div>
+                            <div className="truncate text-xs text-muted-foreground">{detail.product?.sku || "-"}</div>
+                          </Td>
+                          <Td>{detail.quantity}</Td>
+                          <Td>{formatCurrency(detail.unitPrice)}</Td>
+                          <Td>{formatCurrency(detail.lineTotal)}</Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </DataTable>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Card>
+                    <CardHeader><CardTitle>{t("payments.title")}</CardTitle></CardHeader>
+                    <CardContent>
+                      {selectedOrderPayment ? (
+                        <div className="space-y-2 text-sm">
+                          <p><span className="font-semibold">Số tiền:</span> {formatCurrency(selectedOrderPayment.amount)}</p>
+                          <p><span className="font-semibold">{t("payments.method")}:</span> {t(`paymentMethod.${selectedOrderPayment.method}`)}</p>
+                          <StatusBadge status={selectedOrderPayment.status} />
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">{t("orders.noPayment")}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader><CardTitle>{t("warranties.title")}</CardTitle></CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      {selectedOrderWarranties.length > 0 ? (
+                        selectedOrderWarranties.map((warranty) => (
+                          <div key={warranty.id} className="rounded-lg border p-3">
+                            <p className="font-medium">{warranty.warrantyCode}</p>
+                            <StatusBadge status={warranty.status} />
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-muted-foreground">{t("orders.noWarranty")}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
+        </div>
       </div>
     </RoleGuard>
   );

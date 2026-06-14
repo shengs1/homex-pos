@@ -21,13 +21,66 @@ function defaultDateRange() {
   const fromDate = new Date();
   fromDate.setDate(toDate.getDate() - 30);
   return {
-    fromDate: fromDate.toISOString().slice(0, 10),
-    toDate: toDate.toISOString().slice(0, 10),
+    fromDate: toLocalIsoDate(fromDate),
+    toDate: toLocalIsoDate(toDate),
   };
 }
 
 function formatRevenueChartDate(value: string | number | Date | null | undefined) {
   return formatChartDateVN(value);
+}
+
+
+function toLocalIsoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeIsoDate(value: string | number | Date | null | undefined) {
+  if (!value) return "";
+  if (typeof value === "string") {
+    const match = value.match(/\d{4}-\d{2}-\d{2}/);
+    if (match) return match[0];
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return toLocalIsoDate(date);
+}
+
+function addDaysToIsoDate(isoDate: string, days: number) {
+  const date = new Date(`${isoDate}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return toLocalIsoDate(date);
+}
+
+function buildDateSeries(fromDate: string, toDate: string) {
+  const result: string[] = [];
+  let cursor = fromDate;
+
+  while (cursor <= toDate) {
+    result.push(cursor);
+    cursor = addDaysToIsoDate(cursor, 1);
+  }
+
+  return result;
+}
+
+function fillRevenueChartData(items: RevenueReportItem[], fromDate: string, toDate: string) {
+  const revenueByDate = new Map<string, number>();
+
+  items.forEach((item) => {
+    const key = normalizeIsoDate(item.period);
+    if (!key) return;
+    revenueByDate.set(key, Number(item.revenue || 0));
+  });
+
+  return buildDateSeries(fromDate, toDate).map((period) => ({
+    period,
+    revenue: revenueByDate.get(period) || 0,
+  }));
 }
 
 function SummaryBox({ label, value }: { label: string; value: string }) {
@@ -88,8 +141,12 @@ export default function ReportsPage() {
     loadReports();
   }
 
-  const revenueChartData = revenueItems.map((item) => ({ period: item.period, revenue: Number(item.revenue || 0) }));
-  const topProductChartData = topProducts.slice(0, 5).map((item) => ({ name: item.product?.name || `#${item.productId}`, quantity: Number(item.totalQuantity || 0) }));
+  const revenueChartData = fillRevenueChartData(revenueItems, fromDate, toDate);
+  const topProductChartData = topProducts
+    .slice(0, 5)
+    .map((item) => ({ name: item.product?.name || `#${item.productId}`, quantity: Number(item.totalQuantity || 0) }));
+  const hasRevenueChartData = revenueChartData.some((item) => item.revenue > 0);
+  const hasTopProductChartData = topProductChartData.some((item) => item.quantity > 0);
 
   return (
     <RoleGuard allowedRoles={["ADMIN"]}>
@@ -135,30 +192,42 @@ export default function ReportsPage() {
           <Card className="min-w-0">
             <CardHeader><CardTitle>{t("reports.revenueChart")}</CardTitle></CardHeader>
             <CardContent className="min-h-[320px] min-w-0">
-              <ResponsiveContainer width="100%" height={320} minWidth={1} minHeight={1}>
-                <LineChart data={revenueChartData} margin={{ left: 4, right: 12, top: 10, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="period" tick={{ fontSize: 12 }} tickFormatter={formatRevenueChartDate} />
-                  <YAxis tick={{ fontSize: 12 }} width={72} />
-                  <Tooltip formatter={(value) => formatCurrency(Number(value))} labelFormatter={(label) => formatRevenueChartDate(label)} />
-                  <Line type="monotone" dataKey="revenue" name={t("reports.revenue")} stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} />
-                </LineChart>
-              </ResponsiveContainer>
+              {hasRevenueChartData ? (
+                <ResponsiveContainer width="100%" height={320} minWidth={1} minHeight={1}>
+                  <LineChart data={revenueChartData} margin={{ left: 4, right: 12, top: 10, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="period" tick={{ fontSize: 12 }} tickFormatter={formatRevenueChartDate} />
+                    <YAxis tick={{ fontSize: 12 }} width={72} />
+                    <Tooltip formatter={(value) => formatCurrency(Number(value))} labelFormatter={(label) => formatRevenueChartDate(label)} />
+                    <Line type="monotone" dataKey="revenue" name={t("reports.revenue")} stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-[320px] items-center justify-center rounded-xl border border-dashed">
+                  <EmptyState message="Chưa có dữ liệu doanh thu trong khoảng thời gian đã chọn." />
+                </div>
+              )}
             </CardContent>
           </Card>
 
           <Card className="min-w-0">
             <CardHeader><CardTitle>{t("reports.topProducts")}</CardTitle></CardHeader>
             <CardContent className="min-h-[320px] min-w-0">
-              <ResponsiveContainer width="100%" height={320} minWidth={1} minHeight={1}>
-                <BarChart data={topProductChartData} layout="vertical" margin={{ left: 4, right: 12, top: 10, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis type="category" dataKey="name" width={118} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="quantity" name={t("reports.quantity")} fill="#2563eb" radius={[0, 6, 6, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+              {hasTopProductChartData ? (
+                <ResponsiveContainer width="100%" height={320} minWidth={1} minHeight={1}>
+                  <BarChart data={topProductChartData} layout="vertical" margin={{ left: 4, right: 12, top: 10, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" tick={{ fontSize: 12 }} />
+                    <YAxis type="category" dataKey="name" width={118} tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Bar dataKey="quantity" name={t("reports.quantity")} fill="#2563eb" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-[320px] items-center justify-center rounded-xl border border-dashed">
+                  <EmptyState message="Chưa có dữ liệu sản phẩm bán chạy trong khoảng thời gian đã chọn." />
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
