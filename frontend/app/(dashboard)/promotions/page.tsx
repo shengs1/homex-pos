@@ -433,8 +433,11 @@ export default function PromotionsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>{t("promotions.expiredAt")}</Label>
-                <DateFilterInput value={form.expiredAt} onChange={(value) => setForm((current) => ({ ...current, expiredAt: value }))} />
+                <DateFilterInput
+                  label={t("promotions.expiredAt")}
+                  value={form.expiredAt}
+                  onChange={(value) => setForm((current) => ({ ...current, expiredAt: value }))}
+                />
               </div>
 
               <div className="space-y-2 md:col-span-2">

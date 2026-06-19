@@ -46,7 +46,8 @@ const formSchema = z.object({
   imageUrl: z.string().trim().optional(),
 });
 
-type FormValues = z.infer<typeof formSchema>;
+type FormInput = z.input<typeof formSchema>;
+type FormValues = z.output<typeof formSchema>;
 
 type ProductActionItem = {
   label: string;
@@ -152,7 +153,7 @@ export default function ProductsPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: emptyForm });
+  const form = useForm<FormInput, unknown, FormValues>({resolver: zodResolver(formSchema), defaultValues: emptyForm, });
 
   const selectedIds = useMemo(() => Object.keys(rowSelection).filter((key) => rowSelection[key]).map((key) => Number(key)), [rowSelection]);
   const selectedCount = selectedIds.length;
@@ -458,7 +459,7 @@ export default function ProductsPage() {
       setSuccessMessage("");
       const result = await softDeleteProducts(selectedIds);
       setRowSelection({});
-      setSuccessMessage(t("products.bulkDeleteResult", result));
+      setSuccessMessage( t("products.bulkDeleteResult", {deleted: result.deleted, failed: result.failed, }) );
       await loadData(page);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error));

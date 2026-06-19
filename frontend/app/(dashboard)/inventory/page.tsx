@@ -28,8 +28,11 @@ import type { Product, StockTransaction } from "@/types/domain";
 const importSchema = z.object({ productId: z.coerce.number().int().positive("Chọn sản phẩm"), quantity: z.coerce.number().int().positive("Số lượng phải lớn hơn 0"), note: z.string().trim().optional() });
 const adjustSchema = z.object({ productId: z.coerce.number().int().positive("Chọn sản phẩm"), newQuantity: z.coerce.number().int().min(0, "Tồn mới không được âm"), note: z.string().trim().optional() });
 
-type ImportValues = z.infer<typeof importSchema>;
-type AdjustValues = z.infer<typeof adjustSchema>;
+type ImportInput = z.input<typeof importSchema>;
+type ImportValues = z.output<typeof importSchema>;
+
+type AdjustInput = z.input<typeof adjustSchema>;
+type AdjustValues = z.output<typeof adjustSchema>;
 
 export default function InventoryPage() {
   const { t } = useLanguage();
@@ -44,8 +47,23 @@ export default function InventoryPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const importForm = useForm<ImportValues>({ resolver: zodResolver(importSchema), defaultValues: { productId: 0, quantity: 1, note: "" } });
-  const adjustForm = useForm<AdjustValues>({ resolver: zodResolver(adjustSchema), defaultValues: { productId: 0, newQuantity: 0, note: "" } });
+  const importForm = useForm<ImportInput, unknown, ImportValues>({
+    resolver: zodResolver(importSchema),
+    defaultValues: {
+      productId: 0,
+      quantity: 1,
+      note: "",
+    },
+  });
+
+  const adjustForm = useForm<AdjustInput, unknown, AdjustValues>({
+    resolver: zodResolver(adjustSchema),
+    defaultValues: {
+      productId: 0,
+      newQuantity: 0,
+      note: "",
+    },
+  });
 
   async function loadOptions() {
     const data = await productService.list({ page: 1, limit: 300, status: "ACTIVE" });
@@ -153,7 +171,7 @@ export default function InventoryPage() {
             <CardHeader><CardTitle className="flex items-center gap-2"><PackagePlus className="h-5 w-5" />{t("inventory.importStock")}</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={importForm.handleSubmit(submitImport)} className="space-y-3">
-                <div className="space-y-2"><Label>{t("inventory.product")}</Label><ProductCombobox products={products} value={importForm.watch("productId")} onChange={(value) => importForm.setValue("productId", value, { shouldValidate: true })} />{importForm.formState.errors.productId ? <p className="text-sm text-destructive">{importForm.formState.errors.productId.message}</p> : null}</div>
+                <div className="space-y-2"><Label>{t("inventory.product")}</Label><ProductCombobox products={products} value={Number(importForm.watch("productId") || 0)} onChange={(value) => importForm.setValue("productId", value, { shouldValidate: true })} />{importForm.formState.errors.productId ? <p className="text-sm text-destructive">{importForm.formState.errors.productId.message}</p> : null}</div>
                 <div className="space-y-2"><Label>{t("inventory.importQuantity")}</Label><Input type="number" {...importForm.register("quantity")} />{importForm.formState.errors.quantity ? <p className="text-sm text-destructive">{importForm.formState.errors.quantity.message}</p> : null}</div>
                 <div className="space-y-2"><Label>{t("inventory.note")}</Label><Textarea {...importForm.register("note")} /></div>
                 <Button type="submit" disabled={importForm.formState.isSubmitting}>{t("inventory.importStock")}</Button>
@@ -165,7 +183,7 @@ export default function InventoryPage() {
             <CardHeader><CardTitle className="flex items-center gap-2"><SlidersHorizontal className="h-5 w-5" />{t("inventory.adjustStock")}</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={adjustForm.handleSubmit(submitAdjust)} className="space-y-3">
-                <div className="space-y-2"><Label>{t("inventory.product")}</Label><ProductCombobox products={products} value={adjustForm.watch("productId")} onChange={(value) => adjustForm.setValue("productId", value, { shouldValidate: true })} />{adjustForm.formState.errors.productId ? <p className="text-sm text-destructive">{adjustForm.formState.errors.productId.message}</p> : null}</div>
+                <div className="space-y-2"><Label>{t("inventory.product")}</Label><ProductCombobox products={products} value={Number(adjustForm.watch("productId") || 0)} onChange={(value) => adjustForm.setValue("productId", value, { shouldValidate: true })} />{adjustForm.formState.errors.productId ? <p className="text-sm text-destructive">{adjustForm.formState.errors.productId.message}</p> : null}</div>
                 <div className="space-y-2"><Label>{t("inventory.newQuantity")}</Label><Input type="number" {...adjustForm.register("newQuantity")} />{adjustForm.formState.errors.newQuantity ? <p className="text-sm text-destructive">{adjustForm.formState.errors.newQuantity.message}</p> : null}</div>
                 <div className="space-y-2"><Label>{t("inventory.note")}</Label><Textarea {...adjustForm.register("note")} /></div>
                 <Button type="submit" disabled={adjustForm.formState.isSubmitting}>{t("common.adjust")}</Button>

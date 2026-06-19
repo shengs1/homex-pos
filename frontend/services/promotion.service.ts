@@ -1,8 +1,17 @@
 import { api } from "@/lib/api";
-import type { PaginatedResponse } from "@/types/api";
 
 export type PromotionDiscountType = "AMOUNT" | "PERCENT";
 export type PromotionStatus = "ACTIVE" | "EXPIRED" | "USED_UP" | "INACTIVE";
+
+type PaginatedResponse<T> = {
+  items: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalItems: number;
+    totalPages: number;
+  };
+};
 
 export type Promotion = {
   id: number;
