@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Eye, RotateCcw, Search } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { useLanguage } from "@/contexts/language-context";
-import { ActionMenu } from "@/components/shared/action-menu";
 import { DataTable, Td, Th } from "@/components/shared/data-table";
 import { DateFilterInput } from "@/components/shared/date-filter-input";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
@@ -316,83 +315,80 @@ export default function PaymentsPage() {
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
 
         {!isLoading && items.length > 0 ? (
-          <DataTable noHorizontalScroll>
-            <colgroup>
-              <col className="w-[6%]" />
-              <col className="w-[16%]" />
-              <col className="w-[18%]" />
-              <col className="w-[15%]" />
-              <col className="w-[14%]" />
-              <col className="w-[12%]" />
-              <col className="w-[11%]" />
-              <col className="w-[8%]" />
-            </colgroup>
-            <thead>
-              <tr>
-                <Th className="w-[70px] whitespace-nowrap">{t("common.no")}</Th>
-                <Th>{t("payments.transactionId")}</Th>
-                <Th>{t("payments.linkedOrderCode")}</Th>
-                <Th>{t("payments.method")}</Th>
-                <Th>{t("payments.amountPaid")}</Th>
-                <Th>{t("common.status")}</Th>
-                <Th>{t("payments.paidAt")}</Th>
-                <Th className="w-[96px] whitespace-nowrap text-right">{t("common.actions")}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((payment, index) => {
-                const dateTime = formatDateTimeParts(getPaymentDate(payment));
-                const rowIndex = (page - 1) * PAGE_SIZE + index + 1;
-
-                return (
-                  <tr key={payment.id}>
-                    <Td>{rowIndex}</Td>
-                    <Td>
-                      <div className="truncate font-medium" title={getPaymentTransactionCode(payment)}>
-                        {getPaymentTransactionCode(payment)}
-                      </div>
-                    </Td>
-                    <Td>
-                      <div className="truncate font-medium" title={getLinkedOrderCode(payment)}>
-                        {getLinkedOrderCode(payment)}
-                      </div>
-                      <div className="truncate text-xs text-muted-foreground" title={payment.order?.customer?.fullName || "-"}>
-                        {payment.order?.customer?.fullName || "-"}
-                      </div>
-                    </Td>
-                    <Td>{getPaymentMethodLabel(payment.method)}</Td>
-                    <Td className="font-medium">{formatCurrency(payment.amount)}</Td>
-                    <Td><StatusBadge status={payment.status} /></Td>
-                    <Td>
-                      <div className="leading-tight">
-                        <div>{dateTime.time}</div>
-                        <div>{dateTime.date}</div>
-                      </div>
-                    </Td>
-                    <Td className="text-right">
-                      <ActionMenu
-                        label={t("common.actions")}
-                        items={[
-                          {
-                            label: t("payments.viewVoucher"),
-                            icon: <Eye className="h-4 w-4" />,
-                            onClick: () => loadDetail(payment.id),
-                          },
-                          {
-                            label: t("payments.refundTransaction"),
-                            icon: <RotateCcw className="h-4 w-4" />,
-                            onClick: () => handleRefund(payment),
-                            variant: "destructive",
-                            disabled: payment.status === "REFUNDED",
-                          },
-                        ]}
-                      />
-                    </Td>
+          <Card className="overflow-hidden">
+            <CardContent className="p-0">
+              <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
+                <colgroup>
+                  <col className="w-[6%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[17%]" />
+                  <col className="w-[14%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[13%]" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <Th className="w-[70px] whitespace-nowrap">{t("common.no")}</Th>
+                    <Th>{t("payments.transactionId")}</Th>
+                    <Th>{t("payments.linkedOrderCode")}</Th>
+                    <Th>{t("payments.method")}</Th>
+                    <Th>{t("payments.amountPaid")}</Th>
+                    <Th>{t("common.status")}</Th>
+                    <Th>{t("payments.paidAt")}</Th>
+                    <Th className="w-[160px] whitespace-nowrap text-right">{t("common.actions")}</Th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </DataTable>
+                </thead>
+                <tbody>
+                  {items.map((payment, index) => {
+                    const dateTime = formatDateTimeParts(getPaymentDate(payment));
+                    const rowIndex = (page - 1) * PAGE_SIZE + index + 1;
+
+                    return (
+                      <tr key={payment.id}>
+                        <Td>{rowIndex}</Td>
+                        <Td>
+                          <div className="truncate font-medium" title={getPaymentTransactionCode(payment)}>
+                            {getPaymentTransactionCode(payment)}
+                          </div>
+                        </Td>
+                        <Td>
+                          <div className="truncate font-medium" title={getLinkedOrderCode(payment)}>
+                            {getLinkedOrderCode(payment)}
+                          </div>
+                          <div className="truncate text-xs text-muted-foreground" title={payment.order?.customer?.fullName || "-"}>
+                            {payment.order?.customer?.fullName || "-"}
+                          </div>
+                        </Td>
+                        <Td>{getPaymentMethodLabel(payment.method)}</Td>
+                        <Td className="font-medium">{formatCurrency(payment.amount)}</Td>
+                        <Td><StatusBadge status={payment.status} /></Td>
+                        <Td>
+                          <div className="leading-tight">
+                            <div>{dateTime.time}</div>
+                            <div>{dateTime.date}</div>
+                          </div>
+                        </Td>
+                        <Td className="text-right">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button type="button" size="sm" variant="outline" onClick={() => loadDetail(payment.id)}>
+                              <Eye className="h-4 w-4" />
+                              {t("payments.viewVoucher")}
+                            </Button>
+                            <Button type="button" size="sm" variant="destructive" onClick={() => handleRefund(payment)} disabled={payment.status === "REFUNDED"}>
+                              <RotateCcw className="h-4 w-4" />
+                              {t("payments.refundTransaction")}
+                            </Button>
+                          </div>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </DataTable>
+            </CardContent>
+          </Card>
         ) : null}
 
         <PaginationControls pagination={pagination} onPageChange={setPage} />
@@ -400,8 +396,14 @@ export default function PaymentsPage() {
         <div ref={detailRef}>
           {selectedPayment ? (
             <Card className="w-full min-w-0">
-              <CardHeader>
-                <CardTitle>{t("payments.voucherTitle", { code: getPaymentTransactionCode(selectedPayment) })}</CardTitle>
+              <CardHeader className="border-b">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <CardTitle>{t("payments.voucherTitle", { code: getPaymentTransactionCode(selectedPayment) })}</CardTitle>
+                  <Button type="button" variant="destructive" onClick={() => handleRefund(selectedPayment)} disabled={selectedPayment.status === "REFUNDED"}>
+                    <RotateCcw className="h-4 w-4" />
+                    {t("payments.refundTransaction")}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <div>

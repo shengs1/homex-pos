@@ -30,10 +30,14 @@ function getSetting(order: Order | PublicInvoice, setting?: Setting | null) {
 export function PrintableInvoice({ order, setting, publicUrl, className }: PrintableInvoiceProps) {
   const { t } = useLanguage();
   const invoiceSetting = getSetting(order, setting);
+  const isK80 = (invoiceSetting?.printPaperSize || "K80").toUpperCase() === "K80";
+  const paperClassName = isK80
+    ? "mx-auto w-[80mm] max-w-[80mm] bg-white px-[4mm] py-[5mm] text-[11px] leading-snug text-black print:w-[80mm] print:max-w-[80mm] print:p-[4mm]"
+    : "mx-auto max-w-[210mm] bg-white p-6 text-sm text-black print:max-w-[210mm] print:p-0";
 
   return (
     <div className={className}>
-      <div className="mx-auto max-w-[780px] bg-white p-6 text-sm text-black print:max-w-none print:p-0">
+      <div className={paperClassName}>
         <div className="text-center">
           <h2 className="text-lg font-bold">{invoiceSetting?.storeName || "Homex POS"}</h2>
           {invoiceSetting?.storeAddress ? <p>{invoiceSetting.storeAddress}</p> : null}
@@ -50,7 +54,7 @@ export function PrintableInvoice({ order, setting, publicUrl, className }: Print
           <p>{t("orders.customer")}: {getCustomerName(order)}</p>
         </div>
 
-        <table className="mt-4 w-full border-collapse text-left text-xs">
+        <table className={`mt-4 w-full border-collapse text-left ${isK80 ? "text-[10px]" : "text-xs"}`}>
           <thead>
             <tr className="border-y border-black">
               <th className="py-2 pr-2">{t("products.product")}</th>
@@ -87,7 +91,7 @@ export function PrintableInvoice({ order, setting, publicUrl, className }: Print
 
         {publicUrl ? (
           <div className="mt-4 flex flex-col items-center gap-2 text-center">
-            <QRCodeSVG value={publicUrl} size={116} />
+            <QRCodeSVG value={publicUrl} size={isK80 ? 96 : 116} />
             <p className="text-xs">{t("invoice.scanPublic")}</p>
           </div>
         ) : null}

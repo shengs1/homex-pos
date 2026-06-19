@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Eye, PlayCircle, Printer, XCircle } from "lucide-react";
+import { Download, Eye, PlayCircle, Plus, Printer, XCircle } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { useLanguage } from "@/contexts/language-context";
-import { ActionMenu } from "@/components/shared/action-menu";
 import { DataTable, Td, Th } from "@/components/shared/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -271,7 +270,12 @@ export default function OrdersPage() {
         <PageHeader
           title={t("orders.title")}
           description={t("orders.description")}
-        />
+        >
+          <Button type="button" onClick={() => router.push("/pos")}>
+            <Plus className="h-4 w-4" />
+            {t("common.addNew")}
+          </Button>
+        </PageHeader>
 
         <ErrorState message={errorMessage} />
         {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
@@ -308,106 +312,123 @@ export default function OrdersPage() {
         </Card>
 
         {isLoading ? <LoadingState /> : null}
-        {!isLoading && items.length === 0 ? <EmptyState /> : null}
+        {!isLoading && items.length === 0 ? <EmptyState actionLabel={t("common.addNew")} onAction={() => router.push("/pos")} /> : null}
 
         {!isLoading && items.length > 0 ? (
-          <DataTable noHorizontalScroll>
-            <colgroup>
-              <col className="w-[18%]" />
-              <col className="w-[16%]" />
-              <col className="w-[15%]" />
-              <col className="w-[14%]" />
-              <col className="w-[13%]" />
-              <col className="w-[14%]" />
-              <col className="w-[10%]" />
-            </colgroup>
-            <thead>
-              <tr>
-                <Th>{t("orders.orderCode")}</Th>
-                <Th>{t("orders.customer")}</Th>
-                <Th>{t("orders.cashier")}</Th>
-                <Th>{t("orders.total")}</Th>
-                <Th>{t("common.status")}</Th>
-                <Th>{t("common.createdAt")}</Th>
-                <Th className="text-right">{t("common.actions")}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((order) => {
-                const dateTime = formatDateTimeParts(order.createdAt);
-
-                return (
-                  <tr key={order.id}>
-                    <Td>
-                      <div className="truncate font-medium" title={order.orderCode}>
-                        {order.orderCode}
-                      </div>
-                    </Td>
-                    <Td>
-                      <div className="truncate" title={getOrderCustomerName(order)}>
-                        {getOrderCustomerName(order)}
-                      </div>
-                    </Td>
-                    <Td>
-                      <div className="truncate" title={getOrderCashierName(order)}>
-                        {getOrderCashierName(order)}
-                      </div>
-                    </Td>
-                    <Td className="font-medium">{formatCurrency(order.totalAmount)}</Td>
-                    <Td><StatusBadge status={order.status} /></Td>
-                    <Td>
-                      <div className="leading-tight">
-                        <div>{dateTime.time}</div>
-                        <div>{dateTime.date}</div>
-                      </div>
-                    </Td>
-                    <Td className="text-right">
-                      <ActionMenu
-                        label={t("common.actions")}
-                        items={[
-                          {
-                            label: t("common.detail"),
-                            icon: <Eye className="h-4 w-4" />,
-                            onClick: () => loadDetail(order.id),
-                          },
-                          ...(order.status === "DRAFT"
-                            ? [
-                                {
-                                  label: t("orders.continuePayment"),
-                                  icon: <PlayCircle className="h-4 w-4" />,
-                                  onClick: () => handleContinuePayment(order),
-                                },
-                              ]
-                            : []),
-                          {
-                            label: t("orders.printInvoice"),
-                            icon: <Printer className="h-4 w-4" />,
-                            onClick: () => handlePrintInvoice(order),
-                          },
-                          {
-                            label: t("orders.cancelOrder"),
-                            icon: <XCircle className="h-4 w-4" />,
-                            onClick: () => handleCancelOrder(order),
-                            variant: "destructive",
-                            disabled: order.status === "CANCELLED",
-                          },
-                        ]}
-                      />
-                    </Td>
+          <Card className="overflow-hidden">
+            <CardContent className="p-0">
+              <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
+                <colgroup>
+                  <col className="w-[16%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[13%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[12%]" />
+                  <col className="w-[22%]" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <Th>{t("orders.orderCode")}</Th>
+                    <Th>{t("orders.customer")}</Th>
+                    <Th>{t("orders.cashier")}</Th>
+                    <Th>{t("orders.total")}</Th>
+                    <Th>{t("common.status")}</Th>
+                    <Th>{t("common.createdAt")}</Th>
+                    <Th className="text-right">{t("common.actions")}</Th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </DataTable>
+                </thead>
+                <tbody>
+                  {items.map((order) => {
+                    const dateTime = formatDateTimeParts(order.createdAt);
+
+                    return (
+                      <tr key={order.id}>
+                        <Td>
+                          <div className="truncate font-medium" title={order.orderCode}>
+                            {order.orderCode}
+                          </div>
+                        </Td>
+                        <Td>
+                          <div className="truncate" title={getOrderCustomerName(order)}>
+                            {getOrderCustomerName(order)}
+                          </div>
+                        </Td>
+                        <Td>
+                          <div className="truncate" title={getOrderCashierName(order)}>
+                            {getOrderCashierName(order)}
+                          </div>
+                        </Td>
+                        <Td className="font-medium">{formatCurrency(order.totalAmount)}</Td>
+                        <Td><StatusBadge status={order.status} /></Td>
+                        <Td>
+                          <div className="leading-tight">
+                            <div>{dateTime.time}</div>
+                            <div>{dateTime.date}</div>
+                          </div>
+                        </Td>
+                        <Td className="text-right">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button type="button" size="sm" variant="outline" onClick={() => loadDetail(order.id)}>
+                              <Eye className="h-4 w-4" />
+                              {t("common.detail")}
+                            </Button>
+                            {order.status === "DRAFT" ? (
+                              <Button type="button" size="sm" onClick={() => handleContinuePayment(order)}>
+                                <PlayCircle className="h-4 w-4" />
+                                {t("orders.continuePayment")}
+                              </Button>
+                            ) : null}
+                            <Button type="button" size="sm" variant="outline" onClick={() => handlePrintInvoice(order)}>
+                              <Printer className="h-4 w-4" />
+                              {t("orders.printInvoice")}
+                            </Button>
+                            <Button type="button" size="sm" variant="destructive" onClick={() => handleCancelOrder(order)} disabled={order.status === "CANCELLED"}>
+                              <XCircle className="h-4 w-4" />
+                              {t("orders.cancelOrder")}
+                            </Button>
+                          </div>
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </DataTable>
+            </CardContent>
+          </Card>
         ) : null}
 
         <PaginationControls pagination={pagination} onPageChange={setPage} />
 
         <div ref={detailRef} className="print:block">
           {selectedOrder ? (
-            <Card className="print:border-0 print:shadow-none">
-              <CardHeader>
-                <CardTitle>{t("orders.detailTitle", { code: selectedOrder.orderCode })}</CardTitle>
+            <Card className="overflow-hidden border-primary/20 bg-gradient-to-b from-card to-muted/20 shadow-sm print:border-0 print:shadow-none">
+              <CardHeader className="border-b bg-card/80">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <CardTitle>{t("orders.detailTitle", { code: selectedOrder.orderCode })}</CardTitle>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <StatusBadge status={selectedOrder.status} />
+                      <span className="text-sm font-semibold text-primary">{formatCurrency(selectedOrder.totalAmount)}</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedOrder.status === "DRAFT" ? (
+                      <Button type="button" onClick={() => handleContinuePayment(selectedOrder)}>
+                        <PlayCircle className="h-4 w-4" />
+                        {t("orders.continuePayment")}
+                      </Button>
+                    ) : null}
+                    <Button type="button" variant="outline" onClick={() => handlePrintInvoice(selectedOrder)}>
+                      <Printer className="h-4 w-4" />
+                      {t("orders.printInvoice")}
+                    </Button>
+                    <Button type="button" variant="destructive" onClick={() => handleCancelOrder(selectedOrder)} disabled={selectedOrder.status === "CANCELLED"}>
+                      <XCircle className="h-4 w-4" />
+                      {t("orders.cancelOrder")}
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -468,7 +489,7 @@ export default function OrdersPage() {
                     <CardContent>
                       {selectedOrderPayment ? (
                         <div className="space-y-2 text-sm">
-                          <p><span className="font-semibold">Số tiền:</span> {formatCurrency(selectedOrderPayment.amount)}</p>
+                          <p><span className="font-semibold">{t("payments.amountPaid")}:</span> {formatCurrency(selectedOrderPayment.amount)}</p>
                           <p><span className="font-semibold">{t("payments.method")}:</span> {t(`paymentMethod.${selectedOrderPayment.method}`)}</p>
                           <StatusBadge status={selectedOrderPayment.status} />
                         </div>

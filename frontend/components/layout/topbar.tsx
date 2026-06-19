@@ -45,14 +45,14 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
   }
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur md:px-6">
+    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border/60 bg-background/80 px-4 shadow-sm shadow-slate-950/5 backdrop-blur-xl md:px-5">
       <div className="flex min-w-0 items-center gap-3">
-        <Button variant="ghost" size="icon" className="md:hidden" onClick={onMenuClick}>
+        <Button variant="ghost" size="icon" className="h-9 w-9 min-w-9 md:hidden" onClick={onMenuClick}>
           <Menu className="h-5 w-5" />
         </Button>
         <div className="min-w-0">
-          <p className="text-sm text-muted-foreground">{t("topbar.greeting")}</p>
-          <h1 className="truncate text-base font-semibold md:text-lg">{user.fullName}</h1>
+          <p className="text-xs text-muted-foreground">{t("topbar.greeting")}</p>
+          <h1 className="truncate text-sm font-semibold md:text-base">{user.fullName}</h1>
         </div>
       </div>
 
@@ -60,7 +60,7 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
         <LanguageToggle />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" size="icon" className="relative" title={t("notifications.title")}>
+            <Button type="button" variant="outline" size="icon" className="relative h-9 w-9 min-w-9 bg-background/80" title={t("notifications.title")}>
               <Bell className="h-4 w-4" />
               {unreadCount > 0 ? (
                 <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
@@ -90,7 +90,7 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
           </DropdownMenuContent>
         </DropdownMenu>
         <Badge variant={user.role === "ADMIN" ? "default" : "secondary"}>{user.role}</Badge>
-        <Button variant="outline" size="sm" onClick={onLogout}>
+        <Button variant="outline" size="sm" className="bg-background/80" onClick={onLogout}>
           <LogOut className="h-4 w-4" />
           <span className="hidden sm:inline">{t("topbar.logout")}</span>
         </Button>

@@ -81,19 +81,19 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
   return (
     <aside
       className={cn(
-        "relative flex h-full flex-col border-r bg-card transition-all duration-200",
+        "relative flex h-full flex-col border-r border-slate-900 bg-slate-950 text-slate-100 shadow-2xl shadow-slate-950/20 transition-all duration-200",
         collapsed ? "w-20" : "w-72"
       )}
     >
-      <div className={cn("flex h-16 items-center border-b px-4", collapsed ? "justify-center" : "gap-3")}>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+      <div className={cn("flex h-14 items-center border-b border-white/10 px-4", collapsed ? "justify-center" : "gap-3")}>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-white/15">
           <Home className="h-5 w-5" />
         </div>
 
         {!collapsed ? (
           <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-bold leading-none">Homex POS</p>
-            <p className="mt-1 truncate text-xs text-muted-foreground">{t("app.subtitle")}</p>
+            <p className="truncate text-base font-bold leading-none text-white">Homex POS</p>
+            <p className="mt-1 truncate text-xs text-slate-400">{t("app.subtitle")}</p>
           </div>
         ) : null}
 
@@ -102,7 +102,10 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
             type="button"
             variant="ghost"
             size="icon"
-            className={cn("hidden md:inline-flex", collapsed && "absolute left-[4.25rem]")}
+            className={cn(
+              "hidden text-slate-300 hover:bg-white/10 hover:text-white md:inline-flex",
+              collapsed && "absolute left-[4.25rem] bg-slate-950 shadow-lg"
+            )}
             title={collapsed ? t("topbar.expandSidebar") : t("topbar.collapseSidebar")}
             onClick={onToggleCollapsed}
           >
@@ -124,9 +127,9 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
               title={collapsed ? label : undefined}
               onClick={onNavigate}
               className={cn(
-                "flex items-center rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+                "flex items-center rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white",
                 collapsed ? "justify-center" : "gap-3",
-                isActive && "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
+                isActive && "bg-white text-slate-950 shadow-sm hover:bg-white hover:text-slate-950"
               )}
             >
               <Icon className="h-4 w-4 shrink-0" />

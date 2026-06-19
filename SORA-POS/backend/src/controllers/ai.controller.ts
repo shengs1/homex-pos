@@ -1,0 +1,66 @@
+import { Request, Response } from 'express';
+import { AIService } from '../services/ai.service';
+import { successResponse } from '../utils/response';
+import { asyncHandler } from '../utils/asyncHandler';
+import { AppError } from '../utils/AppError';
+
+export class AIController {
+  static restockAnalysis = asyncHandler(async (req: Request, res: Response) => {
+    const targetDays = Number(req.query.target_days || 14);
+    const productId = typeof req.query.product_id === 'string' ? req.query.product_id : undefined;
+    successResponse(res, await AIService.analyzeRestock(targetDays, productId), 'Phân tích tồn kho thành công');
+  });
+
+  static generate = asyncHandler(async (req: Request, res: Response) => {
+    if (!req.user) throw new AppError(401, 'Chưa xác thực');
+    successResponse(
+      res,
+      await AIService.generateRecommendations(req.body.target_days || 14, req.user.userId, req.body.product_id),
+      'Tạo gợi ý nhập hàng thành công',
+      201
+    );
+  });
+
+  static list = asyncHandler(async (req: Request, res: Response) => {
+    successResponse(res, await AIService.list(req.query), 'Lấy danh sách gợi ý AI thành công');
+  });
+
+  static updateStatus = asyncHandler(async (req: Request, res: Response) => {
+    successResponse(
+      res,
+      await AIService.updateStatus(req.params.id, req.body.status),
+      'Cập nhật trạng thái gợi ý thành công'
+    );
+  });
+
+  static identifyProductByBarcode = asyncHandler(async (req: Request, res: Response) => {
+    successResponse(
+      res,
+      await AIService.identifyProductByBarcode(req.params.barcode),
+      'Nhận diện sản phẩm từ mã vạch thành công'
+    );
+  });
+
+  static generateDescription = asyncHandler(async (req: Request, res: Response) => {
+    const { productName } = req.body;
+    if (!productName) throw new AppError(400, 'Vui lòng cung cấp tên sản phẩm');
+    const description = await AIService.generateDescription(productName);
+    successResponse(res, { description }, 'Sinh mô tả sản phẩm thành công');
+  });
+
+  static suggestCategory = asyncHandler(async (req: Request, res: Response) => {
+    const { productName, categories } = req.body;
+    if (!productName || !categories || !Array.isArray(categories)) {
+      throw new AppError(400, 'Tham số không hợp lệ. Cần có productName và danh sách categories');
+    }
+    const categoryId = await AIService.suggestCategory(productName, categories);
+    successResponse(res, { categoryId }, 'Gợi ý danh mục sản phẩm thành công');
+  });
+
+  static suggestCategoryImage = asyncHandler(async (req: Request, res: Response) => {
+    const { categoryName } = req.body;
+    if (!categoryName) throw new AppError(400, 'Vui lòng cung cấp tên danh mục');
+    const imageUrl = await AIService.suggestCategoryImage(categoryName);
+    successResponse(res, { imageUrl }, 'Gợi ý ảnh danh mục thành công');
+  });
+}

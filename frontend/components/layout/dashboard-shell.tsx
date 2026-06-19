@@ -121,7 +121,7 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-muted/30">
       <div className="fixed inset-y-0 left-0 z-30 hidden md:block">
         <Sidebar role={user.role} collapsed={isSidebarCollapsed} onToggleCollapsed={handleToggleSidebar} />
       </div>
@@ -150,7 +150,7 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
       <div className={cn("transition-all duration-200", isSidebarCollapsed ? "md:pl-20" : "md:pl-72")}>
         <Topbar user={user} onMenuClick={() => setIsMobileSidebarOpen(true)} onLogout={handleLogout} />
         <NetworkStatusBar />
-        <main className="p-4 md:p-6">
+        <main className="p-3 md:p-4">
           <ErrorBoundary>
             {isRouteBlocked ? (
               <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground shadow-sm">{noPermissionMessage}</div>

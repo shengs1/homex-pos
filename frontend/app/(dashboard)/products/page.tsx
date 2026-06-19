@@ -757,7 +757,12 @@ export default function ProductsPage() {
 
   return (
     <div className="w-full min-w-0 space-y-6 overflow-visible">
-      <PageHeader title={t("products.title")} description={t("products.description")} />
+      <PageHeader title={t("products.title")} description={t("products.description")}>
+        <Button type="button" onClick={openCreateForm}>
+          <Plus className="h-4 w-4" />
+          {t("common.addNew")}
+        </Button>
+      </PageHeader>
 
       <ErrorState message={errorMessage} />
       {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
@@ -809,18 +814,14 @@ export default function ProductsPage() {
               </Button>
             </div>
 
-            <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
-              {selectedCount > 0 ? (
+            {selectedCount > 0 ? (
+              <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
                 <Button type="button" variant="destructive" size="sm" onClick={handleBulkDelete} disabled={isBulkLoading}>
                   <CheckSquare className="h-4 w-4" />
                   {t("products.deleteSelected", { count: selectedCount })}
                 </Button>
-              ) : null}
-              <Button size="sm" className="h-10" onClick={openCreateForm}>
-                <Plus className="h-4 w-4" />
-                {t("products.add")}
-              </Button>
-            </div>
+              </div>
+            ) : null}
           </div>
         </CardContent>
       </Card>
@@ -924,7 +925,16 @@ export default function ProductsPage() {
       ) : null}
 
       {/* Product TanStack Data Table */}
-      <TanStackDataTable table={table} isLoading={isLoading} tableClassName="w-full table-fixed" />
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          <TanStackDataTable
+            table={table}
+            isLoading={isLoading}
+            className="rounded-none border-0 shadow-none"
+            tableClassName="w-full table-fixed"
+          />
+        </CardContent>
+      </Card>
       <PaginationControls pagination={pagination} onPageChange={setPage} />
 
       {/* Import guide dialog */}

@@ -14,6 +14,8 @@ type TanStackDataTableProps<TData> = {
   table: TanStackTable<TData>;
   isLoading?: boolean;
   emptyMessage?: string;
+  emptyActionLabel?: string;
+  onEmptyAction?: () => void;
   className?: string;
   tableClassName?: string;
 };
@@ -26,13 +28,15 @@ export function TanStackDataTable<TData>({
   table,
   isLoading = false,
   emptyMessage,
+  emptyActionLabel,
+  onEmptyAction,
   className,
   tableClassName,
 }: TanStackDataTableProps<TData>) {
   if (isLoading) return <LoadingState />;
 
   if (table.getRowModel().rows.length === 0) {
-    return <EmptyState message={emptyMessage} />;
+    return <EmptyState message={emptyMessage} actionLabel={emptyActionLabel} onAction={onEmptyAction} />;
   }
 
   return (

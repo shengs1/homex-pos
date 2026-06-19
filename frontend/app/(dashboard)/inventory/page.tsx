@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Download, PackagePlus, SlidersHorizontal } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, Download, PackagePlus, RotateCcw, SlidersHorizontal } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { RoleGuard } from "@/components/auth/role-guard";
@@ -43,6 +43,7 @@ export default function InventoryPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
+  const [inventoryMode, setInventoryMode] = useState<"IMPORT" | "ADJUST">("IMPORT");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -157,6 +158,22 @@ export default function InventoryPage() {
     link.download = "inventory.csv";
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  function getTransactionIcon(transactionType: string) {
+    if (transactionType === "IMPORT") {
+      return <ArrowUpCircle className="h-4 w-4 text-emerald-600" />;
+    }
+
+    if (transactionType === "SALE") {
+      return <ArrowDownCircle className="h-4 w-4 text-red-600" />;
+    }
+
+    if (transactionType === "RESTORE") {
+      return <RotateCcw className="h-4 w-4 text-emerald-600" />;
+    }
+
+    return <SlidersHorizontal className="h-4 w-4 text-amber-600" />;
   }
 
   return (

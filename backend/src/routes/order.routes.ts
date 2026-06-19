@@ -824,16 +824,17 @@ router.patch(
         : manualDiscountAmount;
 
       const finalAmount = Math.max(orderSubtotal - finalDiscountAmount, 0);
+      const isCashPayment = checkoutData.paymentMethod === PAYMENT_METHOD.CASH;
       const cashReceived =
-        checkoutData.paymentMethod === PAYMENT_METHOD.CASH
+        isCashPayment
           ? Number(checkoutData.cashReceived || 0)
           : null;
       const changeAmount =
-        checkoutData.paymentMethod === PAYMENT_METHOD.CASH
-          ? Math.max(cashReceived - finalAmount, 0)
+        isCashPayment
+          ? Math.max((cashReceived || 0) - finalAmount, 0)
           : null;
 
-      if (checkoutData.paymentMethod === PAYMENT_METHOD.CASH && cashReceived < finalAmount) {
+      if (isCashPayment && (cashReceived || 0) < finalAmount) {
         throw new AppError("Tiền khách đưa chưa đủ để thanh toán", 400);
       }
 

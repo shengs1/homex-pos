@@ -105,6 +105,7 @@ export default function PosPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [isCancelDraftDialogOpen, setIsCancelDraftDialogOpen] = useState(false);
+  const [isCheckoutDialogOpen, setIsCheckoutDialogOpen] = useState(false);
   const [quickCustomerName, setQuickCustomerName] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
@@ -114,6 +115,8 @@ export default function PosPage() {
   const [isOnline, setIsOnline] = useState(true);
   const { t } = useLanguage();
   const cartScrollRef = useRef<HTMLDivElement | null>(null);
+  const barcodeInputRef = useRef<HTMLInputElement | null>(null);
+  const cashReceivedInputRef = useRef<HTMLInputElement | null>(null);
   const previousCartLengthRef = useRef(0);
   const barcodeBufferRef = useRef("");
   const barcodeTimerRef = useRef<number | null>(null);
@@ -128,12 +131,17 @@ export default function PosPage() {
   const changeAmount = paymentMethod === "CASH" ? Math.max(cashReceivedAmount - totalPayable, 0) : 0;
   const requiresShift = user?.role === "CASHIER";
   const isCashPaymentInvalid = paymentMethod === "CASH" && cashReceivedAmount < totalPayable;
-  const isCheckoutDisabled = isSubmitting || cart.length === 0 || !isOnline || isCashPaymentInvalid || (requiresShift && !currentShift);
+  const isCheckoutDisabled = isSubmitting || cart.length === 0 || !isOnline || (requiresShift && !currentShift);
   const transferQrValue = buildVietQrDemoValue(setting, totalPayable, draftOrder?.orderCode || "HOMEX POS");
   const lastInvoicePublicUrl =
     lastCompletedOrder && typeof window !== "undefined"
       ? `${window.location.origin}/invoice/${lastCompletedOrder.orderCode}`
       : "";
+
+  function focusBarcodeInput() {
+    if (typeof window === "undefined") return;
+    window.requestAnimationFrame(() => barcodeInputRef.current?.focus());
+  }
 
   async function loadCategories() {
     try {
@@ -205,6 +213,7 @@ export default function PosPage() {
     setDiscountMessage("");
     setAppliedDiscountAmount(0);
     setAppliedPromotionCode("");
+    setIsCheckoutDialogOpen(false);
   }
 
   async function restoreDraftOrderFromStorage() {
@@ -275,7 +284,17 @@ export default function PosPage() {
     loadSetting();
     loadCurrentShift();
     restoreDraftOrderFromStorage();
+    focusBarcodeInput();
   }, []);
+
+  useEffect(() => {
+    if (!isCheckoutDialogOpen) {
+      focusBarcodeInput();
+      return;
+    }
+
+    window.setTimeout(() => cashReceivedInputRef.current?.focus(), 0);
+  }, [isCheckoutDialogOpen]);
 
   useEffect(() => {
     function updateOnlineStatus() {
@@ -383,6 +402,7 @@ export default function PosPage() {
 
       return [...currentCart, { product, quantity: 1 }];
     });
+    focusBarcodeInput();
   }
 
   async function handleBarcodeScan(code: string) {
@@ -400,6 +420,8 @@ export default function PosPage() {
       setSuccessMessage(t("pos.barcodeAdded", { sku: product.sku }));
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error) || t("pos.barcodeNotFound"));
+    } finally {
+      focusBarcodeInput();
     }
   }
 
@@ -452,6 +474,17 @@ export default function PosPage() {
     }
   }
 
+  function startCheckout() {
+    if (paymentMethod === "CASH") {
+      setErrorMessage("");
+      setSuccessMessage("");
+      setIsCheckoutDialogOpen(true);
+      return;
+    }
+
+    void checkout();
+  }
+
   async function checkout() {
     if (cart.length === 0) {
       setErrorMessage(t("toast.pos.emptyCart"));
@@ -489,6 +522,7 @@ export default function PosPage() {
         discountAmount: discountAmount > 0 ? discountAmount : undefined,
       });
       setLastCompletedOrder(completedOrder);
+      setIsCheckoutDialogOpen(false);
       resetPosState();
       setSuccessMessage(t("toast.pos.checkoutSuccess"));
       router.refresh();
@@ -659,10 +693,12 @@ export default function PosPage() {
 
   return (
     <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
-      <div className="flex h-[calc(100vh-80px)] max-h-[calc(100vh-80px)] min-h-0 flex-col overflow-hidden print:hidden">
+      <div className="flex h-[calc(100vh-4rem)] max-h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden print:hidden">
         <input
+          ref={barcodeInputRef}
           className="sr-only"
           autoFocus
+          autoComplete="off"
           aria-label={t("pos.barcodeInput")}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
@@ -715,13 +751,14 @@ export default function PosPage() {
         </div>
 
         {/* Main POS workspace: chỉ phần này chiếm phần còn lại của màn hình */}
-        <div className="grid min-h-0 flex-1 min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(340px,3fr)] xl:grid-cols-[minmax(0,7fr)_minmax(380px,3fr)]">
           {/* Cột trái: tìm kiếm và danh sách sản phẩm */}
-          <div className="flex min-h-0 min-w-0 flex-col gap-4">
+          <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden">
             <Card className="shrink-0">
               <CardContent className="space-y-4 pt-6">
                 <form onSubmit={handleProductSearch} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
                   <Input
+                    autoFocus
                     placeholder={t("pos.searchProduct")}
                     value={productSearch}
                     onChange={(event) => setProductSearch(event.target.value)}
@@ -919,7 +956,7 @@ export default function PosPage() {
               </div>
 
               {/* Vùng đáy cố định: mã giảm giá + tiền + phương thức + nút hành động */}
-              <div className="shrink-0 border-t border-gray-100 bg-card px-3 py-2.5 shadow-[0_-8px_20px_rgba(15,23,42,0.05)]">
+              <div className="sticky bottom-0 z-10 shrink-0 border-t border-gray-100 bg-card px-3 py-2.5 shadow-[0_-8px_20px_rgba(15,23,42,0.05)]">
                 <div className="mb-1.5 space-y-1">
                   <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                     <Input
@@ -972,26 +1009,6 @@ export default function PosPage() {
                   </Select>
                 </div>
 
-                {paymentMethod === "CASH" ? (
-                  <div className="mt-1.5 grid gap-2 rounded-lg border bg-muted/30 p-2 text-sm">
-                    <div className="space-y-1">
-                      <Label>{t("pos.cashReceived")}</Label>
-                      <Input
-                        inputMode="numeric"
-                        value={cashReceivedInput}
-                        onChange={(event) => setCashReceivedInput(formatMoneyInput(event.target.value))}
-                        placeholder={t("pos.cashReceivedPlaceholder")}
-                        disabled={cart.length === 0 || isSubmitting}
-                      />
-                    </div>
-                    <div className="flex justify-between gap-3">
-                      <span className="text-muted-foreground">{t("pos.changeAmount")}</span>
-                      <span className={cn("font-semibold", isCashPaymentInvalid ? "text-destructive" : "text-green-700")}>{formatCurrency(changeAmount)}</span>
-                    </div>
-                    {isCashPaymentInvalid ? <p className="text-xs text-destructive">{t("pos.cashNotEnough")}</p> : null}
-                  </div>
-                ) : null}
-
                 {paymentMethod === "TRANSFER" ? (
                   <div className="mt-1.5 grid gap-2 rounded-lg border bg-muted/30 p-3 text-center text-xs">
                     <div className="mx-auto rounded-lg bg-white p-2">
@@ -1011,12 +1028,12 @@ export default function PosPage() {
                   </div>
                 ) : null}
 
-                <div className="mt-1.5 grid gap-2 sm:grid-cols-2">
+                <div className="mt-2 grid gap-2">
                   {draftOrder ? (
                     <Button
                       type="button"
                       variant="outline"
-                      className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                      className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
                       disabled={isSubmitting}
                       onClick={() => setIsCancelDraftDialogOpen(true)}
                     >
@@ -1024,12 +1041,12 @@ export default function PosPage() {
                       {t("pos.cancelOrder")}
                     </Button>
                   ) : (
-                    <Button type="button" variant="outline" disabled={isSubmitting || cart.length === 0} onClick={createDraft}>
+                    <Button type="button" variant="outline" className="w-full" disabled={isSubmitting || cart.length === 0} onClick={createDraft}>
                       {t("pos.createDraft")}
                     </Button>
                   )}
 
-                  <Button type="button" disabled={isCheckoutDisabled} onClick={checkout}>
+                  <Button type="button" size="lg" className="min-h-14 w-full text-lg font-bold shadow-lg shadow-primary/20" disabled={isCheckoutDisabled} onClick={startCheckout}>
                     {t("pos.checkout")}
                   </Button>
                 </div>
@@ -1037,6 +1054,73 @@ export default function PosPage() {
             </CardContent>
           </Card>
         </div>
+
+        <Dialog open={isCheckoutDialogOpen} onOpenChange={setIsCheckoutDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("pos.cashCheckoutTitle")}</DialogTitle>
+              <DialogDescription>{t("pos.cashCheckoutDescription")}</DialogDescription>
+            </DialogHeader>
+
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!isCashPaymentInvalid && !isSubmitting) {
+                  void checkout();
+                }
+              }}
+            >
+              <div className="space-y-2 rounded-xl border bg-muted/40 p-3 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">{t("pos.subtotal")}</span>
+                  <span className="font-medium">{formatCurrency(subtotal)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">{t("pos.discount")}</span>
+                  <span className="font-medium">-{formatCurrency(discountAmount)}</span>
+                </div>
+                <div className="flex justify-between gap-4 border-t pt-2 text-base font-bold">
+                  <span>{t("pos.totalPayable")}</span>
+                  <span className="text-primary">{formatCurrency(totalPayable)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="pos-cash-received">{t("pos.cashReceived")}</Label>
+                <Input
+                  id="pos-cash-received"
+                  ref={cashReceivedInputRef}
+                  inputMode="numeric"
+                  value={cashReceivedInput}
+                  onChange={(event) => setCashReceivedInput(formatMoneyInput(event.target.value))}
+                  placeholder={t("pos.cashReceivedPlaceholder")}
+                  className="h-12 text-lg font-semibold"
+                  disabled={cart.length === 0 || isSubmitting}
+                />
+              </div>
+
+              <div className="rounded-xl border bg-card p-3">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-sm text-muted-foreground">{t("pos.changeAmount")}</span>
+                  <span className={cn("text-2xl font-bold", isCashPaymentInvalid ? "text-destructive" : "text-green-700")}>
+                    {formatCurrency(changeAmount)}
+                  </span>
+                </div>
+                {isCashPaymentInvalid ? <p className="mt-2 text-sm text-destructive">{t("pos.cashNotEnough")}</p> : null}
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button type="button" variant="outline" className="w-full" onClick={() => setIsCheckoutDialogOpen(false)} disabled={isSubmitting}>
+                  {t("common.cancel")}
+                </Button>
+                <Button type="submit" size="lg" className="w-full text-base font-semibold" disabled={isSubmitting || isCashPaymentInvalid}>
+                  {t("pos.confirmPayment")}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
 
         <Dialog open={isCustomerDialogOpen} onOpenChange={setIsCustomerDialogOpen}>
           <DialogContent className="max-w-xl">
