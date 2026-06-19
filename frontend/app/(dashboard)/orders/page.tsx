@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, PlayCircle, Printer, XCircle } from "lucide-react";
+import { Download, Eye, PlayCircle, Printer, XCircle } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { useLanguage } from "@/contexts/language-context";
 import { ActionMenu } from "@/components/shared/action-menu";
@@ -10,6 +10,7 @@ import { DataTable, Td, Th } from "@/components/shared/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { PaginationControls } from "@/components/shared/pagination-controls";
+import { PrintableInvoice } from "@/components/shared/printable-invoice";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,9 +18,9 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { getApiErrorMessage } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
-import { orderService } from "@/services/homex.service";
+import { orderService, settingService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
-import type { Order } from "@/types/domain";
+import type { Order, Setting } from "@/types/domain";
 
 const PAGE_SIZE = 10;
 const FETCH_PAGE_SIZE = 100;
@@ -115,6 +116,7 @@ export default function OrdersPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
+  const [setting, setSetting] = useState<Setting | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -154,6 +156,15 @@ export default function OrdersPage() {
       setErrorMessage(getApiErrorMessage(error));
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function loadSetting() {
+    try {
+      const data = await settingService.get();
+      setSetting(data);
+    } catch {
+      setSetting(null);
     }
   }
 
@@ -221,6 +232,33 @@ export default function OrdersPage() {
     loadData(page);
   }, [page, status]);
 
+  useEffect(() => {
+    loadSetting();
+  }, []);
+
+  async function exportOrdersCsv() {
+    const allOrders = sortOrdersByCreatedAtDesc(await fetchAllOrders({ search, status }));
+    const rows = [
+      ["orderCode", "customer", "cashier", "totalAmount", "status", "createdAt"],
+      ...allOrders.map((order) => [
+        order.orderCode,
+        getOrderCustomerName(order),
+        getOrderCashierName(order),
+        String(order.totalAmount),
+        order.status,
+        formatDateTimeParts(order.createdAt).date,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "orders.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPage(1);
@@ -229,7 +267,7 @@ export default function OrdersPage() {
 
   return (
     <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
-      <div className="space-y-6">
+      <div className="space-y-6 print:hidden">
         <PageHeader
           title={t("orders.title")}
           description={t("orders.description")}
@@ -240,7 +278,7 @@ export default function OrdersPage() {
 
         <Card>
           <CardContent className="pt-6">
-            <form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_auto]">
+            <form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_auto_auto]">
               <Input
                 placeholder={t("orders.searchPlaceholder")}
                 value={search}
@@ -261,6 +299,10 @@ export default function OrdersPage() {
               </Select>
 
               <Button type="submit">{t("common.search")}</Button>
+              <Button type="button" variant="outline" onClick={exportOrdersCsv}>
+                <Download className="h-4 w-4" />
+                {t("common.export")}
+              </Button>
             </form>
           </CardContent>
         </Card>
@@ -457,6 +499,14 @@ export default function OrdersPage() {
           ) : null}
         </div>
       </div>
+      {selectedOrder ? (
+        <PrintableInvoice
+          order={selectedOrder}
+          setting={setting}
+          publicUrl={typeof window !== "undefined" ? `${window.location.origin}/invoice/${selectedOrder.orderCode}` : ""}
+          className="hidden print:block"
+        />
+      ) : null}
     </RoleGuard>
   );
 }

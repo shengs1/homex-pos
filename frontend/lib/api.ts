@@ -36,6 +36,10 @@ api.interceptors.response.use(
       }
     }
 
+    if (status === 403 && error.response?.data?.message === "Demo mode restriction" && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("homex-pos:demo-restriction"));
+    }
+
     return Promise.reject(error);
   }
 );

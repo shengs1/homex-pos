@@ -7,6 +7,8 @@ export type PaymentStatus = "PAID" | "PENDING" | "FAILED" | "REFUNDED";
 export type StockTransactionType = "IMPORT" | "SALE" | "ADJUSTMENT" | "RESTORE";
 export type WarrantyStatus = "ACTIVE" | "EXPIRED" | "CANCELLED";
 export type UserStatus = "ACTIVE" | "INACTIVE";
+export type VatInvoiceStatus = "PENDING" | "APPROVED" | "REJECTED";
+export type ShiftStatus = "OPEN" | "CLOSED";
 
 export type Category = {
   id: number;
@@ -37,6 +39,7 @@ export type Product = {
   supplierId: number;
   costPrice: number;
   salePrice: number;
+  originalPrice: number | null;
   stockQuantity: number;
   minStock: number;
   warrantyMonths: number;
@@ -80,6 +83,8 @@ export type Payment = {
   orderId: number;
   method: PaymentMethod;
   amount: number;
+  cashReceived: number | null;
+  changeAmount: number | null;
   status: PaymentStatus;
   paidAt: string | null;
   createdAt: string;
@@ -92,6 +97,7 @@ export type Order = {
   orderCode: string;
   userId: number;
   customerId: number | null;
+  shiftId?: number | null;
   totalAmount: number;
   status: OrderStatus;
   createdAt: string;
@@ -210,4 +216,124 @@ export type CustomerReportItem = Customer & {
   totalOrders: number;
   totalSpent: number;
   latestOrder: Pick<Order, "id" | "orderCode" | "totalAmount" | "createdAt"> | null;
+};
+
+export type Setting = {
+  id: number;
+  storeName: string;
+  storeAddress: string | null;
+  storeHotline: string | null;
+  printPaperSize: string;
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
+  vietQrTemplate: string | null;
+  minStock: number;
+  maxDiscount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type VatInvoiceRequest = {
+  id: number;
+  orderId: number;
+  companyName: string;
+  taxCode: string;
+  companyAddress: string;
+  buyerEmail: string | null;
+  note: string | null;
+  status: VatInvoiceStatus;
+  redInvoiceCode: string | null;
+  adminNote: string | null;
+  requestedAt: string;
+  reviewedAt: string | null;
+  reviewedById: number | null;
+  order?: Order;
+};
+
+export type Shift = {
+  id: number;
+  userId: number;
+  openingCash: number;
+  closingCash: number | null;
+  expectedCash: number | null;
+  discrepancyAmount: number | null;
+  note: string | null;
+  status: ShiftStatus;
+  openedAt: string;
+  closedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user?: Pick<UserAccount, "id" | "fullName" | "email">;
+};
+
+export type PurchaseOrderItem = {
+  id: number;
+  purchaseOrderId: number;
+  productId: number;
+  quantity: number;
+  unitCost: number;
+  lineTotal: number;
+  product?: Product;
+};
+
+export type PurchaseOrder = {
+  id: number;
+  code: string;
+  supplierId: number;
+  userId: number;
+  totalAmount: number;
+  note: string | null;
+  status: "COMPLETED" | "CANCELLED";
+  createdAt: string;
+  updatedAt: string;
+  supplier?: Supplier;
+  user?: Pick<UserAccount, "id" | "fullName" | "email">;
+  items: PurchaseOrderItem[];
+};
+
+export type ReturnOrderItem = {
+  id: number;
+  returnOrderId: number;
+  orderDetailId: number;
+  productId: number;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+  product?: Product;
+  orderDetail?: OrderDetail;
+};
+
+export type ReturnOrder = {
+  id: number;
+  returnCode: string;
+  orderId: number;
+  userId: number;
+  totalAmount: number;
+  reason: string | null;
+  status: "COMPLETED" | "CANCELLED";
+  createdAt: string;
+  updatedAt: string;
+  order?: Order;
+  user?: Pick<UserAccount, "id" | "fullName" | "email">;
+  items: ReturnOrderItem[];
+};
+
+export type NotificationItem = {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  targetRole: string | null;
+  userId: number | null;
+  isRead: boolean;
+  readAt: string | null;
+  createdAt: string;
+};
+
+export type PublicInvoice = Pick<Order, "id" | "orderCode" | "totalAmount" | "status" | "createdAt" | "orderDetails" | "payment"> & {
+  cashierName: string | null;
+  customer: Pick<Customer, "fullName" | "phone"> | null;
+  vatInvoiceRequest: VatInvoiceRequest | null;
+  setting: Setting;
 };

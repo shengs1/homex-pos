@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { PackagePlus, SlidersHorizontal } from "lucide-react";
+import { Download, PackagePlus, SlidersHorizontal } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { RoleGuard } from "@/components/auth/role-guard";
@@ -116,6 +116,31 @@ export default function InventoryPage() {
     loadAll(1);
   }
 
+  async function exportInventoryCsv() {
+    const data = await inventoryService.transactions({ page: 1, limit: 1000, search, type });
+    const rows = [
+      ["id", "product", "type", "quantity", "operator", "order", "note", "createdAt"],
+      ...data.items.map((item) => [
+        String(item.id),
+        item.product?.name || String(item.productId),
+        item.type,
+        String(item.quantity),
+        item.user?.fullName || String(item.userId),
+        item.order?.orderCode || "",
+        item.note || "",
+        formatDateTime(item.createdAt),
+      ]),
+    ];
+    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "inventory.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <RoleGuard allowedRoles={["ADMIN"]}>
       <div className="space-y-6">
@@ -164,7 +189,7 @@ export default function InventoryPage() {
 
         <Card>
           <CardContent className="pt-6">
-            <form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[1fr_200px_auto]">
+            <form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[1fr_200px_auto_auto]">
               <Input placeholder={t("inventory.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} />
               <Select value={type} onChange={(event) => { setType(event.target.value); setPage(1); }}>
                 <option value="">{t("common.allTypes")}</option>
@@ -174,6 +199,10 @@ export default function InventoryPage() {
                 <option value="RESTORE">{t("status.RESTORE")}</option>
               </Select>
               <Button type="submit">{t("inventory.filterTransactions")}</Button>
+              <Button type="button" variant="outline" onClick={exportInventoryCsv}>
+                <Download className="h-4 w-4" />
+                {t("common.export")}
+              </Button>
             </form>
           </CardContent>
         </Card>

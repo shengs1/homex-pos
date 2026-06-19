@@ -109,6 +109,11 @@ const baseProductSchema = z.object({
 
   salePrice: z.coerce.number().positive("Giá bán phải lớn hơn 0"),
 
+  originalPrice: z.coerce
+    .number()
+    .min(0, "Giá gốc không được âm")
+    .optional(),
+
   stockQuantity: z.coerce
     .number()
     .int("Số lượng tồn phải là số nguyên")
@@ -160,6 +165,7 @@ function formatProduct(product: ProductWithRelations) {
     supplier: product.supplier,
     costPrice: Number(product.costPrice),
     salePrice: Number(product.salePrice),
+    originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
     stockQuantity: product.stockQuantity,
     minStock: product.minStock,
     warrantyMonths: product.warrantyMonths,
@@ -398,6 +404,51 @@ router.get(
   })
 );
 
+// GET /api/products/barcode/:code
+router.get(
+  "/barcode/:code",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const barcode = String(req.params.code || "").trim();
+
+    if (!barcode) {
+      throw new AppError("Mã barcode không hợp lệ", 400);
+    }
+
+    const product = await prisma.product.findFirst({
+      where: {
+        status: RECORD_STATUS.ACTIVE,
+        OR: [
+          {
+            sku: {
+              equals: barcode,
+              mode: "insensitive",
+            },
+          },
+          {
+            qrCode: {
+              equals: barcode,
+              mode: "insensitive",
+            },
+          },
+        ],
+      },
+      include: productInclude,
+    });
+
+    if (!product) {
+      throw new AppError("Không tìm thấy sản phẩm theo barcode", 404);
+    }
+
+    return res.json({
+      success: true,
+      message: "Tìm sản phẩm theo barcode thành công",
+      data: formatProduct(product),
+    });
+  })
+);
+
 // GET /api/products/:id
 router.get(
   "/:id",
@@ -443,6 +494,7 @@ router.post(
       supplierId,
       costPrice,
       salePrice,
+      originalPrice,
       stockQuantity,
       minStock,
       warrantyMonths,
@@ -466,6 +518,7 @@ router.post(
         supplierId,
         costPrice,
         salePrice,
+        originalPrice: originalPrice || null,
         stockQuantity: stockQuantity ?? 0,
         minStock: minStock ?? 0,
         warrantyMonths: warrantyMonths ?? 0,
@@ -514,6 +567,7 @@ router.put(
       supplierId,
       costPrice,
       salePrice,
+      originalPrice,
       stockQuantity,
       minStock,
       warrantyMonths,
@@ -540,6 +594,7 @@ router.put(
         supplierId,
         costPrice,
         salePrice,
+        originalPrice: originalPrice || null,
         stockQuantity: stockQuantity ?? existingProduct.stockQuantity,
         minStock: minStock ?? existingProduct.minStock,
         warrantyMonths: warrantyMonths ?? existingProduct.warrantyMonths,

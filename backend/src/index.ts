@@ -16,6 +16,14 @@ import paymentRoutes from "./routes/payment.routes";
 import reportRoutes from "./routes/report.routes";
 import auditLogRoutes from "./routes/audit-log.routes";
 import promotionRoutes from "./routes/promotion.routes";
+import settingRoutes from "./routes/setting.routes";
+import shiftRoutes from "./routes/shift.routes";
+import purchaseOrderRoutes from "./routes/purchase-order.routes";
+import returnOrderRoutes from "./routes/return-order.routes";
+import vatInvoiceRoutes from "./routes/vat-invoice.routes";
+import notificationRoutes from "./routes/notification.routes";
+import publicInvoiceRoutes from "./routes/public-invoice.routes";
+import { demoModeMiddleware } from "./middlewares/demo-mode.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 
 dotenv.config();
@@ -24,6 +32,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use(demoModeMiddleware);
 
 app.get("/", (req, res) => {
   res.send("Homex POS Backend is running");
@@ -100,6 +109,13 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/promotions", promotionRoutes);
+app.use("/api/settings", settingRoutes);
+app.use("/api/shifts", shiftRoutes);
+app.use("/api/purchase-orders", purchaseOrderRoutes);
+app.use("/api/return-orders", returnOrderRoutes);
+app.use("/api/vat-invoices", vatInvoiceRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/invoices/public", publicInvoiceRoutes);
 app.use(errorMiddleware);
 
 const PORT = process.env.PORT || 5000;

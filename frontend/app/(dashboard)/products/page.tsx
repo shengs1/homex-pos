@@ -38,6 +38,7 @@ const formSchema = z.object({
   supplierId: z.coerce.number().int().positive("Vui lòng chọn nhà cung cấp"),
   costPrice: z.coerce.number().min(0, "Giá nhập không được âm"),
   salePrice: z.coerce.number().positive("Giá bán phải lớn hơn 0"),
+  originalPrice: z.coerce.number().min(0).optional(),
   stockQuantity: z.coerce.number().int().min(0).optional(),
   minStock: z.coerce.number().int().min(0).optional(),
   warrantyMonths: z.coerce.number().int().min(0).optional(),
@@ -64,6 +65,7 @@ const emptyForm: FormValues = {
   supplierId: 0,
   costPrice: 0,
   salePrice: 0,
+  originalPrice: 0,
   stockQuantity: 0,
   minStock: 0,
   warrantyMonths: 0,
@@ -237,6 +239,7 @@ export default function ProductsPage() {
       supplierId: item.supplierId,
       costPrice: item.costPrice,
       salePrice: item.salePrice,
+      originalPrice: item.originalPrice || 0,
       stockQuantity: item.stockQuantity,
       minStock: item.minStock,
       warrantyMonths: item.warrantyMonths,
@@ -687,7 +690,17 @@ export default function ProductsPage() {
       id: "salePrice",
       size: 105,
       header: t("products.salePrice"),
-      cell: ({ getValue }) => <div className="truncate font-medium" title={formatCurrency(getValue())}>{formatCurrency(getValue())}</div>,
+      cell: ({ row, getValue }) => {
+        const salePrice = Number(getValue());
+        const originalPrice = Number(row.original.originalPrice || 0);
+
+        return (
+          <div className="truncate" title={formatCurrency(salePrice)}>
+            {originalPrice > salePrice ? <div className="text-xs text-muted-foreground line-through">{formatCurrency(originalPrice)}</div> : null}
+            <div className="font-medium">{formatCurrency(salePrice)}</div>
+          </div>
+        );
+      },
       meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
     }),
     columnHelper.display({
@@ -854,6 +867,10 @@ export default function ProductsPage() {
                 <Label>{t("products.salePrice")}</Label>
                 <Input type="number" placeholder="750000" {...form.register("salePrice")} />
                 {form.formState.errors.salePrice ? <p className="text-sm text-destructive">{form.formState.errors.salePrice.message}</p> : null}
+              </div>
+              <div className="space-y-2">
+                <Label>{t("products.originalPrice")}</Label>
+                <Input type="number" placeholder="950000" {...form.register("originalPrice")} />
               </div>
               <div className="space-y-2"><Label>{t("products.stockQuantity")}</Label><Input type="number" placeholder="30" {...form.register("stockQuantity")} /></div>
               <div className="space-y-2"><Label>{t("products.minStock")}</Label><Input type="number" placeholder="5" {...form.register("minStock")} /></div>

@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { ErrorBoundary } from "@/components/shared/error-boundary";
+import { NetworkStatusBar } from "@/components/shared/network-status-bar";
 import { clearAuthStorage, getAuthToken, getAuthUser, isRoleAllowed } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/language-context";
@@ -147,12 +149,15 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
 
       <div className={cn("transition-all duration-200", isSidebarCollapsed ? "md:pl-20" : "md:pl-72")}>
         <Topbar user={user} onMenuClick={() => setIsMobileSidebarOpen(true)} onLogout={handleLogout} />
+        <NetworkStatusBar />
         <main className="p-4 md:p-6">
-          {isRouteBlocked ? (
-            <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground shadow-sm">{noPermissionMessage}</div>
-          ) : (
-            children
-          )}
+          <ErrorBoundary>
+            {isRouteBlocked ? (
+              <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground shadow-sm">{noPermissionMessage}</div>
+            ) : (
+              children
+            )}
+          </ErrorBoundary>
         </main>
       </div>
     </div>

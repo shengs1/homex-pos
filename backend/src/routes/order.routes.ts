@@ -52,6 +52,8 @@ const orderInclude = {
           sku: true,
           name: true,
           salePrice: true,
+          originalPrice: true,
+          imageUrl: true,
           warrantyMonths: true,
           status: true,
         },
@@ -118,6 +120,11 @@ const draftOrderSchema = z.object({
 
 const checkoutOrderSchema = z.object({
   paymentMethod: paymentMethodSchema,
+
+  cashReceived: z.coerce
+    .number()
+    .min(0, "Tiền khách đưa không hợp lệ")
+    .optional(),
 
   discountAmount: z.coerce
     .number()
@@ -250,6 +257,7 @@ function formatOrder(order: OrderWithRelations) {
     orderCode: order.orderCode,
     userId: order.userId,
     customerId: order.customerId,
+    shiftId: order.shiftId,
     totalAmount: formatMoney(order.totalAmount),
     status: order.status,
     createdAt: order.createdAt,
@@ -269,6 +277,7 @@ function formatOrder(order: OrderWithRelations) {
       product: {
         ...detail.product,
         salePrice: formatMoney(detail.product.salePrice),
+        originalPrice: detail.product.originalPrice ? formatMoney(detail.product.originalPrice) : null,
       },
       warranty: detail.warranty,
     })),
@@ -278,6 +287,8 @@ function formatOrder(order: OrderWithRelations) {
           orderId: order.payment.orderId,
           method: order.payment.method,
           amount: formatMoney(order.payment.amount),
+          cashReceived: order.payment.cashReceived ? formatMoney(order.payment.cashReceived) : null,
+          changeAmount: order.payment.changeAmount ? formatMoney(order.payment.changeAmount) : null,
           status: order.payment.status,
           paidAt: order.payment.paidAt,
           createdAt: order.payment.createdAt,
@@ -813,6 +824,32 @@ router.patch(
         : manualDiscountAmount;
 
       const finalAmount = Math.max(orderSubtotal - finalDiscountAmount, 0);
+      const cashReceived =
+        checkoutData.paymentMethod === PAYMENT_METHOD.CASH
+          ? Number(checkoutData.cashReceived || 0)
+          : null;
+      const changeAmount =
+        checkoutData.paymentMethod === PAYMENT_METHOD.CASH
+          ? Math.max(cashReceived - finalAmount, 0)
+          : null;
+
+      if (checkoutData.paymentMethod === PAYMENT_METHOD.CASH && cashReceived < finalAmount) {
+        throw new AppError("Tiền khách đưa chưa đủ để thanh toán", 400);
+      }
+
+      const activeShift = await tx.shift.findFirst({
+        where: {
+          userId,
+          status: "OPEN",
+        },
+        orderBy: {
+          openedAt: "desc",
+        },
+      });
+
+      if (authReq.user?.role === USER_ROLES.CASHIER && !activeShift) {
+        throw new AppError("Vui lòng mở ca trước khi thanh toán", 400);
+      }
 
       const productIds = order.orderDetails.map((detail) => detail.productId);
 
@@ -881,6 +918,8 @@ router.patch(
           orderId: order.id,
           method: checkoutData.paymentMethod,
           amount: finalAmount,
+          cashReceived,
+          changeAmount,
           status: PAYMENT_STATUS.PAID,
           paidAt: new Date(),
         },
@@ -940,6 +979,7 @@ router.patch(
         },
         data: {
           totalAmount: finalAmount,
+          shiftId: activeShift?.id || null,
           status: ORDER_STATUS.COMPLETED,
         },
       });

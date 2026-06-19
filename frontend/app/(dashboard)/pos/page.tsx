@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Minus, Plus, Search, ShoppingCart, Trash2, UserPlus, XCircle } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { useLanguage } from "@/contexts/language-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
 import { PageHeader } from "@/components/shared/page-header";
+import { PrintableInvoice } from "@/components/shared/printable-invoice";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,9 +21,9 @@ import { getApiErrorMessage } from "@/lib/api";
 import { REAL_PRODUCT_FALLBACK_IMAGE } from "@/lib/demo-products";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { categoryService, customerService, orderService, productService } from "@/services/homex.service";
+import { categoryService, customerService, orderService, productService, settingService, shiftService } from "@/services/homex.service";
 import { promotionService } from "@/services/promotion.service";
-import type { Category, Customer, Order, PaymentMethod, Product } from "@/types/domain";
+import type { Category, Customer, Order, PaymentMethod, Product, Setting, Shift } from "@/types/domain";
 
 type CartItem = {
   product: Product;
@@ -50,18 +53,50 @@ function getPaymentMethodLabel(method: PaymentMethod) {
   return labels[method];
 }
 
+function getDigits(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function formatMoneyInput(value: string) {
+  const digits = getDigits(value);
+  if (!digits) return "";
+  return new Intl.NumberFormat("vi-VN").format(Number(digits));
+}
+
+function getMoneyInputAmount(value: string) {
+  const digits = getDigits(value);
+  return digits ? Number(digits) : 0;
+}
+
+function buildVietQrDemoValue(setting: Setting | null, amount: number, content: string) {
+  return [
+    `bank=${setting?.bankName || "BANK"}`,
+    `account=${setting?.bankAccountNumber || "0000000000"}`,
+    `name=${setting?.bankAccountName || "HOMEX POS"}`,
+    `amount=${Math.round(amount)}`,
+    `content=${content}`,
+  ].join("|");
+}
+
 export default function PosPage() {
   const router = useRouter();
+  const user = useCurrentUser();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [draftOrder, setDraftOrder] = useState<Order | null>(null);
+  const [lastCompletedOrder, setLastCompletedOrder] = useState<Order | null>(null);
+  const [setting, setSetting] = useState<Setting | null>(null);
+  const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  const [cashReceivedInput, setCashReceivedInput] = useState("");
+  const [openingCashInput, setOpeningCashInput] = useState("");
+  const [closingCashInput, setClosingCashInput] = useState("");
   const [discountInput, setDiscountInput] = useState("");
   const [discountMessage, setDiscountMessage] = useState("");
   const [appliedDiscountAmount, setAppliedDiscountAmount] = useState(0);
@@ -76,9 +111,12 @@ export default function PosPage() {
   const [quickCustomerAddress, setQuickCustomerAddress] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [isOnline, setIsOnline] = useState(true);
   const { t } = useLanguage();
   const cartScrollRef = useRef<HTMLDivElement | null>(null);
   const previousCartLengthRef = useRef(0);
+  const barcodeBufferRef = useRef("");
+  const barcodeTimerRef = useRef<number | null>(null);
 
   const subtotal = useMemo(() => {
     return cart.reduce((total, item) => total + item.product.salePrice * item.quantity, 0);
@@ -86,6 +124,16 @@ export default function PosPage() {
 
   const discountAmount = Math.min(Math.max(appliedDiscountAmount, 0), subtotal);
   const totalPayable = Math.max(subtotal - discountAmount, 0);
+  const cashReceivedAmount = getMoneyInputAmount(cashReceivedInput);
+  const changeAmount = paymentMethod === "CASH" ? Math.max(cashReceivedAmount - totalPayable, 0) : 0;
+  const requiresShift = user?.role === "CASHIER";
+  const isCashPaymentInvalid = paymentMethod === "CASH" && cashReceivedAmount < totalPayable;
+  const isCheckoutDisabled = isSubmitting || cart.length === 0 || !isOnline || isCashPaymentInvalid || (requiresShift && !currentShift);
+  const transferQrValue = buildVietQrDemoValue(setting, totalPayable, draftOrder?.orderCode || "HOMEX POS");
+  const lastInvoicePublicUrl =
+    lastCompletedOrder && typeof window !== "undefined"
+      ? `${window.location.origin}/invoice/${lastCompletedOrder.orderCode}`
+      : "";
 
   async function loadCategories() {
     try {
@@ -127,6 +175,24 @@ export default function PosPage() {
     }
   }
 
+  async function loadSetting() {
+    try {
+      const data = await settingService.get();
+      setSetting(data);
+    } catch {
+      setSetting(null);
+    }
+  }
+
+  async function loadCurrentShift() {
+    try {
+      const data = await shiftService.current();
+      setCurrentShift(data);
+    } catch {
+      setCurrentShift(null);
+    }
+  }
+
   function resetPosState() {
     window.localStorage.removeItem(POS_RESUME_DRAFT_ORDER_ID_KEY);
     setCart([]);
@@ -134,6 +200,7 @@ export default function PosPage() {
     setCustomerId("");
     setCustomerSearch("");
     setPaymentMethod("CASH");
+    setCashReceivedInput("");
     setDiscountInput("");
     setDiscountMessage("");
     setAppliedDiscountAmount(0);
@@ -174,6 +241,7 @@ export default function PosPage() {
               supplierId: 0,
               costPrice: detail.unitPrice,
               salePrice: detail.unitPrice,
+              originalPrice: null,
               stockQuantity: Math.max(detail.quantity, 999),
               minStock: 0,
               warrantyMonths: detail.product?.warrantyMonths || 0,
@@ -204,7 +272,24 @@ export default function PosPage() {
     loadCategories();
     loadProducts();
     searchCustomers();
+    loadSetting();
+    loadCurrentShift();
     restoreDraftOrderFromStorage();
+  }, []);
+
+  useEffect(() => {
+    function updateOnlineStatus() {
+      setIsOnline(window.navigator.onLine);
+    }
+
+    updateOnlineStatus();
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+    };
   }, []);
 
   useEffect(() => {
@@ -239,6 +324,50 @@ export default function PosPage() {
     previousCartLengthRef.current = cart.length;
   }, [cart.length]);
 
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase();
+
+      if (tagName === "input" || tagName === "textarea" || tagName === "select" || target?.isContentEditable) {
+        return;
+      }
+
+      if (barcodeTimerRef.current) {
+        window.clearTimeout(barcodeTimerRef.current);
+      }
+
+      if (event.key === "Enter") {
+        const barcode = barcodeBufferRef.current;
+        barcodeBufferRef.current = "";
+        handleBarcodeScan(barcode);
+        return;
+      }
+
+      if (event.key.length === 1) {
+        barcodeBufferRef.current += event.key;
+        barcodeTimerRef.current = window.setTimeout(() => {
+          barcodeBufferRef.current = "";
+        }, 120);
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      if (barcodeTimerRef.current) {
+        window.clearTimeout(barcodeTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (paymentMethod !== "CASH") {
+      setCashReceivedInput("");
+    }
+  }, [paymentMethod]);
+
   function addToCart(product: Product) {
     if (product.stockQuantity <= 0) return;
 
@@ -254,6 +383,24 @@ export default function PosPage() {
 
       return [...currentCart, { product, quantity: 1 }];
     });
+  }
+
+  async function handleBarcodeScan(code: string) {
+    const barcode = code.trim();
+    if (!barcode) return;
+
+    try {
+      setErrorMessage("");
+      const product = await productService.findByBarcode(barcode);
+      if (product.stockQuantity <= 0) {
+        setErrorMessage(t("pos.barcodeOutOfStock"));
+        return;
+      }
+      addToCart(product);
+      setSuccessMessage(t("pos.barcodeAdded", { sku: product.sku }));
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error) || t("pos.barcodeNotFound"));
+    }
   }
 
   function changeQuantity(productId: number, delta: number) {
@@ -311,6 +458,21 @@ export default function PosPage() {
       return;
     }
 
+    if (!isOnline) {
+      setErrorMessage(t("network.checkoutDisabled"));
+      return;
+    }
+
+    if (requiresShift && !currentShift) {
+      setErrorMessage(t("shifts.required"));
+      return;
+    }
+
+    if (paymentMethod === "CASH" && cashReceivedAmount < totalPayable) {
+      setErrorMessage(t("pos.cashNotEnough"));
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setErrorMessage("");
@@ -320,11 +482,13 @@ export default function PosPage() {
         ? await orderService.updateDraft(draftOrder.id, buildOrderBody())
         : await orderService.createDraft(buildOrderBody());
 
-      await orderService.checkout(orderToCheckout.id, {
+      const completedOrder = await orderService.checkout(orderToCheckout.id, {
         paymentMethod,
+        cashReceived: paymentMethod === "CASH" ? cashReceivedAmount : undefined,
         promotionCode: appliedPromotionCode || undefined,
         discountAmount: discountAmount > 0 ? discountAmount : undefined,
       });
+      setLastCompletedOrder(completedOrder);
       resetPosState();
       setSuccessMessage(t("toast.pos.checkoutSuccess"));
       router.refresh();
@@ -352,6 +516,36 @@ export default function PosPage() {
       setErrorMessage(getApiErrorMessage(error));
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function openShift() {
+    try {
+      const openingCash = getMoneyInputAmount(openingCashInput);
+      setErrorMessage("");
+      setSuccessMessage("");
+      const shift = await shiftService.open({ openingCash });
+      setCurrentShift(shift);
+      setOpeningCashInput("");
+      setSuccessMessage(t("shifts.opened"));
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
+    }
+  }
+
+  async function closeShift() {
+    if (!currentShift) return;
+
+    try {
+      const closingCash = getMoneyInputAmount(closingCashInput);
+      setErrorMessage("");
+      setSuccessMessage("");
+      const shift = await shiftService.close(currentShift.id, { closingCash });
+      setCurrentShift(null);
+      setClosingCashInput("");
+      setSuccessMessage(t("shifts.closed", { amount: formatCurrency(shift.discrepancyAmount || 0) }));
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
     }
   }
 
@@ -465,12 +659,59 @@ export default function PosPage() {
 
   return (
     <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
-      <div className="flex h-[calc(100vh-80px)] max-h-[calc(100vh-80px)] min-h-0 flex-col overflow-hidden">
+      <div className="flex h-[calc(100vh-80px)] max-h-[calc(100vh-80px)] min-h-0 flex-col overflow-hidden print:hidden">
+        <input
+          className="sr-only"
+          autoFocus
+          aria-label={t("pos.barcodeInput")}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              handleBarcodeScan(event.currentTarget.value);
+              event.currentTarget.value = "";
+            }
+          }}
+        />
         {/* Header cố định trong vùng POS */}
         <div className="shrink-0 space-y-2 pb-3">
           <PageHeader title={t("pos.title")} description={t("pos.description")} />
           <ErrorState message={errorMessage} />
           {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+          {!isOnline ? <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{t("network.checkoutDisabled")}</div> : null}
+          <div className="grid gap-2 rounded-lg border bg-card p-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <div className="font-medium">{currentShift ? t("shifts.currentOpen") : t("shifts.noOpen")}</div>
+              <div className="text-muted-foreground">
+                {currentShift ? `${t("shifts.openingCash")}: ${formatCurrency(currentShift.openingCash)}` : t("shifts.required")}
+              </div>
+            </div>
+            {currentShift ? (
+              <div className="grid gap-2 sm:grid-cols-[180px_auto]">
+                <Input
+                  inputMode="numeric"
+                  placeholder={t("shifts.closingCash")}
+                  value={closingCashInput}
+                  onChange={(event) => setClosingCashInput(formatMoneyInput(event.target.value))}
+                />
+                <Button type="button" variant="outline" onClick={closeShift}>{t("shifts.close")}</Button>
+              </div>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-[180px_auto]">
+                <Input
+                  inputMode="numeric"
+                  placeholder={t("shifts.openingCash")}
+                  value={openingCashInput}
+                  onChange={(event) => setOpeningCashInput(formatMoneyInput(event.target.value))}
+                />
+                <Button type="button" onClick={openShift}>{t("shifts.open")}</Button>
+              </div>
+            )}
+          </div>
+          {lastCompletedOrder ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3 text-sm">
+              <span>{t("invoice.lastReady", { code: lastCompletedOrder.orderCode })}</span>
+              <Button type="button" variant="outline" onClick={() => window.print()}>{t("orders.printInvoice")}</Button>
+            </div>
+          ) : null}
         </div>
 
         {/* Main POS workspace: chỉ phần này chiếm phần còn lại của màn hình */}
@@ -539,7 +780,12 @@ export default function PosPage() {
                       </CardHeader>
                       <CardContent className="space-y-3">
                         <div className="flex items-center justify-between gap-3 text-sm">
-                          <span className="font-semibold text-primary">{formatCurrency(product.salePrice)}</span>
+                          <span className="font-semibold text-primary">
+                            {product.originalPrice && product.originalPrice > product.salePrice ? (
+                              <span className="mr-2 text-xs font-normal text-muted-foreground line-through">{formatCurrency(product.originalPrice)}</span>
+                            ) : null}
+                            {formatCurrency(product.salePrice)}
+                          </span>
                           <span className={cn(isLowStock ? "font-bold text-destructive" : "text-muted-foreground")}>
                             {t("products.stock")}: {product.stockQuantity}
                           </span>
@@ -726,6 +972,39 @@ export default function PosPage() {
                   </Select>
                 </div>
 
+                {paymentMethod === "CASH" ? (
+                  <div className="mt-1.5 grid gap-2 rounded-lg border bg-muted/30 p-2 text-sm">
+                    <div className="space-y-1">
+                      <Label>{t("pos.cashReceived")}</Label>
+                      <Input
+                        inputMode="numeric"
+                        value={cashReceivedInput}
+                        onChange={(event) => setCashReceivedInput(formatMoneyInput(event.target.value))}
+                        placeholder={t("pos.cashReceivedPlaceholder")}
+                        disabled={cart.length === 0 || isSubmitting}
+                      />
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">{t("pos.changeAmount")}</span>
+                      <span className={cn("font-semibold", isCashPaymentInvalid ? "text-destructive" : "text-green-700")}>{formatCurrency(changeAmount)}</span>
+                    </div>
+                    {isCashPaymentInvalid ? <p className="text-xs text-destructive">{t("pos.cashNotEnough")}</p> : null}
+                  </div>
+                ) : null}
+
+                {paymentMethod === "TRANSFER" ? (
+                  <div className="mt-1.5 grid gap-2 rounded-lg border bg-muted/30 p-3 text-center text-xs">
+                    <div className="mx-auto rounded-lg bg-white p-2">
+                      <QRCodeSVG value={transferQrValue} size={120} />
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className="font-medium">{setting?.bankName || t("settings.bankName")}</p>
+                      <p>{setting?.bankAccountNumber || "-"}</p>
+                      <p>{t("orders.total")}: {formatCurrency(totalPayable)}</p>
+                    </div>
+                  </div>
+                ) : null}
+
                 {draftOrder ? (
                   <div className="mt-1.5 truncate rounded-lg bg-muted px-2.5 py-1.5 text-xs sm:text-sm">
                     {t("pos.processingDraft")}: <span className="font-semibold">{draftOrder.orderCode}</span>
@@ -750,7 +1029,7 @@ export default function PosPage() {
                     </Button>
                   )}
 
-                  <Button type="button" disabled={isSubmitting || cart.length === 0} onClick={checkout}>
+                  <Button type="button" disabled={isCheckoutDisabled} onClick={checkout}>
                     {t("pos.checkout")}
                   </Button>
                 </div>
@@ -816,6 +1095,14 @@ export default function PosPage() {
           </DialogContent>
         </Dialog>
       </div>
+      {lastCompletedOrder ? (
+        <PrintableInvoice
+          order={lastCompletedOrder}
+          setting={setting}
+          publicUrl={lastInvoicePublicUrl}
+          className="hidden print:block"
+        />
+      ) : null}
     </RoleGuard>
   );
 }

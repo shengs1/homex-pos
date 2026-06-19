@@ -8,14 +8,21 @@ import type {
   Order,
   Payment,
   Product,
+  PublicInvoice,
+  PurchaseOrder,
+  ReturnOrder,
   ReportSummary,
   RevenueReportItem,
+  Setting,
+  Shift,
   StockTransaction,
   Supplier,
   TopCustomerReportItem,
   TopProductReportItem,
   UserAccount,
+  VatInvoiceRequest,
   Warranty,
+  NotificationItem,
 } from "@/types/domain";
 
 export type ListParams = Record<string, string | number | boolean | undefined | null>;
@@ -127,6 +134,7 @@ export type ProductPayload = {
   supplierId: number;
   costPrice: number;
   salePrice: number;
+  originalPrice?: number | null;
   stockQuantity?: number;
   minStock?: number;
   warrantyMonths?: number;
@@ -137,6 +145,7 @@ export type ProductPayload = {
 export const productService = {
   list: (params?: ListParams) => getPaginatedDataByIdAsc<Product>("/products", params),
   detail: (id: number) => getData<Product>(`/products/${id}`),
+  findByBarcode: (code: string) => getData<Product>(`/products/barcode/${encodeURIComponent(code)}`),
   create: (body: ProductPayload) => postData<Product>("/products", body),
   update: (id: number, body: ProductPayload) => putData<Product>(`/products/${id}`, body),
   remove: (id: number) => deleteData<Product>(`/products/${id}`),
@@ -172,6 +181,7 @@ export type DraftOrderPayload = {
 
 export type CheckoutOrderPayload = {
   paymentMethod: string;
+  cashReceived?: number;
   discountAmount?: number;
   promotionCode?: string;
 };
@@ -183,6 +193,57 @@ export const orderService = {
   updateDraft: (id: number, body: DraftOrderPayload) => putData<Order>(`/orders/${id}/draft`, body),
   checkout: (id: number, body: CheckoutOrderPayload) => patchData<Order>(`/orders/${id}/checkout`, body),
   cancel: (id: number) => patchData<Order>(`/orders/${id}/cancel`),
+};
+
+export type SettingPayload = Omit<Setting, "id" | "createdAt" | "updatedAt">;
+
+export const settingService = {
+  get: () => getData<Setting>("/settings"),
+  update: (body: SettingPayload) => putData<Setting>("/settings", body),
+};
+
+export const publicInvoiceService = {
+  detail: (orderCode: string) => getData<PublicInvoice>(`/invoices/public/${encodeURIComponent(orderCode)}`),
+  requestVat: (
+    orderCode: string,
+    body: {
+      companyName: string;
+      taxCode: string;
+      companyAddress: string;
+      buyerEmail?: string;
+      note?: string;
+    }
+  ) => postData<VatInvoiceRequest>(`/invoices/public/${encodeURIComponent(orderCode)}/vat-request`, body),
+};
+
+export const vatInvoiceService = {
+  list: (params?: ListParams) => getPaginatedDataByIdAsc<VatInvoiceRequest>("/vat-invoices", params),
+  approve: (id: number, body: { redInvoiceCode: string; adminNote?: string }) => patchData<VatInvoiceRequest>(`/vat-invoices/${id}/approve`, body),
+  reject: (id: number, body: { adminNote?: string }) => patchData<VatInvoiceRequest>(`/vat-invoices/${id}/reject`, body),
+};
+
+export const shiftService = {
+  current: () => getData<Shift | null>("/shifts/current"),
+  list: (params?: ListParams) => getPaginatedDataByIdAsc<Shift>("/shifts", params),
+  open: (body: { openingCash: number; note?: string }) => postData<Shift>("/shifts/open", body),
+  close: (id: number, body: { closingCash: number; note?: string }) => patchData<Shift>(`/shifts/${id}/close`, body),
+};
+
+export const purchaseOrderService = {
+  list: (params?: ListParams) => getPaginatedDataByIdAsc<PurchaseOrder>("/purchase-orders", params),
+  create: (body: { supplierId: number; note?: string; items: { productId: number; quantity: number; unitCost: number }[] }) =>
+    postData<PurchaseOrder>("/purchase-orders", body),
+};
+
+export const returnOrderService = {
+  list: (params?: ListParams) => getPaginatedDataByIdAsc<ReturnOrder>("/return-orders", params),
+  create: (body: { orderId: number; reason?: string; items: { orderDetailId: number; quantity: number }[] }) => postData<ReturnOrder>("/return-orders", body),
+};
+
+export const notificationService = {
+  list: (params?: ListParams) => getData<{ items: NotificationItem[]; unreadCount: number; pagination: PaginatedData<NotificationItem>["pagination"] }>("/notifications", params),
+  markRead: (id: number) => patchData<NotificationItem>(`/notifications/${id}/read`),
+  markAllRead: () => patchData<{ count: number }>("/notifications/read-all"),
 };
 
 export const warrantyService = {
