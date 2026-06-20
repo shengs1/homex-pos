@@ -22,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/contexts/language-context";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import { getApiErrorMessage } from "@/lib/api";
 import { buildDemoProductPayloads, parseProductImportFileContent, resolveRealProductImageFromProductName, REAL_PRODUCT_FALLBACK_IMAGE } from "@/lib/demo-products";
 import { formatCurrency, formatDateTime } from "@/lib/format";
@@ -44,6 +45,7 @@ const formSchema = z.object({
   warrantyMonths: z.coerce.number().int().min(0).optional(),
   qrCode: z.string().trim().optional(),
   imageUrl: z.string().trim().optional(),
+  status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
 });
 
 type FormInput = z.input<typeof formSchema>;
@@ -72,6 +74,7 @@ const emptyForm: FormValues = {
   warrantyMonths: 0,
   qrCode: "",
   imageUrl: "",
+  status: "ACTIVE",
 };
 
 const jsonStructureExample = `[
@@ -127,6 +130,8 @@ const columnHelper = createColumnHelper<Product>();
 
 export default function ProductsPage() {
   const { t } = useLanguage();
+  const user = useCurrentUser();
+  const isAdmin = user?.role === "ADMIN";
   const importFileRef = useRef<HTMLInputElement | null>(null);
   const productImageFileRef = useRef<HTMLInputElement | null>(null);
   const [items, setItems] = useState<Product[]>([]);
@@ -246,6 +251,7 @@ export default function ProductsPage() {
       warrantyMonths: item.warrantyMonths,
       qrCode: item.qrCode || item.sku,
       imageUrl: item.imageUrl || "",
+      status: item.status as "ACTIVE" | "INACTIVE",
     });
     setIsFormOpen(true);
     window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
@@ -592,158 +598,185 @@ export default function ProductsPage() {
     printWindow.document.close();
   }
 
-  const columns = useMemo<any[]>(() => [
-    columnHelper.display({
-      id: "select",
-      size: 42,
-      header: ({ table }) => (
-        <div className="flex justify-center">
-          <input
-            type="checkbox"
-            checked={table.getIsAllPageRowsSelected()}
-            ref={(element) => {
-              if (element) element.indeterminate = table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected();
-            }}
-            onChange={table.getToggleAllPageRowsSelectedHandler()}
-            aria-label={t("products.selectAll")}
-          />
-        </div>
-      ),
-      cell: ({ row }) => (
-        <div className="flex justify-center">
-          <input
-            type="checkbox"
-            checked={row.getIsSelected()}
-            disabled={!row.getCanSelect()}
-            onChange={row.getToggleSelectedHandler()}
-            aria-label={t("products.selectProduct", { sku: row.original.sku })}
-          />
-        </div>
-      ),
-      meta: { headerClassName: "px-2 text-center", cellClassName: "px-2 text-center" },
-    }),
-    columnHelper.accessor("sku", {
-      id: "sku",
-      size: 108,
-      header: t("products.sku"),
-      cell: ({ getValue }) => <div className="break-words whitespace-normal line-clamp-2 font-medium" title={getValue()}>{getValue()}</div>,
-      meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
-    }),
-    columnHelper.display({
-      id: "image",
-      size: 60,
-      header: t("common.image"),
-      cell: ({ row }) => (
-        <div className="mx-auto h-11 w-11 overflow-hidden rounded-lg border bg-muted">
-          <img
-            src={row.original.imageUrl || REAL_PRODUCT_FALLBACK_IMAGE}
-            alt={row.original.name}
-            className="h-full w-full object-cover"
-            onError={(event) => handleProductImageError(event, row.original.name)}
-          />
-        </div>
-      ),
-      meta: { headerClassName: "px-2 text-center whitespace-nowrap", cellClassName: "px-2" },
-    }),
-    columnHelper.display({
-      id: "qr",
-      size: 62,
-      header: t("products.qrCode"),
-      cell: ({ row }) => {
-        const qrValue = row.original.qrCode || row.original.sku;
-        return (
-          <div className="text-center">
-            <button type="button" className="inline-flex rounded-md border bg-white p-1 transition hover:scale-105" title={t("products.openQr")} onClick={() => setSelectedQrProduct(row.original)}>
-              <QRCodeSVG value={qrValue} size={36} />
-            </button>
+  const columns = useMemo<any[]>(() => {
+    const cols = [
+      columnHelper.display({
+        id: "select",
+        size: 42,
+        header: ({ table }) => (
+          <div className="flex justify-center">
+            <input
+              type="checkbox"
+              checked={table.getIsAllPageRowsSelected()}
+              ref={(element) => {
+                if (element) element.indeterminate = table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected();
+              }}
+              onChange={table.getToggleAllPageRowsSelectedHandler()}
+              aria-label={t("products.selectAll")}
+              disabled={!isAdmin}
+            />
           </div>
-        );
-      },
-      meta: { headerClassName: "px-2 text-center whitespace-nowrap", cellClassName: "px-2 text-center" },
-    }),
-    columnHelper.display({
-      id: "product",
-      size: 230,
-      header: t("products.product"),
-      cell: ({ row }) => (
-        <div className="min-w-0">
-          <div className="line-clamp-2 font-medium" title={row.original.name}>{row.original.name}</div>
-          <div className="break-words whitespace-normal line-clamp-2 text-xs text-muted-foreground">{t("products.updatedAt", { date: formatDateTime(row.original.updatedAt) })}</div>
-        </div>
-      ),
-      meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
-    }),
-    columnHelper.display({
-      id: "category",
-      size: 112,
-      header: t("products.category"),
-      cell: ({ row }) => <div className="break-words whitespace-normal line-clamp-2" title={row.original.category?.name || String(row.original.categoryId)}>{row.original.category?.name || row.original.categoryId}</div>,
-      meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
-    }),
-    columnHelper.display({
-      id: "supplier",
-      size: 112,
-      header: t("products.supplierShort"),
-      cell: ({ row }) => <div className="break-words whitespace-normal line-clamp-2" title={row.original.supplier?.name || String(row.original.supplierId)}>{row.original.supplier?.name || row.original.supplierId}</div>,
-      meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
-    }),
-    columnHelper.accessor("salePrice", {
-      id: "salePrice",
-      size: 105,
-      header: t("products.salePrice"),
-      cell: ({ row, getValue }) => {
-        const salePrice = Number(getValue());
-        const originalPrice = Number(row.original.originalPrice || 0);
+        ),
+        cell: ({ row }) => (
+          <div className="flex justify-center">
+            <input
+              type="checkbox"
+              checked={row.getIsSelected()}
+              disabled={!row.getCanSelect() || !isAdmin}
+              onChange={row.getToggleSelectedHandler()}
+              aria-label={t("products.selectProduct", { sku: row.original.sku })}
+            />
+          </div>
+        ),
+        meta: { headerClassName: "px-2 text-center", cellClassName: "px-2 text-center" },
+      }),
+      columnHelper.accessor("sku", {
+        id: "sku",
+        size: 108,
+        header: t("products.sku"),
+        cell: ({ getValue }) => <div className="break-words whitespace-normal line-clamp-2 font-medium" title={getValue()}>{getValue()}</div>,
+        meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
+      }),
+      columnHelper.display({
+        id: "image",
+        size: 60,
+        header: t("common.image"),
+        cell: ({ row }) => (
+          <div className="mx-auto h-11 w-11 overflow-hidden rounded-lg border bg-muted">
+            <img
+              src={row.original.imageUrl || REAL_PRODUCT_FALLBACK_IMAGE}
+              alt={row.original.name}
+              className="h-full w-full object-cover"
+              onError={(event) => handleProductImageError(event, row.original.name)}
+            />
+          </div>
+        ),
+        meta: { headerClassName: "px-2 text-center whitespace-nowrap", cellClassName: "px-2" },
+      }),
+      columnHelper.display({
+        id: "qr",
+        size: 62,
+        header: t("products.qrCode"),
+        cell: ({ row }) => {
+          const qrValue = row.original.qrCode || row.original.sku;
+          return (
+            <div className="text-center">
+              <button type="button" className="inline-flex rounded-md border bg-white p-1 transition hover:scale-105" title={t("products.openQr")} onClick={() => setSelectedQrProduct(row.original)}>
+                <QRCodeSVG value={qrValue} size={36} />
+              </button>
+            </div>
+          );
+        },
+        meta: { headerClassName: "px-2 text-center whitespace-nowrap", cellClassName: "px-2 text-center" },
+      }),
+      columnHelper.display({
+        id: "product",
+        size: 230,
+        header: t("products.product"),
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <div className="line-clamp-2 font-medium" title={row.original.name}>{row.original.name}</div>
+            <div className="break-words whitespace-normal line-clamp-2 text-xs text-muted-foreground">{t("products.updatedAt", { date: formatDateTime(row.original.updatedAt) })}</div>
+          </div>
+        ),
+        meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
+      }),
+      columnHelper.display({
+        id: "category",
+        size: 112,
+        header: t("products.category"),
+        cell: ({ row }) => <div className="break-words whitespace-normal line-clamp-2" title={row.original.category?.name || String(row.original.categoryId)}>{row.original.category?.name || row.original.categoryId}</div>,
+        meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
+      }),
+      columnHelper.display({
+        id: "supplier",
+        size: 112,
+        header: t("products.supplierShort"),
+        cell: ({ row }) => <div className="break-words whitespace-normal line-clamp-2" title={row.original.supplier?.name || String(row.original.supplierId)}>{row.original.supplier?.name || row.original.supplierId}</div>,
+        meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
+      }),
+      columnHelper.accessor("salePrice", {
+        id: "salePrice",
+        size: 105,
+        header: t("products.salePrice"),
+        cell: ({ row, getValue }) => {
+          const salePrice = Number(getValue());
+          const originalPrice = Number(row.original.originalPrice || 0);
+          return (
+            <div className="break-words whitespace-normal line-clamp-2" title={formatCurrency(salePrice)}>
+              {originalPrice > salePrice ? <div className="text-xs text-muted-foreground line-through">{formatCurrency(originalPrice)}</div> : null}
+              <div className="font-medium text-emerald-600">{formatCurrency(salePrice)}</div>
+            </div>
+          );
+        },
+        meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
+      }),
+    ];
 
-        return (
-          <div className="break-words whitespace-normal line-clamp-2" title={formatCurrency(salePrice)}>
-            {originalPrice > salePrice ? <div className="text-xs text-muted-foreground line-through">{formatCurrency(originalPrice)}</div> : null}
-            <div className="font-medium">{formatCurrency(salePrice)}</div>
-          </div>
-        );
-      },
-      meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
-    }),
-    columnHelper.display({
-      id: "stock",
-      size: 78,
-      header: t("products.stock"),
-      cell: ({ row }) => {
-        const isLowStock = row.original.stockQuantity <= row.original.minStock;
-        return (
-          <div>
-            <span className={cn("font-semibold", isLowStock ? "text-destructive" : "text-foreground")}>{row.original.stockQuantity}/{row.original.minStock}</span>
-            {isLowStock ? <Badge variant="destructive" className="mt-1 block w-fit text-[10px]">{t("products.lowShort")}</Badge> : null}
-          </div>
-        );
-      },
-      meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
-    }),
-    columnHelper.accessor("status", {
-      id: "status",
-      size: 92,
-      header: t("common.status"),
-      cell: ({ getValue }) => <StatusBadge status={getValue()} />,
-      meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
-    }),
-    columnHelper.display({
-      id: "actions",
-      size: 108,
-      header: () => <span className="whitespace-nowrap">{t("common.actions")}</span>,
-      cell: ({ row }) => (
-        <ProductActionMenu
-          label={t("common.actions")}
-          items={[
-            { label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(row.original) },
-            row.original.status === "ACTIVE"
-              ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(row.original), variant: "destructive" }
-              : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(row.original) },
-          ]}
-        />
-      ),
-      meta: { headerClassName: "min-w-[100px] whitespace-nowrap px-3 text-right", cellClassName: "min-w-[100px] px-3 pr-4 text-right" },
-    }),
-  ], [t, rowSelection]);
+    if (isAdmin) {
+      cols.push(
+        columnHelper.accessor("costPrice", {
+          id: "costPrice",
+          size: 105,
+          header: t("products.costPrice"),
+          cell: ({ getValue }) => <div className="font-medium text-amber-600" title={formatCurrency(Number(getValue()))}>{formatCurrency(Number(getValue()))}</div>,
+          meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
+        })
+      );
+    }
+
+    cols.push(
+      columnHelper.display({
+        id: "stock",
+        size: 120,
+        header: t("products.stock"),
+        cell: ({ row }) => {
+          const isLowStock = row.original.stockQuantity <= row.original.minStock;
+          return (
+            <div className="text-sm">
+              <span className={cn("font-semibold", isLowStock ? "text-destructive" : "text-foreground")} title={`${row.original.stockQuantity} ${t("products.currentStock")} / ${row.original.minStock} ${t("products.minStock")}`}>
+                {row.original.stockQuantity} <span className="text-xs text-muted-foreground font-normal">{t("products.currentStock")}</span>
+              </span>
+              <div className="text-xs text-muted-foreground">/ {row.original.minStock} {t("products.minStock")}</div>
+              {isLowStock ? <Badge variant="destructive" className="mt-1 block w-fit text-[10px] px-1 py-0">{t("products.lowShort")}</Badge> : null}
+            </div>
+          );
+        },
+        meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
+      }),
+      columnHelper.accessor("status", {
+        id: "status",
+        size: 92,
+        header: t("common.status"),
+        cell: ({ getValue }) => <StatusBadge status={getValue()} />,
+        meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
+      })
+    );
+
+    if (isAdmin) {
+      cols.push(
+        columnHelper.display({
+          id: "actions",
+          size: 108,
+          header: () => <span className="whitespace-nowrap">{t("common.actions")}</span>,
+          cell: ({ row }) => (
+            <ProductActionMenu
+              label={t("common.actions")}
+              items={[
+                { label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(row.original) },
+                row.original.status === "ACTIVE"
+                  ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(row.original), variant: "destructive" }
+                  : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(row.original) },
+              ]}
+            />
+          ),
+          meta: { headerClassName: "min-w-[100px] whitespace-nowrap px-3 text-right", cellClassName: "min-w-[100px] px-3 pr-4 text-right" },
+        })
+      );
+    }
+
+    return cols;
+  }, [t, rowSelection, isAdmin]);
 
   const table = useReactTable({
     data: items,
@@ -758,15 +791,54 @@ export default function ProductsPage() {
   return (
     <div className="w-full min-w-0 space-y-6 overflow-visible">
       <PageHeader title={t("products.title")} description={t("products.description")}>
-        <Button type="button" onClick={openCreateForm}>
-          <Plus className="h-4 w-4" />
-          {t("common.addNew")}
-        </Button>
+        {isAdmin ? (
+          <Button type="button" onClick={openCreateForm}>
+            <Plus className="h-4 w-4" />
+            {t("common.addNew")}
+          </Button>
+        ) : null}
       </PageHeader>
+
+      {!isAdmin ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 shadow-sm">
+          <div className="flex items-center gap-2 font-semibold">
+            <LockKeyhole className="h-4 w-4" />
+            Chế độ Chỉ xem (CASHIER)
+          </div>
+          <p className="mt-1">Tài khoản của bạn chỉ được phép xem danh sách và tồn kho. Không được xem giá nhập hoặc thao tác thay đổi dữ liệu.</p>
+        </div>
+      ) : null}
 
       <ErrorState message={errorMessage} />
       {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
       {toastMessage ? <div className="fixed right-5 top-5 z-[60] rounded-lg border bg-card px-4 py-3 text-sm font-medium shadow-xl">{toastMessage}</div> : null}
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm font-medium text-muted-foreground">Tổng sản phẩm (trang này)</div>
+            <div className="mt-1 text-2xl font-bold">{items.length} {pagination && pagination.totalItems > items.length ? <span className="text-sm text-muted-foreground font-normal">/ {pagination.totalItems} tổng</span> : null}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm font-medium text-muted-foreground">Đang hoạt động</div>
+            <div className="mt-1 text-2xl font-bold text-emerald-600">{items.filter(i => i.status === 'ACTIVE').length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm font-medium text-muted-foreground">Ngừng hoạt động</div>
+            <div className="mt-1 text-2xl font-bold text-amber-600">{items.filter(i => i.status === 'INACTIVE').length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="text-sm font-medium text-muted-foreground">Tồn thấp</div>
+            <div className="mt-1 text-2xl font-bold text-destructive">{items.filter(i => i.stockQuantity <= i.minStock).length}</div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Filter toolbar and grouped product actions */}
       <Card className="w-full min-w-0">
@@ -793,36 +865,38 @@ export default function ProductsPage() {
             <Button type="submit" className="h-10 w-full lg:w-auto">{t("common.search")}</Button>
           </form>
 
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex w-full flex-wrap items-center gap-2">
-              <input ref={importFileRef} type="file" accept=".json,.csv,application/json,text/csv" className="hidden" onChange={handleFileImport} />
-              <Button variant="outline" size="sm" className="h-10" onClick={() => setIsImportGuideOpen(true)} disabled={isBulkLoading}>
-                <FileUp className="h-4 w-4" />
-                {t("products.importFile")}
-              </Button>
-              <Button variant="outline" size="sm" className="h-10" onClick={handleBulkDemoImport} disabled={isBulkLoading}>
-                <Database className="h-4 w-4" />
-                {isBulkLoading ? t("products.bulkRunning") : t("products.bulkAdd")}
-              </Button>
-              <Button variant="outline" size="sm" className="h-10" onClick={handleRestoreLastDeletedBatch} disabled={isBulkLoading}>
-                <RotateCcw className="h-4 w-4" />
-                {lastDeletedProductIds.length > 0 ? `Khôi phục sản phẩm (${lastDeletedProductIds.length})` : "Khôi phục sản phẩm"}
-              </Button>
-              <Button variant="destructive" size="sm" className="h-10" onClick={() => setIsDeleteAllDialogOpen(true)} disabled={isBulkLoading}>
-                <Trash2 className="h-4 w-4" />
-                {t("products.deleteAll")}
-              </Button>
-            </div>
-
-            {selectedCount > 0 ? (
-              <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
-                <Button type="button" variant="destructive" size="sm" onClick={handleBulkDelete} disabled={isBulkLoading}>
-                  <CheckSquare className="h-4 w-4" />
-                  {t("products.deleteSelected", { count: selectedCount })}
+          {isAdmin ? (
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex w-full flex-wrap items-center gap-2">
+                <input ref={importFileRef} type="file" accept=".json,.csv,application/json,text/csv" className="hidden" onChange={handleFileImport} />
+                <Button variant="outline" size="sm" className="h-10" onClick={() => setIsImportGuideOpen(true)} disabled={isBulkLoading}>
+                  <FileUp className="h-4 w-4" />
+                  {t("products.importFile")}
+                </Button>
+                <Button variant="outline" size="sm" className="h-10" onClick={handleBulkDemoImport} disabled={isBulkLoading}>
+                  <Database className="h-4 w-4" />
+                  {isBulkLoading ? t("products.bulkRunning") : t("products.bulkAdd")}
+                </Button>
+                <Button variant="outline" size="sm" className="h-10" onClick={handleRestoreLastDeletedBatch} disabled={isBulkLoading}>
+                  <RotateCcw className="h-4 w-4" />
+                  {lastDeletedProductIds.length > 0 ? `Khôi phục sản phẩm (${lastDeletedProductIds.length})` : "Khôi phục sản phẩm"}
+                </Button>
+                <Button variant="destructive" size="sm" className="h-10" onClick={() => setIsDeleteAllDialogOpen(true)} disabled={isBulkLoading}>
+                  <Trash2 className="h-4 w-4" />
+                  {t("products.deleteAll")}
                 </Button>
               </div>
-            ) : null}
-          </div>
+
+              {selectedCount > 0 ? (
+                <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
+                  <Button type="button" variant="destructive" size="sm" onClick={handleBulkDelete} disabled={isBulkLoading}>
+                    <CheckSquare className="h-4 w-4" />
+                    {t("products.deleteSelected", { count: selectedCount })}
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
@@ -878,6 +952,13 @@ export default function ProductsPage() {
               <div className="space-y-2"><Label>{t("products.minStock")}</Label><Input type="number" placeholder="5" {...form.register("minStock")} /></div>
               <div className="space-y-2"><Label>{t("products.warrantyMonths")}</Label><Input type="number" placeholder="12" {...form.register("warrantyMonths")} /></div>
               <div className="space-y-2"><Label>{t("products.qrCode")}</Label><Input {...form.register("qrCode")} placeholder={t("products.qrPlaceholder")} /></div>
+              <div className="space-y-2">
+                <Label>{t("common.status")}</Label>
+                <Select {...form.register("status")}>
+                  <option value="ACTIVE">{t("status.ACTIVE")}</option>
+                  <option value="INACTIVE">{t("status.INACTIVE")}</option>
+                </Select>
+              </div>
               <div className="space-y-3 md:col-span-2 xl:col-span-3">
                 <Label>{t("products.imageUrl")}</Label>
                 <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">

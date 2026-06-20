@@ -63,7 +63,6 @@ const ADMIN_SIDEBAR_SECTIONS: SidebarMenuSection[] = [
       { titleKey: "nav.products", href: "/products", icon: Package },
       { titleKey: "nav.categories", href: "/categories", icon: Tags },
       { titleKey: "nav.suppliers", href: "/suppliers", icon: Truck },
-      { titleKey: "nav.purchaseOrders", href: "/purchase-orders", icon: ClipboardList },
     ],
   },
   {
@@ -100,6 +99,12 @@ const CASHIER_SIDEBAR_SECTIONS: SidebarMenuSection[] = [
   {
     titleKey: "nav.groupOperations",
     items: [{ titleKey: "nav.shifts", href: "/shifts", icon: FileText }],
+  },
+  {
+    titleKey: "nav.groupInventory",
+    items: [
+      { titleKey: "nav.products", href: "/products", icon: Package },
+    ],
   },
 ];
 

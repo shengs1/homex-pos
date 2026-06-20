@@ -15,7 +15,7 @@ import type { AuthUser, UserRole } from "@/types/auth";
 const DEFAULT_ALLOWED_ROLES: UserRole[] = ["ADMIN", "CASHIER"];
 
 // CASHIER chỉ được truy cập 5 route này. Các route quản trị còn lại sẽ bị chặn dù gõ URL trực tiếp.
-const CASHIER_ALLOWED_ROUTE_PREFIXES = ["/dashboard", "/pos", "/orders", "/customers", "/warranties", "/shifts"];
+const CASHIER_ALLOWED_ROUTE_PREFIXES = ["/dashboard", "/pos", "/orders", "/customers", "/warranties", "/shifts", "/products"];
 
 function isCashierRouteAllowed(pathname: string) {
   return CASHIER_ALLOWED_ROUTE_PREFIXES.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
