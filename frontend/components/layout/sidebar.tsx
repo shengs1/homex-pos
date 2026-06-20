@@ -22,6 +22,8 @@ import {
   Truck,
   Users,
   Warehouse,
+  PanelLeftClose,
+  PanelLeft
 } from "lucide-react";
 import { useLanguage } from "@/contexts/language-context";
 import { cn } from "@/lib/utils";
@@ -125,7 +127,7 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
       )}
     >
       {/* Logo Header */}
-      <div className={cn("flex h-16 shrink-0 items-center border-b border-slate-800/40 px-5", collapsed ? "justify-center" : "gap-3")}>
+      <div className={cn("flex h-16 shrink-0 items-center border-b border-slate-800/40 px-4", collapsed ? "justify-center" : "gap-3")}>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
           <Home className="h-5 w-5" />
         </div>
@@ -135,6 +137,21 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
             <p className="truncate text-sm font-black leading-none tracking-tight text-white">Homex POS</p>
             <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t("app.subtitle")}</p>
           </div>
+        ) : null}
+
+        {onToggleCollapsed ? (
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-white shrink-0",
+              collapsed ? "absolute -right-4 top-4 z-50 bg-slate-800 border border-slate-700 rounded-full shadow-md" : ""
+            )}
+            title={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+            aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+          >
+            {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
         ) : null}
       </div>
 

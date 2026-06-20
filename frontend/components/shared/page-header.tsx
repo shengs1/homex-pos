@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
 type PageHeaderProps = {
@@ -8,13 +12,30 @@ type PageHeaderProps = {
 };
 
 export function PageHeader({ title, description, children, className }: PageHeaderProps) {
-  return (
-    <div className={cn("flex min-w-0 flex-col gap-3 md:flex-row md:items-start md:justify-between", className)}>
-      <div className="min-w-0">
-        <h2 className="truncate text-xl font-black tracking-tight text-slate-800">{title}</h2>
-        {description ? <p className="mt-1 max-w-3xl text-xs font-semibold uppercase tracking-wider text-slate-500 line-clamp-2">{description}</p> : null}
-      </div>
-      {children ? <div className="flex shrink-0 flex-wrap items-center gap-2">{children}</div> : null}
+  const [target, setTarget] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    setTarget(document.getElementById("page-title-portal"));
+  }, []);
+
+  const portalContent = (
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <h2 className="truncate text-base font-black tracking-tight text-slate-800 lg:text-lg">{title}</h2>
+      {description ? (
+        <>
+          <div className="h-4 w-px shrink-0 bg-slate-300 hidden md:block"></div>
+          <p className="hidden flex-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 truncate lg:block" title={description}>
+            {description}
+          </p>
+        </>
+      ) : null}
     </div>
+  );
+
+  return (
+    <>
+      {target ? createPortal(portalContent, target) : null}
+      {children ? <div className={cn("flex w-full shrink-0 items-center justify-between gap-3 mb-4", className)}>{children}</div> : null}
+    </>
   );
 }

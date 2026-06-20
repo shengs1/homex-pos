@@ -28,7 +28,7 @@ function getSetting(order: Order | PublicInvoice, setting?: Setting | null) {
 }
 
 export function PrintableInvoice({ order, setting, publicUrl, className }: PrintableInvoiceProps) {
-  const { t } = useLanguage();
+  const { language, t } = useLanguage();
   const invoiceSetting = getSetting(order, setting);
   const isK80 = (invoiceSetting?.printPaperSize || "K80").toUpperCase() === "K80";
   const paperClassName = isK80
@@ -79,7 +79,11 @@ export function PrintableInvoice({ order, setting, publicUrl, className }: Print
         </table>
 
         <div className="mt-4 space-y-1 border-b border-dashed border-black pb-4 text-right">
-          <p>{t("orders.total")}: <span className="font-bold">{formatCurrency(order.totalAmount)}</span></p>
+          <p>{language === "en" ? "Subtotal" : "Tạm tính"}: {formatCurrency(order.totalAmount)}</p>
+          {order.payment && order.payment.amount < order.totalAmount ? (
+            <p>{language === "en" ? "Discount" : "Chiết khấu"}: -{formatCurrency(Number(order.totalAmount) - Number(order.payment.amount))}</p>
+          ) : null}
+          <p>{t("orders.total")}: <span className="font-bold">{formatCurrency(order.payment?.amount || order.totalAmount)}</span></p>
           {order.payment ? <p>{t("payments.method")}: {t(`paymentMethod.${order.payment.method}`)}</p> : null}
           {order.payment?.cashReceived !== null && order.payment?.cashReceived !== undefined ? (
             <p>{t("pos.cashReceived")}: {formatCurrency(order.payment.cashReceived)}</p>

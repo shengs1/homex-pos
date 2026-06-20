@@ -125,7 +125,7 @@ export default function ReturnOrdersPage() {
                   <div>{t("orders.total")}: {formatCurrency(selectedOrder.totalAmount)}</div>
                 </div>
 
-                <DataTable noHorizontalScroll>
+                <DataTable>
                   <thead>
                     <tr>
                       <Th>{t("products.product")}</Th>
@@ -167,7 +167,7 @@ export default function ReturnOrdersPage() {
         {!isLoading && items.length > 0 ? (
           <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
             <CardContent className="p-0">
-              <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
+              <DataTable className="rounded-none border-0 shadow-none">
                 <thead>
                   <tr>
                     <Th>{t("common.code")}</Th>
@@ -197,3 +197,4 @@ export default function ReturnOrdersPage() {
     </RoleGuard>
   );
 }
+

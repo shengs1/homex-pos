@@ -125,13 +125,16 @@ export default function SettingsPage() {
   }
 
   async function saveSettings(payload: SettingPayload) {
-    setIsSaving(true);
-    setErrorMessage("");
-    setSuccessMessage("");
-    await settingService.update(payload);
-    setSuccessMessage(t("message.saved"));
-    await loadSettings();
-    setIsSaving(false);
+    try {
+      setIsSaving(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+      await settingService.update(payload);
+      setSuccessMessage(t("message.saved"));
+      await loadSettings();
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -273,3 +276,4 @@ export default function SettingsPage() {
     </RoleGuard>
   );
 }
+

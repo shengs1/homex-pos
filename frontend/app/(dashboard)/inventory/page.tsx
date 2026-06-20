@@ -261,10 +261,10 @@ export default function InventoryPage() {
           <CardHeader><CardTitle>{t("inventory.lowStockTitle")}</CardTitle></CardHeader>
           <CardContent>
             {lowStockItems.length === 0 ? <EmptyState message={t("message.noLowStock")} /> : (
-              <DataTable noHorizontalScroll>
+              <DataTable>
                 <colgroup><col className="w-[16%]" /><col className="w-[34%]" /><col className="w-[20%]" /><col className="w-[18%]" /><col className="w-[6%]" /><col className="w-[6%]" /></colgroup>
                 <thead><tr><Th>{t("products.sku")}</Th><Th>{t("products.product")}</Th><Th>{t("products.category")}</Th><Th>{t("products.supplier")}</Th><Th>{t("products.stock")}</Th><Th>{t("inventory.minStock")}</Th></tr></thead>
-                <tbody>{lowStockItems.map((item) => <tr key={item.id}><Td><div className="truncate">{item.sku}</div></Td><Td><div className="break-words font-medium">{item.name}</div></Td><Td>{item.category?.name || item.categoryId}</Td><Td>{item.supplier?.name || item.supplierId}</Td><Td className="font-bold text-destructive">{item.stockQuantity}</Td><Td>{item.minStock}</Td></tr>)}</tbody>
+                <tbody>{lowStockItems.map((item) => <tr key={item.id}><Td><div className="break-words whitespace-normal line-clamp-2">{item.sku}</div></Td><Td><div className="break-words font-medium">{item.name}</div></Td><Td>{item.category?.name || item.categoryId}</Td><Td>{item.supplier?.name || item.supplierId}</Td><Td className="font-bold text-destructive">{item.stockQuantity}</Td><Td>{item.minStock}</Td></tr>)}</tbody>
               </DataTable>
             )}
           </CardContent>
@@ -303,3 +303,5 @@ export default function InventoryPage() {
     </RoleGuard>
   );
 }
+
+

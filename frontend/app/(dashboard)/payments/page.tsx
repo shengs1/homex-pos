@@ -317,7 +317,7 @@ export default function PaymentsPage() {
         {!isLoading && items.length > 0 ? (
           <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
             <CardContent className="p-0">
-              <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
+              <DataTable className="rounded-none border-0 shadow-none">
                 <colgroup>
                   <col className="w-[6%]" />
                   <col className="w-[15%]" />
@@ -349,15 +349,15 @@ export default function PaymentsPage() {
                       <tr key={payment.id}>
                         <Td>{rowIndex}</Td>
                         <Td>
-                          <div className="truncate font-medium" title={getPaymentTransactionCode(payment)}>
+                          <div className="break-words whitespace-normal line-clamp-2 font-medium" title={getPaymentTransactionCode(payment)}>
                             {getPaymentTransactionCode(payment)}
                           </div>
                         </Td>
                         <Td>
-                          <div className="truncate font-medium" title={getLinkedOrderCode(payment)}>
+                          <div className="break-words whitespace-normal line-clamp-2 font-medium" title={getLinkedOrderCode(payment)}>
                             {getLinkedOrderCode(payment)}
                           </div>
-                          <div className="truncate text-xs text-muted-foreground" title={payment.order?.customer?.fullName || "-"}>
+                          <div className="break-words whitespace-normal line-clamp-2 text-xs text-muted-foreground" title={payment.order?.customer?.fullName || "-"}>
                             {payment.order?.customer?.fullName || "-"}
                           </div>
                         </Td>
@@ -450,3 +450,5 @@ export default function PaymentsPage() {
     </RoleGuard>
   );
 }
+
+

@@ -86,7 +86,7 @@ function SummaryBox({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-2 truncate text-xl font-black text-slate-800" title={value}>{value}</p>
+      <p className="mt-2 break-words whitespace-normal line-clamp-2 text-xl font-black text-slate-800" title={value}>{value}</p>
     </div>
   );
 }
@@ -239,12 +239,12 @@ export default function ReportsPage() {
             <CardHeader><CardTitle>{t("reports.topProducts")}</CardTitle></CardHeader>
             <CardContent className="min-w-0">
               {topProducts.length === 0 ? <EmptyState /> : (
-                <DataTable noHorizontalScroll>
+                <DataTable>
                   <thead><tr><Th>{t("products.product")}</Th><Th>{t("reports.quantity")}</Th><Th>{t("reports.revenue")}</Th></tr></thead>
                   <tbody>
                     {topProducts.map((item) => (
                       <tr key={item.productId}>
-                        <Td><div className="line-clamp-2 font-medium" title={item.product?.name || String(item.productId)}>{item.product?.name || item.productId}</div><div className="truncate text-xs text-muted-foreground">{item.product?.sku || "-"}</div></Td>
+                        <Td><div className="line-clamp-2 font-medium" title={item.product?.name || String(item.productId)}>{item.product?.name || item.productId}</div><div className="break-words whitespace-normal line-clamp-2 text-xs text-muted-foreground">{item.product?.sku || "-"}</div></Td>
                         <Td>{formatNumber(item.totalQuantity)}</Td>
                         <Td>{formatCurrency(item.totalRevenue)}</Td>
                       </tr>
@@ -259,12 +259,12 @@ export default function ReportsPage() {
             <CardHeader><CardTitle>{t("reports.topCustomers")}</CardTitle></CardHeader>
             <CardContent className="min-w-0">
               {topCustomers.length === 0 ? <EmptyState /> : (
-                <DataTable noHorizontalScroll>
+                <DataTable>
                   <thead><tr><Th>{t("customers.title")}</Th><Th>{t("reports.totalOrders")}</Th><Th>{t("reports.totalSpent")}</Th></tr></thead>
                   <tbody>
                     {topCustomers.map((item, index) => (
                       <tr key={`${item.customerId || "retail"}-${index}`}>
-                        <Td><div className="line-clamp-2 font-medium" title={item.customer?.fullName || t("customers.retail")}>{item.customer?.fullName || t("customers.retail")}</div><div className="truncate text-xs text-muted-foreground">{item.customer?.phone || "-"}</div></Td>
+                        <Td><div className="line-clamp-2 font-medium" title={item.customer?.fullName || t("customers.retail")}>{item.customer?.fullName || t("customers.retail")}</div><div className="break-words whitespace-normal line-clamp-2 text-xs text-muted-foreground">{item.customer?.phone || "-"}</div></Td>
                         <Td>{formatNumber(item.totalOrders)}</Td>
                         <Td>{formatCurrency(item.totalSpent)}</Td>
                       </tr>
@@ -279,12 +279,12 @@ export default function ReportsPage() {
             <CardHeader><CardTitle>{t("reports.lowStock")}</CardTitle></CardHeader>
             <CardContent className="min-w-0">
               {lowStockProducts.length === 0 ? <EmptyState message={t("message.noLowStock")} /> : (
-                <DataTable noHorizontalScroll>
+                <DataTable>
                   <thead><tr><Th>{t("products.sku")}</Th><Th>{t("products.product")}</Th><Th>{t("products.stock")}</Th><Th>{t("products.minStock")}</Th></tr></thead>
                   <tbody>
                     {lowStockProducts.map((item) => (
                       <tr key={item.id}>
-                        <Td><div className="truncate" title={item.sku}>{item.sku}</div></Td>
+                        <Td><div className="break-words whitespace-normal line-clamp-2" title={item.sku}>{item.sku}</div></Td>
                         <Td><div className="line-clamp-2 font-medium" title={item.name}>{item.name}</div></Td>
                         <Td className="font-bold text-destructive">{item.stockQuantity}</Td>
                         <Td>{item.minStock}</Td>
@@ -300,15 +300,15 @@ export default function ReportsPage() {
             <CardHeader><CardTitle>{t("reports.customers")}</CardTitle></CardHeader>
             <CardContent className="min-w-0">
               {customerItems.length === 0 ? <EmptyState /> : (
-                <DataTable noHorizontalScroll>
+                <DataTable>
                   <thead><tr><Th>{t("customers.title")}</Th><Th>{t("reports.totalOrders")}</Th><Th>{t("reports.totalSpent")}</Th><Th>{t("reports.latestOrder")}</Th></tr></thead>
                   <tbody>
                     {customerItems.map((item) => (
                       <tr key={item.id}>
-                        <Td><div className="line-clamp-2 font-medium" title={item.fullName}>{item.fullName}</div><div className="truncate text-xs text-muted-foreground">{item.phone}</div></Td>
+                        <Td><div className="line-clamp-2 font-medium" title={item.fullName}>{item.fullName}</div><div className="break-words whitespace-normal line-clamp-2 text-xs text-muted-foreground">{item.phone}</div></Td>
                         <Td>{formatNumber(item.totalOrders)}</Td>
                         <Td>{formatCurrency(item.totalSpent)}</Td>
-                        <Td><div className="truncate" title={item.latestOrder?.orderCode || "-"}>{item.latestOrder?.orderCode || "-"}</div></Td>
+                        <Td><div className="break-words whitespace-normal line-clamp-2" title={item.latestOrder?.orderCode || "-"}>{item.latestOrder?.orderCode || "-"}</div></Td>
                       </tr>
                     ))}
                   </tbody>
@@ -321,3 +321,5 @@ export default function ReportsPage() {
     </RoleGuard>
   );
 }
+
+

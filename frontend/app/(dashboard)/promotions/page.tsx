@@ -330,7 +330,7 @@ export default function PromotionsPage() {
         {!isLoading && items.length > 0 ? (
           <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
             <CardContent className="p-0">
-              <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
+              <DataTable className="rounded-none border-0 shadow-none">
                 <thead>
                   <tr>
                     <Th className="w-[80px] whitespace-nowrap">{t("common.no")}</Th>
@@ -463,3 +463,4 @@ export default function PromotionsPage() {
     </RoleGuard>
   );
 }
+

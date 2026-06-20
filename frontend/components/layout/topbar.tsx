@@ -67,20 +67,19 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
           <Menu className="h-5 w-5" />
         </Button>
 
-        {/* Page title area with icon */}
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="hidden md:flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
-            <Calendar className="h-3.5 w-3.5 text-slate-400" />
-            <span>{formattedDate}</span>
-          </div>
-          <div className="hidden md:flex items-center gap-2 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-mono tracking-wider">{formattedTime}</span>
-          </div>
-        </div>
+        {/* Page title area with portal */}
+        <div id="page-title-portal" className="flex min-w-0 flex-1 items-center gap-2"></div>
       </div>
 
       <div className="flex min-w-0 shrink-0 items-center gap-2 md:gap-3">
+        <div className="hidden lg:flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+          <Calendar className="h-3.5 w-3.5 text-slate-400" />
+          <span>{formattedDate}</span>
+        </div>
+        <div className="hidden md:flex items-center gap-2 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-mono tracking-wider">{formattedTime}</span>
+        </div>
         <LanguageToggle />
 
         {/* Notifications */}

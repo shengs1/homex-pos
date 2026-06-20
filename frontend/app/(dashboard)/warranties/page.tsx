@@ -450,7 +450,7 @@ export default function WarrantiesPage() {
         {isLoading ? <LoadingState /> : null}
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
         {!isLoading && items.length > 0 ? (
-          <DataTable noHorizontalScroll className="overflow-visible" tableClassName="table-fixed w-full">
+          <DataTable className="overflow-visible" tableClassName="table-fixed w-full">
             <colgroup>
               <col className="w-[16%]" />
               <col className="w-[18%]" />
@@ -474,14 +474,14 @@ export default function WarrantiesPage() {
             <tbody>
               {items.map((item) => (
                 <tr key={item.id}>
-                  <Td className="px-3"><div className="truncate font-medium" title={item.warrantyCode}>{item.warrantyCode}</div></Td>
+                  <Td className="px-3"><div className="break-words whitespace-normal line-clamp-2 font-medium" title={item.warrantyCode}>{item.warrantyCode}</div></Td>
                   <Td className="px-3">
-                    <div className="truncate font-medium" title={item.customer?.fullName || String(item.customerId)}>{item.customer?.fullName || item.customerId}</div>
-                    <div className="truncate text-xs text-muted-foreground" title={item.customer?.phone || "-"}>{item.customer?.phone || "-"}</div>
+                    <div className="break-words whitespace-normal line-clamp-2 font-medium" title={item.customer?.fullName || String(item.customerId)}>{item.customer?.fullName || item.customerId}</div>
+                    <div className="break-words whitespace-normal line-clamp-2 text-xs text-muted-foreground" title={item.customer?.phone || "-"}>{item.customer?.phone || "-"}</div>
                   </Td>
                   <Td className="px-3"><div className="line-clamp-2 break-words" title={item.orderDetail?.product?.name || "-"}>{item.orderDetail?.product?.name || item.orderDetail?.productId || "-"}</div></Td>
-                  <Td className="px-3"><div className="truncate">{formatDateVN(item.startDate)}</div></Td>
-                  <Td className="px-3"><div className="truncate">{formatDateVN(item.endDate)}</div></Td>
+                  <Td className="px-3"><div className="break-words whitespace-normal line-clamp-2">{formatDateVN(item.startDate)}</div></Td>
+                  <Td className="px-3"><div className="break-words whitespace-normal line-clamp-2">{formatDateVN(item.endDate)}</div></Td>
                   <Td className="px-3"><StatusBadge status={item.status} /></Td>
                   <Td className="min-w-[100px] px-3 pr-4 text-right">
                     <WarrantyActionMenu
@@ -525,3 +525,5 @@ export default function WarrantiesPage() {
     </RoleGuard>
   );
 }
+
+

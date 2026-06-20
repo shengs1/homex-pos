@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { categoryService, customerService, orderService, productService, settingService, shiftService } from "@/services/homex.service";
 import { promotionService } from "@/services/promotion.service";
 import type { Category, Customer, Order, PaymentMethod, Product, Setting, Shift } from "@/types/domain";
+import type { Promotion } from "@/services/promotion.service";
 
 type CartItem = {
   product: Product;
@@ -60,6 +61,17 @@ function getMoneyInputAmount(value: string) {
   return digits ? Number(digits) : 0;
 }
 
+function formatDiscountInput(value: string, type: "AMOUNT" | "PERCENT") {
+  if (type === "PERCENT") {
+    const digits = getDigits(value);
+    if (!digits) return "";
+    const num = Number(digits);
+    if (num > 100) return "100";
+    return digits;
+  }
+  return formatMoneyInput(value);
+}
+
 function buildVietQrDemoValue(setting: Setting | null, amount: number, content: string) {
   return [
     `bank=${setting?.bankName || "BANK"}`,
@@ -77,18 +89,17 @@ export default function PosPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [draftOrder, setDraftOrder] = useState<Order | null>(null);
   const [lastCompletedOrder, setLastCompletedOrder] = useState<Order | null>(null);
   const [setting, setSetting] = useState<Setting | null>(null);
-  const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("CASH");
   const [cashReceivedInput, setCashReceivedInput] = useState("");
-  const [openingCashInput, setOpeningCashInput] = useState("");
-  const [closingCashInput, setClosingCashInput] = useState("");
+  const [discountType, setDiscountType] = useState<"AMOUNT" | "PERCENT">("AMOUNT");
   const [discountInput, setDiscountInput] = useState("");
   const [discountMessage, setDiscountMessage] = useState("");
   const [appliedDiscountAmount, setAppliedDiscountAmount] = useState(0);
@@ -114,6 +125,15 @@ export default function PosPage() {
   const barcodeBufferRef = useRef("");
   const barcodeTimerRef = useRef<number | null>(null);
 
+  useEffect(() => {
+    if (!errorMessage && !successMessage) return;
+    const timer = window.setTimeout(() => {
+      setErrorMessage("");
+      setSuccessMessage("");
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [errorMessage, successMessage]);
+
   const subtotal = useMemo(() => {
     return cart.reduce((total, item) => total + item.product.salePrice * item.quantity, 0);
   }, [cart]);
@@ -123,9 +143,8 @@ export default function PosPage() {
   const cashReceivedAmount = getMoneyInputAmount(cashReceivedInput);
   const changeAmount = paymentMethod === "CASH" ? Math.max(cashReceivedAmount - totalPayable, 0) : 0;
   const selectedCustomer = useMemo(() => customers.find((customer) => String(customer.id) === customerId) || null, [customerId, customers]);
-  const requiresShift = user?.role === "CASHIER";
   const isCashPaymentInvalid = paymentMethod === "CASH" && cashReceivedAmount < totalPayable;
-  const isCheckoutDisabled = isSubmitting || cart.length === 0 || !isOnline || (requiresShift && !currentShift);
+  const isCheckoutDisabled = isSubmitting || cart.length === 0 || !isOnline;
   const transferContent = draftOrder?.orderCode || "HOMEX POS";
   const isBankConfigured = Boolean(setting?.bankName && setting?.bankAccountNumber && setting?.bankAccountName);
   const transferQrValue = buildVietQrDemoValue(setting, totalPayable, transferContent);
@@ -188,12 +207,12 @@ export default function PosPage() {
     }
   }
 
-  async function loadCurrentShift() {
+  async function loadPromotions() {
     try {
-      const data = await shiftService.current();
-      setCurrentShift(data);
+      const data = await promotionService.list({ page: 1, limit: 100, status: "ACTIVE" });
+      setPromotions(data.items);
     } catch {
-      setCurrentShift(null);
+      // ignore
     }
   }
 
@@ -278,7 +297,7 @@ export default function PosPage() {
     loadProducts();
     searchCustomers();
     loadSetting();
-    loadCurrentShift();
+    loadPromotions();
     restoreDraftOrderFromStorage();
     focusBarcodeInput();
   }, []);
@@ -475,7 +494,16 @@ export default function PosPage() {
   function startCheckout() {
     setErrorMessage("");
     setSuccessMessage("");
-    setCheckoutStep("confirm");
+    if (setting?.confirmBeforeCheckout === false) {
+      if (paymentMethod === "CASH") {
+        setCheckoutStep("cash");
+      } else {
+        void prepareTransferCheckout();
+        return; // Don't open dialog yet, wait for prepareTransferCheckout to open it? No, prepareTransferCheckout expects it to be open.
+      }
+    } else {
+      setCheckoutStep("confirm");
+    }
     setIsCheckoutDialogOpen(true);
   }
 
@@ -490,11 +518,6 @@ export default function PosPage() {
       return;
     }
 
-    if (requiresShift && !currentShift) {
-      setErrorMessage(t("shifts.required"));
-      return;
-    }
-
     try {
       setIsSubmitting(true);
       setErrorMessage("");
@@ -503,6 +526,7 @@ export default function PosPage() {
         : await orderService.createDraft(buildOrderBody());
       setDraftOrder(orderToPay);
       setCheckoutStep("qr");
+      setIsCheckoutDialogOpen(true);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error));
     } finally {
@@ -518,11 +542,6 @@ export default function PosPage() {
 
     if (!isOnline) {
       setErrorMessage(t("network.checkoutDisabled"));
-      return;
-    }
-
-    if (requiresShift && !currentShift) {
-      setErrorMessage(t("shifts.required"));
       return;
     }
 
@@ -611,93 +630,20 @@ export default function PosPage() {
     }
   }
 
-  async function openShift() {
-    try {
-      const openingCash = getMoneyInputAmount(openingCashInput);
-      setErrorMessage("");
-      setSuccessMessage("");
-      const shift = await shiftService.open({ openingCash });
-      setCurrentShift(shift);
-      setOpeningCashInput("");
-      setSuccessMessage(t("shifts.opened"));
-    } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
-    }
-  }
-
-  async function closeShift() {
-    if (!currentShift) return;
-
-    try {
-      const closingCash = getMoneyInputAmount(closingCashInput);
-      setErrorMessage("");
-      setSuccessMessage("");
-      const shift = await shiftService.close(currentShift.id, { closingCash });
-      setCurrentShift(null);
-      setClosingCashInput("");
-      setSuccessMessage(t("shifts.closed", { amount: formatCurrency(shift.discrepancyAmount || 0) }));
-    } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
-    }
-  }
-
-
-  async function applyDiscount() {
-    const rawValue = discountInput.trim();
-
-    if (cart.length === 0) {
-      setDiscountMessage(t("pos.discountNeedCart"));
+  async function applyVoucher(code: string) {
+    if (cart.length === 0) return;
+    
+    if (!code) {
+      setAppliedPromotionCode("");
       setAppliedDiscountAmount(0);
-      setAppliedPromotionCode("");
-      return;
-    }
-
-    if (!rawValue) {
-      setDiscountMessage(t("pos.discountEmpty"));
-      setAppliedDiscountAmount(0);
-      setAppliedPromotionCode("");
-      return;
-    }
-
-    const normalizedValue = rawValue.replace(/\s+/g, "");
-    const isPercent = /^\d+(\.\d+)?%$/.test(normalizedValue);
-    const isAmount = /^\d+$/.test(normalizedValue);
-
-    if (isPercent) {
-      const percent = Number(normalizedValue.replace("%", ""));
-      if (percent <= 0 || percent > 100) {
-        setDiscountMessage(t("pos.discountPercentInvalid"));
-        setAppliedDiscountAmount(0);
-        setAppliedPromotionCode("");
-        return;
-      }
-
-      const amount = Math.floor((subtotal * percent) / 100);
-      setAppliedDiscountAmount(amount);
-      setAppliedPromotionCode("");
-      setDiscountMessage(t("pos.discountApplied", { amount: formatCurrency(amount) }));
-      return;
-    }
-
-    if (isAmount) {
-      const amount = Math.min(Number(normalizedValue), subtotal);
-      if (amount <= 0) {
-        setDiscountMessage(t("pos.discountAmountInvalid"));
-        setAppliedDiscountAmount(0);
-        setAppliedPromotionCode("");
-        return;
-      }
-
-      setAppliedDiscountAmount(amount);
-      setAppliedPromotionCode("");
-      setDiscountMessage(t("pos.discountApplied", { amount: formatCurrency(amount) }));
+      setDiscountMessage("");
       return;
     }
 
     try {
       setIsSubmitting(true);
       setDiscountMessage("");
-      const result = await promotionService.validate({ code: rawValue.toUpperCase(), subtotal });
+      const result = await promotionService.validate({ code: code.toUpperCase(), subtotal });
       const amount = Math.min(Number(result.discountAmount || 0), subtotal);
 
       if (amount <= 0) {
@@ -708,14 +654,82 @@ export default function PosPage() {
       }
 
       setAppliedDiscountAmount(amount);
-      setAppliedPromotionCode(rawValue.toUpperCase());
-      setDiscountMessage(t("pos.discountApplied", { amount: formatCurrency(amount) }));
+      setAppliedPromotionCode(code.toUpperCase());
+      setDiscountMessage(t("toast.pos.voucherAppliedWithAmount", { code: code.toUpperCase(), amount: formatCurrency(amount) }));
     } catch (error) {
       setAppliedDiscountAmount(0);
       setAppliedPromotionCode("");
       setDiscountMessage(getApiErrorMessage(error) || t("pos.voucherInvalid"));
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  function applyManualDiscount() {
+    const rawValue = discountInput.trim();
+
+    if (cart.length === 0) {
+      setDiscountMessage(t("pos.discountNeedCart"));
+      setAppliedDiscountAmount(0);
+      setAppliedPromotionCode("");
+      return;
+    }
+
+    if (!rawValue) {
+      setAppliedDiscountAmount(0);
+      setDiscountMessage("");
+      return;
+    }
+
+    let amount = 0;
+
+    if (discountType === "PERCENT") {
+      const percent = Number(getDigits(rawValue));
+      if (percent < 1 || percent > 100) {
+        setDiscountMessage(t("pos.invalidDiscountPercent"));
+        setAppliedDiscountAmount(0);
+        setAppliedPromotionCode("");
+        return;
+      }
+      amount = Math.floor((subtotal * percent) / 100);
+    } else {
+      const numValue = getMoneyInputAmount(rawValue);
+      if (numValue <= 0) {
+        setDiscountMessage(t("pos.invalidDiscountAmount"));
+        setAppliedDiscountAmount(0);
+        setAppliedPromotionCode("");
+        return;
+      }
+      amount = Math.min(numValue, subtotal);
+    }
+
+    const maxDiscount = setting?.maxDiscount || 100;
+    const maxDiscountAmount = Math.floor((subtotal * maxDiscount) / 100);
+
+    if (discountType === "AMOUNT") {
+      // Validate max discount for AMOUNT type if the setting is a percentage and applicable
+      if (amount > maxDiscountAmount) {
+        setDiscountMessage(t("settings.maxDiscountExceeded", { percent: maxDiscount, max: formatCurrency(maxDiscountAmount) }));
+        setAppliedDiscountAmount(maxDiscountAmount);
+        setAppliedPromotionCode("");
+        return;
+      }
+    } else if (discountType === "PERCENT") {
+      // For PERCENT type, we still validate against maxDiscountAmount
+      if (amount > maxDiscountAmount) {
+        setDiscountMessage(t("settings.maxDiscountExceeded", { percent: maxDiscount, max: formatCurrency(maxDiscountAmount) }));
+        setAppliedDiscountAmount(maxDiscountAmount);
+        setAppliedPromotionCode("");
+        return;
+      }
+    }
+
+    setAppliedDiscountAmount(amount);
+    setAppliedPromotionCode("");
+    if (discountType === "AMOUNT") {
+      setDiscountMessage(t("toast.pos.manualDiscountAmountApplied", { amount: formatCurrency(amount) }));
+    } else {
+      setDiscountMessage(t("toast.pos.manualDiscountPercentApplied", { percent: getDigits(rawValue) }));
     }
   }
 
@@ -857,45 +871,20 @@ export default function PosPage() {
           }}
         />
         {/* Header cố định trong vùng POS */}
-        <div className="shrink-0 space-y-2 pb-3">
+        <div className="shrink-0">
           <PageHeader title={t("pos.title")} description={t("pos.description")} />
-          <ErrorState message={errorMessage} />
-          {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
-          {!isOnline ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-900">{t("network.checkoutDisabled")}</div> : null}
-          <div className="grid gap-2 rounded-lg border bg-card p-3 text-sm md:grid-cols-[1fr_auto] md:items-center">
-            <div>
-              <div className="font-medium">{currentShift ? t("shifts.currentOpen") : t("shifts.noOpen")}</div>
-              <div className="text-muted-foreground">
-                {currentShift ? `${t("shifts.openingCash")}: ${formatCurrency(currentShift.openingCash)}` : t("shifts.required")}
-              </div>
-            </div>
-            {currentShift ? (
-              <div className="grid gap-2 sm:grid-cols-[180px_auto]">
-                <Input
-                  inputMode="numeric"
-                  placeholder={t("shifts.closingCash")}
-                  value={closingCashInput}
-                  onChange={(event) => setClosingCashInput(formatMoneyInput(event.target.value))}
-                />
-                <Button type="button" variant="outline" onClick={closeShift}>{t("shifts.close")}</Button>
-              </div>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-[180px_auto]">
-                <Input
-                  inputMode="numeric"
-                  placeholder={t("shifts.openingCash")}
-                  value={openingCashInput}
-                  onChange={(event) => setOpeningCashInput(formatMoneyInput(event.target.value))}
-                />
-                <Button type="button" onClick={openShift}>{t("shifts.open")}</Button>
-              </div>
-            )}
-          </div>
+        </div>
+
+        {/* Floating Notifications */}
+        <div className="fixed top-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full">
+          {errorMessage ? <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm font-bold text-destructive shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-top-2">{errorMessage}</div> : null}
+          {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-700 shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-top-2">{successMessage}</div> : null}
+          {!isOnline ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900 shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-top-2">{t("network.checkoutDisabled")}</div> : null}
         </div>
 
         {/* Main POS workspace: chỉ phần này */}
         {lastCompletedOrder ? renderReceiptView(lastCompletedOrder) : (
-        <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(360px,3fr)] xl:grid-cols-[minmax(0,7fr)_minmax(380px,3fr)]">
+        <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,400px)] xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)]">
           {/* Cột trái: tìm kiếm và danh sách sản phẩm */}
           <div className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/50 bg-white shadow-sm overflow-hidden">
             <div className="shrink-0 p-4 space-y-3 border-b border-border/40">
@@ -996,12 +985,12 @@ export default function PosPage() {
 
           {/* Cột phải: giỏ hàng cố định đúng chiều cao màn hình */}
           <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-            <div className="shrink-0 border-b border-slate-100 px-4 py-3 flex items-center justify-between">
+            <div className="shrink-0 border-b border-slate-100 px-3 py-2 flex items-center justify-between bg-white">
               <div className="flex items-center gap-2">
-                <ShoppingCart className="h-5 w-5 text-primary" />
-                <span className="text-sm font-black uppercase tracking-wide text-slate-800">{t("pos.cart")}</span>
+                <ShoppingCart className="h-4 w-4 text-primary" />
+                <span className="text-xs font-black uppercase tracking-wide text-slate-800">{t("pos.cart")}</span>
                 {cart.length > 0 ? (
-                  <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-black text-white">
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-black text-white">
                     {cart.reduce((sum, item) => sum + item.quantity, 0)}
                   </span>
                 ) : null}
@@ -1010,23 +999,21 @@ export default function PosPage() {
                 <button
                   type="button"
                   onClick={() => { setCart([]); setAppliedDiscountAmount(0); setAppliedPromotionCode(""); setDiscountInput(""); setDiscountMessage(""); }}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                  className="flex h-6 w-6 items-center justify-center rounded text-slate-400 transition-colors hover:bg-destructive/10 hover:text-destructive"
                   title={t("common.delete")}
                   aria-label={t("common.delete")}
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3.5 w-3.5" />
                 </button>
               ) : null}
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col">
               {/* Vùng khách hàng */}
-              <div className="shrink-0 space-y-3 border-b border-border/40 px-4 py-4 bg-slate-50/50">
-                <div className="space-y-1">
-                  <Label className="block text-[10px] font-black text-muted-foreground uppercase tracking-wider">{t("pos.customerPlaceholder")}</Label>
-                  <div className="relative">
-                    <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-muted-foreground pointer-events-none">
-                      <Search className="w-4 h-4" />
+              <div className="shrink-0 space-y-2 border-b border-border/40 px-3 py-2 bg-slate-50/50">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-muted-foreground pointer-events-none">
+                      <Search className="w-3.5 h-3.5" />
                     </span>
                     <form onSubmit={searchCustomers}>
                       <input
@@ -1034,40 +1021,37 @@ export default function PosPage() {
                         value={customerSearch}
                         onChange={(event) => setCustomerSearch(event.target.value)}
                         placeholder={t("pos.customerPlaceholder")}
-                        className="w-full bg-white border border-border pl-9 pr-3 py-1.5 rounded-lg text-xs font-semibold text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition"
+                        className="w-full bg-white border border-border pl-8 pr-2 py-1 rounded-md text-xs font-semibold text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition h-8"
                       />
                     </form>
                   </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Select value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
-                    <option value="">{t("customers.retail")}</option>
-                    {customers.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.fullName} - {customer.phone} - {t(`customerTier.${customer.tier || "SILVER"}`)} / {formatNumber(customer.points)} {t("customers.points")}
-                      </option>
-                    ))}
-                  </Select>
                   <Button
                     type="button"
                     variant="outline"
-                    className="shrink-0"
+                    className="shrink-0 h-8 w-8 p-0"
                     title={t("customers.quickAdd")}
                     onClick={() => {
                       setQuickCustomerPhone(customerSearch);
                       setIsCustomerDialogOpen(true);
                     }}
                   >
-                    <UserPlus className="h-4 w-4" />
+                    <UserPlus className="h-3.5 w-3.5" />
                   </Button>
                 </div>
+                <Select value={customerId} onChange={(event) => setCustomerId(event.target.value)} className="h-8 text-xs py-1">
+                  <option value="">{t("customers.retail")}</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.id}>
+                      {customer.fullName} - {customer.phone} - {t(`customerTier.${customer.tier || "SILVER"}`)}
+                    </option>
+                  ))}
+                </Select>
               </div>
 
               {/* Vùng danh sách sản phẩm trong giỏ: thiết kế dòng phẳng tối giản, cuộn nội bộ */}
               <div
                 ref={cartScrollRef}
-                className="flex-1 min-h-0 overflow-y-auto px-3 py-2 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-track]:bg-transparent"
+                className="flex-1 min-h-[160px] overflow-y-auto px-3 py-2 pr-1 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-track]:bg-transparent"
               >
                 {cart.length === 0 ? (
                   <div className="flex h-full min-h-[160px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50/60 px-4 text-center">
@@ -1145,104 +1129,145 @@ export default function PosPage() {
               </div>
 
               {/* Vùng đáy cố định: mã giảm giá + tiền + phương thức + nút hành động */}
-              <div className="sticky bottom-0 z-10 shrink-0 border-t border-gray-100 bg-card px-3 py-2.5 shadow-[0_-8px_20px_rgba(15,23,42,0.05)]">
-                <div className="mb-1.5 space-y-1">
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
-                    <Input
-                      value={discountInput}
-                      onChange={(event) => setDiscountInput(event.target.value)}
-                      placeholder={t("pos.discountInputPlaceholder")}
-                      className="h-9 text-sm"
-                      disabled={cart.length === 0 || isSubmitting}
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-9 shrink-0 px-3"
-                      disabled={cart.length === 0 || isSubmitting}
-                      onClick={applyDiscount}
-                    >
-                      {t("pos.applyDiscount")}
-                    </Button>
-                  </div>
-                  {discountMessage ? (
-                    <p className={cn("text-xs", discountAmount > 0 ? "text-green-600" : "text-destructive")}>
-                      {discountMessage}
-                    </p>
-                  ) : null}
-                </div>
+              <div className="shrink-0 border-t border-gray-100 bg-card px-3 py-2 shadow-[0_-8px_20px_rgba(15,23,42,0.05)]">
+                {/* Voucher & Discount Row */}
+                <div className="mb-2 flex items-center gap-2">
+                  <Select
+                    value={appliedPromotionCode}
+                    onChange={(event) => applyVoucher(event.target.value)}
+                    disabled={cart.length === 0 || isSubmitting}
+                    className="h-10 text-[11px] flex-[1.4] min-w-0"
+                  >
+                    <option value="">{t("pos.noVoucher")}</option>
+                    {promotions.map((p) => (
+                      <option key={p.id} value={p.code}>
+                        {p.code} - {p.discountType === "PERCENT" ? `${p.discountValue}%` : formatCurrency(p.discountValue)}
+                      </option>
+                    ))}
+                  </Select>
 
-                <div className="space-y-1.5 rounded-xl bg-slate-50 border border-slate-100 px-3 py-2.5 text-xs">
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Select
+                      value={discountType}
+                      onChange={(event) => {
+                        setDiscountType(event.target.value as "AMOUNT" | "PERCENT");
+                        setDiscountInput("");
+                        setDiscountMessage("");
+                        setAppliedDiscountAmount(0);
+                      }}
+                      disabled={cart.length === 0 || isSubmitting || appliedPromotionCode !== ""}
+                      className="h-10 text-[11px] w-20 font-bold shrink-0"
+                    >
+                      <option value="AMOUNT">{t("pos.discountAmount")}</option>
+                      <option value="PERCENT">{t("pos.discountPercent")}</option>
+                    </Select>
+
+                    <div className="relative w-28 shrink-0">
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        value={discountInput}
+                        onChange={(event) => setDiscountInput(formatDiscountInput(event.target.value, discountType))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            applyManualDiscount();
+                          }
+                        }}
+                        placeholder={discountType === "AMOUNT" ? t("pos.manualDiscountPlaceholderAmount") : t("pos.manualDiscountPlaceholderPercent")}
+                        className={cn("h-10 text-[11px] w-full px-2", discountType === "PERCENT" ? "pr-6" : "")}
+                        disabled={cart.length === 0 || isSubmitting || appliedPromotionCode !== ""}
+                        title={t("pos.discountInputPlaceholder")}
+                      />
+                      {discountType === "PERCENT" && (
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-slate-400">
+                          %
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                {discountMessage ? (
+                  <p className={cn("mb-1 text-[10px] font-bold uppercase", discountAmount > 0 ? "text-emerald-600" : "text-destructive")}>
+                    {discountMessage}
+                  </p>
+                ) : null}
+
+                {/* Summary */}
+                <div className="space-y-1 rounded-lg bg-slate-50 border border-slate-100 px-3 py-2 text-xs mb-2">
                   <div className="flex justify-between gap-4">
                     <span className="text-slate-500 font-semibold">{t("pos.subtotal")}</span>
                     <span className="font-bold text-slate-700">{formatCurrency(subtotal)}</span>
                   </div>
-                  <div className="flex justify-between gap-4">
-                    <span className="text-slate-500 font-semibold">{t("pos.discount")}</span>
-                    <span className="font-bold text-slate-700">-{formatCurrency(discountAmount)}</span>
-                  </div>
-                  <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 text-base">
+                  {appliedPromotionCode ? (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-emerald-600 font-semibold">{t("pos.voucher")} ({appliedPromotionCode})</span>
+                      <span className="font-bold text-emerald-700">-{formatCurrency(discountAmount)}</span>
+                    </div>
+                  ) : null}
+                  {!appliedPromotionCode && discountAmount > 0 ? (
+                    <div className="flex justify-between gap-4">
+                      <span className="text-amber-600 font-semibold">{t("pos.manualDiscount")}</span>
+                      <span className="font-bold text-amber-700">-{formatCurrency(discountAmount)}</span>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between gap-4 border-t border-slate-200 pt-1.5 text-sm mt-1.5">
                     <span className="font-black text-slate-800">{t("pos.totalPayable")}</span>
-                    <span className="font-black text-primary text-lg">{formatCurrency(totalPayable)}</span>
+                    <span className="font-black text-primary text-base">{formatCurrency(totalPayable)}</span>
                   </div>
                 </div>
 
-                <div className="mt-1.5 space-y-1.5">
-                  <Label className="block text-[10px] font-black text-muted-foreground uppercase tracking-wider">{t("pos.paymentMethod")}</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {paymentMethods.map((method) => {
-                      const PaymentIcon = method === "CASH" ? Banknote : QrCode;
-
-                      return (
-                        <button
-                          key={method}
-                          type="button"
-                          onClick={() => setPaymentMethod(method)}
-                          className={cn(
-                            "flex flex-col items-center justify-center gap-1 rounded-xl border py-2.5 text-[11px] font-black transition",
-                            paymentMethod === method
-                              ? "border-primary bg-primary text-white shadow-sm shadow-primary/20"
-                              : "border-border bg-muted/40 text-muted-foreground hover:bg-muted"
-                          )}
-                        >
-                          <PaymentIcon className="h-4 w-4" />
-                          <span>{t(`paymentMethod.${method}`)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                {/* Payment Methods */}
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  {paymentMethods.map((method) => {
+                    const PaymentIcon = method === "CASH" ? Banknote : QrCode;
+                    return (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => setPaymentMethod(method)}
+                        className={cn(
+                          "flex items-center justify-center gap-1.5 rounded-lg border py-1.5 text-[11px] font-bold transition",
+                          paymentMethod === method
+                            ? "border-primary bg-primary text-white shadow-sm"
+                            : "border-border bg-muted/40 text-muted-foreground hover:bg-muted"
+                        )}
+                      >
+                        <PaymentIcon className="h-3.5 w-3.5" />
+                        <span>{t(`paymentMethod.${method}`)}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {draftOrder ? (
-                  <div className="mt-1.5 truncate rounded-lg bg-muted px-2.5 py-1.5 text-xs sm:text-sm">
-                    {t("pos.processingDraft")}: <span className="font-semibold">{draftOrder.orderCode}</span>
-                  </div>
-                ) : null}
-
-                <div className="mt-2 grid gap-2">
+                {/* Actions */}
+                <div className="flex gap-2">
                   {draftOrder ? (
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground rounded-xl"
+                      className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground rounded-lg h-10 px-3 text-xs"
                       disabled={isSubmitting}
                       onClick={() => setIsCancelDraftDialogOpen(true)}
                     >
-                      <XCircle className="h-4 w-4" />
+                      <XCircle className="h-4 w-4 mr-1.5" />
                       {t("pos.cancelOrder")}
                     </Button>
                   ) : (
-                    <Button type="button" variant="outline" className="w-full rounded-xl" disabled={isSubmitting || cart.length === 0} onClick={createDraft}>
+                    <Button type="button" variant="outline" className="rounded-lg h-10 px-3 text-xs shrink-0" disabled={isSubmitting || cart.length === 0} onClick={createDraft}>
                       {t("pos.createDraft")}
                     </Button>
                   )}
-
-                  <Button type="button" size="lg" className="min-h-14 w-full rounded-xl bg-accent text-lg font-black uppercase tracking-wider text-white shadow-lg shadow-accent/20 hover:bg-accent/90" disabled={isCheckoutDisabled} onClick={startCheckout}>
+                  <Button type="button" className="flex-1 rounded-lg bg-accent text-sm font-black uppercase tracking-wider text-white shadow-md hover:bg-accent/90 h-10" disabled={isCheckoutDisabled} onClick={startCheckout}>
                     {t("pos.checkout")}
                   </Button>
                 </div>
+                {draftOrder ? (
+                  <div className="mt-1.5 truncate text-center text-[10px] text-muted-foreground">
+                    {t("pos.processingDraft")}: <span className="font-semibold">{draftOrder.orderCode}</span>
+                  </div>
+                ) : null}
               </div>
-            </div>
           </div>
         </div>
         )}
@@ -1320,10 +1345,18 @@ export default function PosPage() {
                       <span className="text-slate-500">{t("pos.subtotal")}</span>
                       <span className="font-bold text-slate-800">{formatCurrency(subtotal)}</span>
                     </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="text-slate-500">{t("pos.discount")}</span>
-                      <span className="font-bold text-slate-800">-{formatCurrency(discountAmount)}</span>
-                    </div>
+                    {appliedPromotionCode ? (
+                      <div className="flex justify-between gap-4">
+                        <span className="text-emerald-600 font-medium">Voucher ({appliedPromotionCode})</span>
+                        <span className="font-bold text-emerald-700">-{formatCurrency(discountAmount)}</span>
+                      </div>
+                    ) : null}
+                    {!appliedPromotionCode && discountAmount > 0 ? (
+                      <div className="flex justify-between gap-4">
+                        <span className="text-amber-600 font-medium">{t("pos.manualDiscount")}</span>
+                        <span className="font-bold text-amber-700">-{formatCurrency(discountAmount)}</span>
+                      </div>
+                    ) : null}
                     <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 text-base">
                       <span className="font-black text-slate-900">{t("pos.totalPayable")}</span>
                       <span className="font-black text-primary">{formatCurrency(totalPayable)}</span>
@@ -1486,3 +1519,4 @@ export default function PosPage() {
     </RoleGuard>
   );
 }
+

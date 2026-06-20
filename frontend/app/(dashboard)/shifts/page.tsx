@@ -179,7 +179,7 @@ export default function ShiftsPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600"><Scale className="h-5 w-5" /></div>
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("shifts.discrepancy")}</p>
-                <p className="truncate text-lg font-black text-slate-800">{formatCurrency(pageSummary.discrepancy)}</p>
+                <p className="break-words whitespace-normal line-clamp-2 text-lg font-black text-slate-800">{formatCurrency(pageSummary.discrepancy)}</p>
               </div>
             </CardContent>
           </Card>
@@ -203,7 +203,7 @@ export default function ShiftsPage() {
                   <dl className="grid gap-2 text-xs font-semibold text-emerald-900">
                     <div className="flex justify-between gap-3"><dt>{t("shifts.openingCash")}</dt><dd>{formatCurrency(currentShift.openingCash)}</dd></div>
                     <div className="flex justify-between gap-3"><dt>{t("shifts.openedAt")}</dt><dd className="text-right">{displayShiftDate(currentShift.openedAt)}</dd></div>
-                    <div className="flex justify-between gap-3"><dt>{t("common.note")}</dt><dd className="max-w-[180px] truncate text-right">{currentShift.note || t("common.notAvailable")}</dd></div>
+                    <div className="flex justify-between gap-3"><dt>{t("common.note")}</dt><dd className="max-w-[180px] break-words whitespace-normal line-clamp-2 text-right">{currentShift.note || t("common.notAvailable")}</dd></div>
                   </dl>
                 </div>
               ) : (
@@ -276,7 +276,7 @@ export default function ShiftsPage() {
                 <tbody>
                   {items.map((item) => (
                     <tr key={item.id}>
-                      <Td className="max-w-[180px] truncate font-bold">{item.user?.fullName || item.userId}</Td>
+                      <Td className="max-w-[180px] break-words whitespace-normal line-clamp-2 font-bold">{item.user?.fullName || item.userId}</Td>
                       <Td>{formatCurrency(item.openingCash)}</Td>
                       <Td>{item.closingCash === null ? "-" : formatCurrency(item.closingCash)}</Td>
                       <Td>{item.expectedCash === null ? "-" : formatCurrency(item.expectedCash)}</Td>
@@ -296,3 +296,5 @@ export default function ShiftsPage() {
     </RoleGuard>
   );
 }
+
+

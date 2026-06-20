@@ -164,7 +164,10 @@ model Customer {
   tier      String   @default("SILVER")
   status    String   @default("ACTIVE")
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt      DateTime  @updatedAt
+  lastPurchaseAt DateTime?
+  tierUpdatedAt  DateTime?
+  tierExpiresAt  DateTime?
 
   orders     Order[]
   warranties Warranty[]
@@ -198,6 +201,7 @@ model OrderDetail {
   quantity  Int
   unitPrice Decimal  @db.Decimal(12, 2)
   lineTotal Decimal  @db.Decimal(12, 2)
+  unitCost  Decimal? @db.Decimal(12, 2)
   status    String   @default("ACTIVE")
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt

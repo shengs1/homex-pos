@@ -72,6 +72,7 @@ export type OrderDetail = {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  unitCost?: number | null;
   status: RecordStatus;
   createdAt?: string;
   updatedAt?: string;

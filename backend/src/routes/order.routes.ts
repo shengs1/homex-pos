@@ -873,6 +873,9 @@ router.patch(
         throw new AppError("Có sản phẩm trong đơn không tồn tại", 404);
       }
 
+      const setting = await tx.setting.findFirst();
+      const allowOversell = setting?.allowOversell === true;
+
       for (const detail of order.orderDetails) {
         const product = products.find(
           (productItem) => productItem.id === detail.productId
@@ -889,7 +892,7 @@ router.patch(
           );
         }
 
-        if (product.stockQuantity < detail.quantity) {
+        if (!allowOversell && product.stockQuantity < detail.quantity) {
           throw new AppError(
             `Sản phẩm "${product.name}" không đủ tồn kho. Hiện còn ${product.stockQuantity}`,
             400
@@ -898,6 +901,13 @@ router.patch(
       }
 
       for (const detail of order.orderDetails) {
+        const product = products.find((p) => p.id === detail.productId);
+
+        await tx.orderDetail.update({
+          where: { id: detail.id },
+          data: { unitCost: product?.costPrice || 0 },
+        });
+
         await tx.product.update({
           where: {
             id: detail.productId,

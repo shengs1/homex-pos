@@ -337,6 +337,7 @@ router.get(
           },
           select: {
             quantity: true,
+            unitCost: true,
             product: {
               select: {
                 costPrice: true,
@@ -361,7 +362,8 @@ router.get(
       };
 
       const orderCogs = order.orderDetails.reduce((sum, detail) => {
-        return sum + Number(detail.product.costPrice) * detail.quantity;
+        const cost = detail.unitCost !== null ? Number(detail.unitCost) : Number(detail.product.costPrice);
+        return sum + cost * detail.quantity;
       }, 0);
 
       current.revenue += Number(order.totalAmount);

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckCircle, XCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CheckCircle, Inbox, XCircle } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { DataTable, Td, Th } from "@/components/shared/data-table";
-import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
+import { ErrorState, LoadingState } from "@/components/shared/message-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { PaginationControls } from "@/components/shared/pagination-controls";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -22,6 +23,7 @@ import type { VatInvoiceRequest } from "@/types/domain";
 const PAGE_SIZE = 10;
 
 export default function VatInvoicesPage() {
+  const router = useRouter();
   const { t } = useLanguage();
   const [items, setItems] = useState<VatInvoiceRequest[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -86,7 +88,7 @@ export default function VatInvoicesPage() {
   }
 
   return (
-    <RoleGuard allowedRoles={["ADMIN"]}>
+    <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
       <div className="space-y-6">
         <PageHeader title={t("vat.title")} description={t("vat.description")} />
         <ErrorState message={errorMessage} />
@@ -108,50 +110,77 @@ export default function VatInvoicesPage() {
         </Card>
 
         {isLoading ? <LoadingState /> : null}
-        {!isLoading && items.length === 0 ? <EmptyState /> : null}
+
+        {!isLoading && items.length === 0 ? (
+          <div className="flex min-h-[300px] flex-col items-center justify-center rounded-xl border border-dashed bg-card p-8 text-center shadow-sm">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <Inbox className="h-8 w-8" />
+            </div>
+            <h3 className="mb-2 text-lg font-bold">Chưa có yêu cầu xuất VAT</h3>
+            <p className="max-w-md text-sm text-muted-foreground mb-6">
+              Chọn hóa đơn bán lẻ → Điền thông tin công ty (MST, Tên doanh nghiệp, Email) → Bấm Tạo yêu cầu xuất VAT
+            </p>
+            <Button type="button" onClick={() => router.push("/orders")}>
+              Xem hóa đơn bán lẻ
+            </Button>
+          </div>
+        ) : null}
+
         {!isLoading && items.length > 0 ? (
-          <DataTable>
-            <thead>
-              <tr>
-                <Th>{t("orders.orderCode")}</Th>
-                <Th>{t("vat.companyName")}</Th>
-                <Th>{t("vat.taxCode")}</Th>
-                <Th>{t("orders.total")}</Th>
-                <Th>{t("common.status")}</Th>
-                <Th>{t("common.createdAt")}</Th>
-                <Th>{t("common.actions")}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <Td>{item.order?.orderCode || item.orderId}</Td>
-                  <Td>
-                    <div className="font-medium">{item.companyName}</div>
-                    <div className="text-xs text-muted-foreground">{item.companyAddress}</div>
-                  </Td>
-                  <Td>{item.taxCode}</Td>
-                  <Td>{item.order ? formatCurrency(item.order.totalAmount) : "-"}</Td>
-                  <Td><StatusBadge status={item.status} /></Td>
-                  <Td>{formatDateTime(item.requestedAt)}</Td>
-                  <Td>
-                    {item.status === "PENDING" ? (
-                      <div className="grid min-w-[260px] gap-2">
-                        <Input placeholder={t("vat.redInvoiceCode")} value={redInvoiceCodes[item.id] || ""} onChange={(event) => setRedInvoiceCodes((current) => ({ ...current, [item.id]: event.target.value }))} />
-                        <Input placeholder={t("vat.adminNote")} value={adminNotes[item.id] || ""} onChange={(event) => setAdminNotes((current) => ({ ...current, [item.id]: event.target.value }))} />
-                        <div className="flex gap-2">
-                          <Button type="button" size="sm" onClick={() => approve(item)}><CheckCircle className="h-4 w-4" />{t("vat.approve")}</Button>
-                          <Button type="button" size="sm" variant="outline" onClick={() => reject(item)}><XCircle className="h-4 w-4" />{t("vat.reject")}</Button>
-                        </div>
-                      </div>
-                    ) : (
-                      item.redInvoiceCode || item.adminNote || "-"
-                    )}
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </DataTable>
+          <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
+            <CardContent className="p-0 overflow-x-auto">
+              <DataTable className="rounded-none border-0 shadow-none min-w-[1000px]">
+                <thead>
+                  <tr>
+                    <Th>Mã yêu cầu</Th>
+                    <Th>{t("orders.orderCode")}</Th>
+                    <Th>{t("vat.companyName")}</Th>
+                    <Th>{t("vat.taxCode")}</Th>
+                    <Th>Email</Th>
+                    <Th>{t("orders.total")}</Th>
+                    <Th>{t("common.status")}</Th>
+                    <Th>{t("common.createdAt")}</Th>
+                    <Th className="text-right">{t("common.actions")}</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <Td className="font-semibold text-muted-foreground">#{item.id}</Td>
+                      <Td className="font-medium">{item.order?.orderCode || item.orderId}</Td>
+                      <Td>
+                        <div className="font-medium">{item.companyName}</div>
+                        <div className="text-xs text-muted-foreground">{item.companyAddress}</div>
+                      </Td>
+                      <Td>{item.taxCode}</Td>
+                      <Td>{item.buyerEmail || "-"}</Td>
+                      <Td className="font-medium">{item.order ? formatCurrency(item.order.totalAmount) : "-"}</Td>
+                      <Td><StatusBadge status={item.status} /></Td>
+                      <Td>{formatDateTime(item.requestedAt)}</Td>
+                      <Td className="text-right">
+                        {item.status === "PENDING" ? (
+                          <div className="flex min-w-[260px] flex-col items-end gap-2">
+                            <Input className="h-8 text-xs" placeholder={t("vat.redInvoiceCode")} value={redInvoiceCodes[item.id] || ""} onChange={(event) => setRedInvoiceCodes((current) => ({ ...current, [item.id]: event.target.value }))} />
+                            <Input className="h-8 text-xs" placeholder={t("vat.adminNote")} value={adminNotes[item.id] || ""} onChange={(event) => setAdminNotes((current) => ({ ...current, [item.id]: event.target.value }))} />
+                            <div className="flex w-full gap-2">
+                              <Button type="button" size="sm" className="flex-1" onClick={() => approve(item)}><CheckCircle className="h-3 w-3 mr-1" />{t("vat.approve")}</Button>
+                              <Button type="button" size="sm" className="flex-1" variant="outline" onClick={() => reject(item)}><XCircle className="h-3 w-3 mr-1" />{t("vat.reject")}</Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-sm">
+                            {item.redInvoiceCode ? <div className="font-semibold text-emerald-600">{item.redInvoiceCode}</div> : null}
+                            {item.adminNote ? <div className="text-xs text-muted-foreground">{item.adminNote}</div> : null}
+                            {!item.redInvoiceCode && !item.adminNote ? "-" : null}
+                          </div>
+                        )}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            </CardContent>
+          </Card>
         ) : null}
         <PaginationControls pagination={pagination} onPageChange={setPage} />
       </div>

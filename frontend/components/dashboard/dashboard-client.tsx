@@ -13,7 +13,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -479,7 +479,9 @@ export default function DashboardPage() {
                   <XAxis type="number" tick={{ fontSize: 10, fontWeight: 700, fill: "#94a3b8" }} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fontWeight: 700, fill: "#475569" }} width={120} />
                   <Tooltip />
-                  <Bar dataKey="quantity" name={t("dashboard.quantity")} fill="#0f766e" radius={[0, 6, 6, 0]} />
+                  <Bar dataKey="quantity" name={t("dashboard.quantity")} fill="#0f766e" radius={[0, 6, 6, 0]}>
+                    <LabelList dataKey="quantity" position="right" style={{ fontSize: 10, fontWeight: 700, fill: "#475569" }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             ) : (

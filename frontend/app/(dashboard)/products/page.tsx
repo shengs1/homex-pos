@@ -592,7 +592,7 @@ export default function ProductsPage() {
     printWindow.document.close();
   }
 
-  const columns = useMemo<ColumnDef<Product>[]>(() => [
+  const columns = useMemo<any[]>(() => [
     columnHelper.display({
       id: "select",
       size: 42,
@@ -626,7 +626,7 @@ export default function ProductsPage() {
       id: "sku",
       size: 108,
       header: t("products.sku"),
-      cell: ({ getValue }) => <div className="truncate font-medium" title={getValue()}>{getValue()}</div>,
+      cell: ({ getValue }) => <div className="break-words whitespace-normal line-clamp-2 font-medium" title={getValue()}>{getValue()}</div>,
       meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
     }),
     columnHelper.display({
@@ -668,7 +668,7 @@ export default function ProductsPage() {
       cell: ({ row }) => (
         <div className="min-w-0">
           <div className="line-clamp-2 font-medium" title={row.original.name}>{row.original.name}</div>
-          <div className="truncate text-xs text-muted-foreground">{t("products.updatedAt", { date: formatDateTime(row.original.updatedAt) })}</div>
+          <div className="break-words whitespace-normal line-clamp-2 text-xs text-muted-foreground">{t("products.updatedAt", { date: formatDateTime(row.original.updatedAt) })}</div>
         </div>
       ),
       meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
@@ -677,14 +677,14 @@ export default function ProductsPage() {
       id: "category",
       size: 112,
       header: t("products.category"),
-      cell: ({ row }) => <div className="truncate" title={row.original.category?.name || String(row.original.categoryId)}>{row.original.category?.name || row.original.categoryId}</div>,
+      cell: ({ row }) => <div className="break-words whitespace-normal line-clamp-2" title={row.original.category?.name || String(row.original.categoryId)}>{row.original.category?.name || row.original.categoryId}</div>,
       meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
     }),
     columnHelper.display({
       id: "supplier",
       size: 112,
       header: t("products.supplierShort"),
-      cell: ({ row }) => <div className="truncate" title={row.original.supplier?.name || String(row.original.supplierId)}>{row.original.supplier?.name || row.original.supplierId}</div>,
+      cell: ({ row }) => <div className="break-words whitespace-normal line-clamp-2" title={row.original.supplier?.name || String(row.original.supplierId)}>{row.original.supplier?.name || row.original.supplierId}</div>,
       meta: { headerClassName: "px-2 whitespace-nowrap", cellClassName: "px-2" },
     }),
     columnHelper.accessor("salePrice", {
@@ -696,7 +696,7 @@ export default function ProductsPage() {
         const originalPrice = Number(row.original.originalPrice || 0);
 
         return (
-          <div className="truncate" title={formatCurrency(salePrice)}>
+          <div className="break-words whitespace-normal line-clamp-2" title={formatCurrency(salePrice)}>
             {originalPrice > salePrice ? <div className="text-xs text-muted-foreground line-through">{formatCurrency(originalPrice)}</div> : null}
             <div className="font-medium">{formatCurrency(salePrice)}</div>
           </div>
@@ -905,7 +905,7 @@ export default function ProductsPage() {
                     </div>
                     <div className="min-w-0 text-sm">
                       <p className="font-medium">Ảnh xem trước</p>
-                      <p className="truncate text-muted-foreground">{currentImageUrl}</p>
+                      <p className="break-words whitespace-normal line-clamp-2 text-muted-foreground">{currentImageUrl}</p>
                     </div>
                   </div>
                 ) : null}
@@ -1039,3 +1039,5 @@ export default function ProductsPage() {
     </div>
   );
 }
+
+
