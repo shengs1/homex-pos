@@ -15,7 +15,7 @@ export function PaginationControls({ pagination, onPageChange }: PaginationContr
   if (!pagination) return null;
 
   return (
-    <div className="flex flex-col gap-3 border-t p-4 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col gap-3 pt-4 text-xs font-semibold text-slate-500 md:flex-row md:items-center md:justify-between">
       <span>
         {t("pagination.info", {
           page: pagination.page,
@@ -27,14 +27,19 @@ export function PaginationControls({ pagination, onPageChange }: PaginationContr
         <Button
           variant="outline"
           size="sm"
+          className="h-8 min-w-8 rounded-lg px-3"
           disabled={pagination.page <= 1}
           onClick={() => onPageChange(pagination.page - 1)}
         >
           {t("common.previous")}
         </Button>
+        <div className="flex h-8 min-w-8 items-center justify-center rounded-lg bg-primary px-3 text-xs font-black text-primary-foreground">
+          {pagination.page}
+        </div>
         <Button
           variant="outline"
           size="sm"
+          className="h-8 min-w-8 rounded-lg px-3"
           disabled={pagination.page >= pagination.totalPages}
           onClick={() => onPageChange(pagination.page + 1)}
         >

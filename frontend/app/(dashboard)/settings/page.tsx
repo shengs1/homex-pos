@@ -89,7 +89,7 @@ export default function SettingsPage() {
       <div className="space-y-6">
         <PageHeader title={t("settings.title")} description={t("settings.description")} />
         <ErrorState message={errorMessage} />
-        {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+        {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
         {isLoading ? <LoadingState /> : null}
 
         <form onSubmit={onSubmit} className="space-y-6">

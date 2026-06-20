@@ -121,9 +121,9 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
   }
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <div className="fixed inset-y-0 left-0 z-30 hidden md:block">
-        <Sidebar role={user.role} collapsed={isSidebarCollapsed} onToggleCollapsed={handleToggleSidebar} />
+    <div className="flex h-screen w-full bg-background overflow-hidden text-foreground">
+      <div className="z-30 hidden h-full md:block shrink-0">
+        <Sidebar role={user.role} collapsed={isSidebarCollapsed} onToggleCollapsed={handleToggleSidebar} onLogout={handleLogout} />
       </div>
 
       {isMobileSidebarOpen ? (
@@ -131,29 +131,29 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
           <button
             type="button"
             aria-label={t("topbar.closeMenu")}
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
             onClick={() => setIsMobileSidebarOpen(false)}
           />
-          <div className="relative h-full w-72">
-            <Sidebar role={user.role} onNavigate={() => setIsMobileSidebarOpen(false)} />
+          <div className="relative h-full w-64 shadow-2xl">
+            <Sidebar role={user.role} onNavigate={() => setIsMobileSidebarOpen(false)} onLogout={handleLogout} />
           </div>
         </div>
       ) : null}
 
       {toastMessage ? (
-        <div className="fixed right-4 top-20 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-destructive/30 bg-destructive px-4 py-3 text-sm text-destructive-foreground shadow-lg">
+        <div className="fixed right-4 top-20 z-50 flex max-w-sm items-start gap-3 rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive font-bold shadow-lg backdrop-blur-md">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{toastMessage}</span>
         </div>
       ) : null}
 
-      <div className={cn("transition-all duration-200", isSidebarCollapsed ? "md:pl-20" : "md:pl-72")}>
+      <div className="flex flex-col flex-1 min-w-0 h-screen bg-slate-50">
         <Topbar user={user} onMenuClick={() => setIsMobileSidebarOpen(true)} onLogout={handleLogout} />
         <NetworkStatusBar />
-        <main className="p-3 md:p-4">
+        <main className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-5 md:p-6">
           <ErrorBoundary>
             {isRouteBlocked ? (
-              <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground shadow-sm">{noPermissionMessage}</div>
+              <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground shadow-sm">{noPermissionMessage}</div>
             ) : (
               children
             )}

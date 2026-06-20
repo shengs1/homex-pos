@@ -278,7 +278,7 @@ export default function OrdersPage() {
         </PageHeader>
 
         <ErrorState message={errorMessage} />
-        {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+        {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
 
         <Card>
           <CardContent className="pt-6">
@@ -315,7 +315,7 @@ export default function OrdersPage() {
         {!isLoading && items.length === 0 ? <EmptyState actionLabel={t("common.addNew")} onAction={() => router.push("/pos")} /> : null}
 
         {!isLoading && items.length > 0 ? (
-          <Card className="overflow-hidden">
+          <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
             <CardContent className="p-0">
               <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
                 <colgroup>

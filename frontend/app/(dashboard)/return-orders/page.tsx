@@ -106,7 +106,7 @@ export default function ReturnOrdersPage() {
       <div className="space-y-6">
         <PageHeader title={t("returnOrders.title")} description={t("returnOrders.description")} />
         <ErrorState message={errorMessage} />
-        {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+        {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
 
         <Card>
           <CardHeader>
@@ -165,28 +165,32 @@ export default function ReturnOrdersPage() {
         {isLoading ? <LoadingState /> : null}
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
         {!isLoading && items.length > 0 ? (
-          <DataTable>
-            <thead>
-              <tr>
-                <Th>{t("common.code")}</Th>
-                <Th>{t("orders.orderCode")}</Th>
-                <Th>{t("orders.total")}</Th>
-                <Th>{t("inventory.operator")}</Th>
-                <Th>{t("common.createdAt")}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <Td>{item.returnCode}</Td>
-                  <Td>{item.order?.orderCode || item.orderId}</Td>
-                  <Td>{formatCurrency(item.totalAmount)}</Td>
-                  <Td>{item.user?.fullName || item.userId}</Td>
-                  <Td>{formatDateTime(item.createdAt)}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </DataTable>
+          <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
+            <CardContent className="p-0">
+              <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
+                <thead>
+                  <tr>
+                    <Th>{t("common.code")}</Th>
+                    <Th>{t("orders.orderCode")}</Th>
+                    <Th>{t("orders.total")}</Th>
+                    <Th>{t("inventory.operator")}</Th>
+                    <Th>{t("common.createdAt")}</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <Td>{item.returnCode}</Td>
+                      <Td>{item.order?.orderCode || item.orderId}</Td>
+                      <Td className="font-semibold">{formatCurrency(item.totalAmount)}</Td>
+                      <Td>{item.user?.fullName || item.userId}</Td>
+                      <Td>{formatDateTime(item.createdAt)}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            </CardContent>
+          </Card>
         ) : null}
         <PaginationControls pagination={pagination} onPageChange={setPage} />
       </div>

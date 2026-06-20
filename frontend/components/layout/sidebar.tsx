@@ -6,13 +6,12 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Boxes,
-  ChevronLeft,
-  ChevronRight,
   CreditCard,
   FileClock,
   FileText,
   Home,
   LayoutDashboard,
+  LogOut,
   Package,
   ClipboardList,
   ReceiptText,
@@ -26,7 +25,6 @@ import {
   Users,
   Warehouse,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/language-context";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types/auth";
@@ -68,9 +66,10 @@ type SidebarProps = {
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
   onNavigate?: () => void;
+  onLogout?: () => void;
 };
 
-export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate }: SidebarProps) {
+export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate, onLogout }: SidebarProps) {
   const pathname = usePathname();
   const { t } = useLanguage();
 
@@ -81,63 +80,71 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
   return (
     <aside
       className={cn(
-        "relative flex h-full flex-col border-r border-slate-900 bg-slate-950 text-slate-100 shadow-2xl shadow-slate-950/20 transition-all duration-200",
-        collapsed ? "w-20" : "w-72"
+        "relative flex h-full flex-col bg-slate-900 text-slate-400 transition-all duration-200",
+        collapsed ? "w-20" : "w-64"
       )}
     >
-      <div className={cn("flex h-14 items-center border-b border-white/10 px-4", collapsed ? "justify-center" : "gap-3")}>
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-white ring-1 ring-white/15">
+      {/* Logo Header */}
+      <div className={cn("flex h-16 shrink-0 items-center border-b border-slate-800/40 px-5", collapsed ? "justify-center" : "gap-3")}>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
           <Home className="h-5 w-5" />
         </div>
 
         {!collapsed ? (
           <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-bold leading-none text-white">Homex POS</p>
-            <p className="mt-1 truncate text-xs text-slate-400">{t("app.subtitle")}</p>
+            <p className="truncate text-sm font-black leading-none tracking-tight text-white">Homex POS</p>
+            <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t("app.subtitle")}</p>
           </div>
-        ) : null}
-
-        {onToggleCollapsed ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "hidden text-slate-300 hover:bg-white/10 hover:text-white md:inline-flex",
-              collapsed && "absolute left-[4.25rem] bg-slate-950 shadow-lg"
-            )}
-            title={collapsed ? t("topbar.expandSidebar") : t("topbar.collapseSidebar")}
-            onClick={onToggleCollapsed}
-          >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </Button>
         ) : null}
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {visibleMenuItems.map((item) => {
-          const Icon = item.icon;
-          const label = t(item.titleKey);
-          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-4 scrollbar-thin">
+        <ul className="space-y-0.5 px-3">
+          {visibleMenuItems.map((item) => {
+            const Icon = item.icon;
+            const label = t(item.titleKey);
+            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={collapsed ? label : undefined}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white",
-                collapsed ? "justify-center" : "gap-3",
-                isActive && "bg-white text-slate-950 shadow-sm hover:bg-white hover:text-slate-950"
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed ? <span className="truncate">{label}</span> : null}
-            </Link>
-          );
-        })}
+            return (
+              <li key={item.href}>
+                <Link
+                  href={item.href}
+                  title={collapsed ? label : undefined}
+                  onClick={onNavigate}
+                  className={cn(
+                    "flex items-center rounded-xl px-4 py-2.5 transition-all duration-200",
+                    collapsed ? "justify-center" : "gap-3",
+                    isActive
+                      ? "bg-primary text-white font-bold shadow-md shadow-primary/20"
+                      : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                  )}
+                >
+                  <Icon className="h-5 w-5 shrink-0" />
+                  {!collapsed ? <span className="truncate text-xs font-bold uppercase tracking-wide">{label}</span> : null}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       </nav>
+
+      {/* Logout Button - Bottom */}
+      {onLogout ? (
+        <div className="shrink-0 border-t border-slate-800/40 p-3">
+          <button
+            type="button"
+            onClick={onLogout}
+            className={cn(
+              "flex w-full items-center justify-center rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 transition-all duration-200 hover:bg-red-950/30 hover:text-red-400",
+              collapsed ? "gap-0" : "gap-2"
+            )}
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!collapsed ? <span>{t("topbar.logout")}</span> : null}
+          </button>
+        </div>
+      ) : null}
     </aside>
   );
 }

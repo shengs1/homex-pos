@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, LogOut, Menu } from "lucide-react";
+import { Bell, Calendar, LogOut, Menu } from "lucide-react";
 import { LanguageToggle } from "@/components/shared/language-toggle";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useLanguage } from "@/contexts/language-context";
@@ -17,10 +16,18 @@ type TopbarProps = {
   onLogout: () => void;
 };
 
+function getUserInitials(name: string): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+  return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+}
+
 export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
   const { t } = useLanguage();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   async function loadNotifications() {
     try {
@@ -39,31 +46,50 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
     return () => window.clearInterval(timer);
   }, []);
 
+  // Real-time clock
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   async function markAllRead() {
     await notificationService.markAllRead();
     await loadNotifications();
   }
 
+  const formattedTime = currentTime.toLocaleTimeString("vi-VN", { hour12: false });
+  const formattedDate = currentTime.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center justify-between border-b border-border/60 bg-background/80 px-4 shadow-sm shadow-slate-950/5 backdrop-blur-xl md:px-5">
+    <header className="z-20 flex h-16 shrink-0 items-center justify-between border-b border-border/50 bg-white px-4 md:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <Button variant="ghost" size="icon" className="h-9 w-9 min-w-9 md:hidden" onClick={onMenuClick}>
           <Menu className="h-5 w-5" />
         </Button>
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">{t("topbar.greeting")}</p>
-          <h1 className="truncate text-sm font-semibold md:text-base">{user.fullName}</h1>
+
+        {/* Page title area with icon */}
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
+            <Calendar className="h-3.5 w-3.5 text-slate-400" />
+            <span>{formattedDate}</span>
+          </div>
+          <div className="hidden md:flex items-center gap-2 rounded-xl bg-slate-900 px-3.5 py-1.5 text-xs font-bold text-white shadow-sm">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-mono tracking-wider">{formattedTime}</span>
+          </div>
         </div>
       </div>
 
       <div className="flex items-center gap-2 md:gap-3">
         <LanguageToggle />
+
+        {/* Notifications */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button type="button" variant="outline" size="icon" className="relative h-9 w-9 min-w-9 bg-background/80" title={t("notifications.title")}>
+            <Button type="button" variant="ghost" size="icon" className="relative h-9 w-9 min-w-9 text-slate-500 hover:text-slate-900" title={t("notifications.title")}>
               <Bell className="h-4 w-4" />
               {unreadCount > 0 ? (
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground">
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-destructive-foreground">
                   {unreadCount > 99 ? "99+" : unreadCount}
                 </span>
               ) : null}
@@ -89,11 +115,17 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
             )}
           </DropdownMenuContent>
         </DropdownMenu>
-        <Badge variant={user.role === "ADMIN" ? "default" : "secondary"}>{user.role}</Badge>
-        <Button variant="outline" size="sm" className="bg-background/80" onClick={onLogout}>
-          <LogOut className="h-4 w-4" />
-          <span className="hidden sm:inline">{t("topbar.logout")}</span>
-        </Button>
+
+        {/* Profile Avatar + Name */}
+        <div className="flex items-center gap-2.5 border-l border-slate-200 pl-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[11px] font-black text-white shadow-sm">
+            {getUserInitials(user.fullName)}
+          </div>
+          <div className="hidden leading-none md:block">
+            <p className="text-xs font-bold text-slate-800">{user.fullName}</p>
+            <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{user.role}</p>
+          </div>
+        </div>
       </div>
     </header>
   );

@@ -310,7 +310,7 @@ export default function WarrantiesPage() {
       <div className="w-full min-w-0 space-y-6 overflow-visible">
         <PageHeader title={t("warranties.title")} description={t("warranties.description")} />
         <ErrorState message={errorMessage} />
-        {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+        {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
 
         {/* Unified filter and lookup toolbar */}
         <Card className="w-full min-w-0">

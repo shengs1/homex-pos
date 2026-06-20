@@ -43,7 +43,7 @@ export default function InventoryPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [type, setType] = useState("");
-  const [inventoryMode, setInventoryMode] = useState<"IMPORT" | "ADJUST">("IMPORT");
+  const [inventoryMode, setInventoryMode] = useState<"LIST" | "IMPORT" | "ADJUST">("LIST");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
@@ -110,6 +110,7 @@ export default function InventoryPage() {
       await inventoryService.importStock(values);
       setSuccessMessage(t("inventory.importSuccess"));
       importForm.reset({ productId: 0, quantity: 1, note: "" });
+      setInventoryMode("LIST");
       await loadAll(page);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error));
@@ -123,6 +124,7 @@ export default function InventoryPage() {
       await inventoryService.adjustStock(values);
       setSuccessMessage(t("inventory.adjustSuccess"));
       adjustForm.reset({ productId: 0, newQuantity: 0, note: "" });
+      setInventoryMode("LIST");
       await loadAll(page);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error));
@@ -181,33 +183,74 @@ export default function InventoryPage() {
       <div className="space-y-6">
         <PageHeader title={t("inventory.title")} description={t("inventory.description")} />
         <ErrorState message={errorMessage} />
-        {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+        {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
 
-        <div className="grid gap-6 xl:grid-cols-2">
+        {inventoryMode === "LIST" ? (
+          <div className="flex flex-wrap gap-4">
+            <Button className="flex items-center gap-2" size="lg" onClick={() => setInventoryMode("IMPORT")}>
+              <PackagePlus className="h-5 w-5" />
+              {t("inventory.importStock")}
+            </Button>
+            <Button variant="secondary" className="flex items-center gap-2" size="lg" onClick={() => setInventoryMode("ADJUST")}>
+              <SlidersHorizontal className="h-5 w-5" />
+              {t("inventory.adjustStock")}
+            </Button>
+          </div>
+        ) : null}
+
+        {inventoryMode === "IMPORT" ? (
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><PackagePlus className="h-5 w-5" />{t("inventory.importStock")}</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <PackagePlus className="h-5 w-5" />
+                  {t("inventory.importStock")}
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setInventoryMode("LIST")}>
+                  {t("common.cancel")}
+                </Button>
+              </CardTitle>
+            </CardHeader>
             <CardContent>
-              <form onSubmit={importForm.handleSubmit(submitImport)} className="space-y-3">
+              <form onSubmit={importForm.handleSubmit(submitImport)} className="max-w-2xl space-y-4">
                 <div className="space-y-2"><Label>{t("inventory.product")}</Label><ProductCombobox products={products} value={Number(importForm.watch("productId") || 0)} onChange={(value) => importForm.setValue("productId", value, { shouldValidate: true })} />{importForm.formState.errors.productId ? <p className="text-sm text-destructive">{importForm.formState.errors.productId.message}</p> : null}</div>
                 <div className="space-y-2"><Label>{t("inventory.importQuantity")}</Label><Input type="number" {...importForm.register("quantity")} />{importForm.formState.errors.quantity ? <p className="text-sm text-destructive">{importForm.formState.errors.quantity.message}</p> : null}</div>
                 <div className="space-y-2"><Label>{t("inventory.note")}</Label><Textarea {...importForm.register("note")} /></div>
-                <Button type="submit" disabled={importForm.formState.isSubmitting}>{t("inventory.importStock")}</Button>
+                <div className="flex gap-2 pt-2">
+                  <Button type="submit" disabled={importForm.formState.isSubmitting}>{t("inventory.importStock")}</Button>
+                  <Button type="button" variant="outline" onClick={() => setInventoryMode("LIST")}>{t("common.cancel")}</Button>
+                </div>
               </form>
             </CardContent>
           </Card>
+        ) : null}
 
+        {inventoryMode === "ADJUST" ? (
           <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><SlidersHorizontal className="h-5 w-5" />{t("inventory.adjustStock")}</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="h-5 w-5" />
+                  {t("inventory.adjustStock")}
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setInventoryMode("LIST")}>
+                  {t("common.cancel")}
+                </Button>
+              </CardTitle>
+            </CardHeader>
             <CardContent>
-              <form onSubmit={adjustForm.handleSubmit(submitAdjust)} className="space-y-3">
+              <form onSubmit={adjustForm.handleSubmit(submitAdjust)} className="max-w-2xl space-y-4">
                 <div className="space-y-2"><Label>{t("inventory.product")}</Label><ProductCombobox products={products} value={Number(adjustForm.watch("productId") || 0)} onChange={(value) => adjustForm.setValue("productId", value, { shouldValidate: true })} />{adjustForm.formState.errors.productId ? <p className="text-sm text-destructive">{adjustForm.formState.errors.productId.message}</p> : null}</div>
                 <div className="space-y-2"><Label>{t("inventory.newQuantity")}</Label><Input type="number" {...adjustForm.register("newQuantity")} />{adjustForm.formState.errors.newQuantity ? <p className="text-sm text-destructive">{adjustForm.formState.errors.newQuantity.message}</p> : null}</div>
                 <div className="space-y-2"><Label>{t("inventory.note")}</Label><Textarea {...adjustForm.register("note")} /></div>
-                <Button type="submit" disabled={adjustForm.formState.isSubmitting}>{t("common.adjust")}</Button>
+                <div className="flex gap-2 pt-2">
+                  <Button type="submit" disabled={adjustForm.formState.isSubmitting}>{t("common.adjust")}</Button>
+                  <Button type="button" variant="outline" onClick={() => setInventoryMode("LIST")}>{t("common.cancel")}</Button>
+                </div>
               </form>
             </CardContent>
           </Card>
-        </div>
+        ) : null}
 
         <Card>
           <CardHeader><CardTitle>{t("inventory.lowStockTitle")}</CardTitle></CardHeader>
@@ -247,7 +290,7 @@ export default function InventoryPage() {
         {!isLoading && transactions.length > 0 ? (
           <DataTable>
             <thead><tr><Th>{t("common.id")}</Th><Th>{t("inventory.product")}</Th><Th>{t("inventory.type")}</Th><Th>{t("inventory.quantity")}</Th><Th>{t("inventory.operator")}</Th><Th>{t("common.order")}</Th><Th>{t("inventory.note")}</Th><Th>{t("common.createdAt")}</Th></tr></thead>
-            <tbody>{transactions.map((item) => <tr key={item.id}><Td>{item.id}</Td><Td>{item.product?.name || item.productId}</Td><Td><StatusBadge status={item.type} /></Td><Td>{item.quantity}</Td><Td>{item.user?.fullName || item.userId}</Td><Td>{item.order?.orderCode || "-"}</Td><Td>{item.note || "-"}</Td><Td>{formatDateTime(item.createdAt)}</Td></tr>)}</tbody>
+            <tbody>{transactions.map((item) => <tr key={item.id}><Td>{item.id}</Td><Td>{item.product?.name || item.productId}</Td><Td><div className="flex items-center gap-2">{getTransactionIcon(item.type)} <StatusBadge status={item.type} /></div></Td><Td className="font-semibold">{item.quantity > 0 ? `+${item.quantity}` : item.quantity}</Td><Td>{item.user?.fullName || item.userId}</Td><Td>{item.order?.orderCode || "-"}</Td><Td>{item.note || "-"}</Td><Td>{formatDateTime(item.createdAt)}</Td></tr>)}</tbody>
           </DataTable>
         ) : null}
         <PaginationControls pagination={pagination} onPageChange={setPage} />

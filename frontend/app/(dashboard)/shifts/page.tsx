@@ -65,34 +65,38 @@ export default function ShiftsPage() {
         {isLoading ? <LoadingState /> : null}
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
         {!isLoading && items.length > 0 ? (
-          <DataTable>
-            <thead>
-              <tr>
-                <Th>{t("shifts.cashier")}</Th>
-                <Th>{t("shifts.openingCash")}</Th>
-                <Th>{t("shifts.closingCash")}</Th>
-                <Th>{t("shifts.expectedCash")}</Th>
-                <Th>{t("shifts.discrepancy")}</Th>
-                <Th>{t("common.status")}</Th>
-                <Th>{t("shifts.openedAt")}</Th>
-                <Th>{t("shifts.closedAt")}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id}>
-                  <Td>{item.user?.fullName || item.userId}</Td>
-                  <Td>{formatCurrency(item.openingCash)}</Td>
-                  <Td>{item.closingCash === null ? "-" : formatCurrency(item.closingCash)}</Td>
-                  <Td>{item.expectedCash === null ? "-" : formatCurrency(item.expectedCash)}</Td>
-                  <Td className={item.discrepancyAmount ? "font-semibold text-destructive" : ""}>{item.discrepancyAmount === null ? "-" : formatCurrency(item.discrepancyAmount)}</Td>
-                  <Td><StatusBadge status={item.status} /></Td>
-                  <Td>{formatDateTime(item.openedAt)}</Td>
-                  <Td>{formatDateTime(item.closedAt)}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </DataTable>
+          <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
+            <CardContent className="p-0">
+              <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
+                <thead>
+                  <tr>
+                    <Th>{t("shifts.cashier")}</Th>
+                    <Th>{t("shifts.openingCash")}</Th>
+                    <Th>{t("shifts.closingCash")}</Th>
+                    <Th>{t("shifts.expectedCash")}</Th>
+                    <Th>{t("shifts.discrepancy")}</Th>
+                    <Th>{t("common.status")}</Th>
+                    <Th>{t("shifts.openedAt")}</Th>
+                    <Th>{t("shifts.closedAt")}</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id}>
+                      <Td>{item.user?.fullName || item.userId}</Td>
+                      <Td>{formatCurrency(item.openingCash)}</Td>
+                      <Td>{item.closingCash === null ? "-" : formatCurrency(item.closingCash)}</Td>
+                      <Td>{item.expectedCash === null ? "-" : formatCurrency(item.expectedCash)}</Td>
+                      <Td className={item.discrepancyAmount ? "font-semibold text-destructive" : ""}>{item.discrepancyAmount === null ? "-" : formatCurrency(item.discrepancyAmount)}</Td>
+                      <Td><StatusBadge status={item.status} /></Td>
+                      <Td>{formatDateTime(item.openedAt)}</Td>
+                      <Td>{formatDateTime(item.closedAt)}</Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            </CardContent>
+          </Card>
         ) : null}
         <PaginationControls pagination={pagination} onPageChange={setPage} />
       </div>

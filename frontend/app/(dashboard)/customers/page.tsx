@@ -71,12 +71,60 @@ export default function CustomersPage() {
       <div className="space-y-6">
         <PageHeader title={t("customers.title")} description={t("customers.description")}><Button onClick={openCreateForm}><Plus className="h-4 w-4" />{t("customers.add")}</Button></PageHeader>
         <ErrorState message={errorMessage} />
-        {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+        {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
         <Card><CardContent className="pt-6"><form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[1fr_180px_auto_auto]"><Input placeholder={t("customers.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} /><Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="ACTIVE">{t("status.ACTIVE")}</option><option value="INACTIVE">{t("status.INACTIVE")}</option><option value="">{t("common.all")}</option></Select><Button type="submit">{t("common.search")}</Button><Button type="button" variant="outline" onClick={exportCustomersCsv}><Download className="h-4 w-4" />{t("common.export")}</Button></form></CardContent></Card>
         {isFormOpen ? <Card><CardHeader><CardTitle>{editingItem ? t("customers.updateTitle") : t("customers.createTitle")}</CardTitle></CardHeader><CardContent><form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2"><div className="space-y-2"><Label>{t("customers.fullName")}</Label><Input {...form.register("fullName")} />{form.formState.errors.fullName ? <p className="text-sm text-destructive">{form.formState.errors.fullName.message}</p> : null}</div><div className="space-y-2"><Label>{t("common.phone")}</Label><Input {...form.register("phone")} />{form.formState.errors.phone ? <p className="text-sm text-destructive">{form.formState.errors.phone.message}</p> : null}</div><div className="space-y-2"><Label>{t("common.email")}</Label><Input {...form.register("email")} />{form.formState.errors.email ? <p className="text-sm text-destructive">{form.formState.errors.email.message}</p> : null}</div><div className="space-y-2 md:col-span-2"><Label>{t("customers.address")}</Label><Textarea {...form.register("address")} /></div><div className="flex gap-2 md:col-span-2"><Button type="submit" disabled={form.formState.isSubmitting}>{editingItem ? t("common.saveChanges") : t("common.createNew")}</Button><Button variant="outline" onClick={() => setIsFormOpen(false)}>{t("common.cancel")}</Button></div></form></CardContent></Card> : null}
         {isLoading ? <LoadingState /> : null}
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
-        {!isLoading && items.length > 0 ? <DataTable><thead><tr><Th className="w-[90px] whitespace-nowrap">{t("common.no")}</Th><Th>{t("customers.title")}</Th><Th>{t("common.phone")}</Th><Th>{t("common.email")}</Th><Th>{t("customers.points")}</Th><Th>{t("common.status")}</Th><Th>{t("common.updatedAt")}</Th><Th className="text-right">{t("common.actions")}</Th></tr></thead><tbody>{items.map((item, index) => <tr key={item.id}><Td className="font-medium">{(page - 1) * PAGE_SIZE + index + 1}</Td><Td><div className="font-medium">{item.fullName}</div><div className="text-xs text-muted-foreground">{item.address || "-"}</div></Td><Td>{item.phone}</Td><Td>{item.email || "-"}</Td><Td>{formatNumber(item.points)}</Td><Td><StatusBadge status={item.status} /></Td><Td>{formatDateTime(item.updatedAt)}</Td><Td className="text-right">{isAdmin ? <ActionMenu label={t("common.actions")} items={[{ label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(item) }, item.status === "ACTIVE" ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(item), variant: "destructive" } : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(item) }]} /> : "-"}</Td></tr>)}</tbody></DataTable> : null}
+        {!isLoading && items.length > 0 ? (
+          <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
+            <CardContent className="p-0">
+              <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
+                <thead>
+                  <tr>
+                    <Th className="w-[90px] whitespace-nowrap">{t("common.no")}</Th>
+                    <Th>{t("customers.title")}</Th>
+                    <Th>{t("common.phone")}</Th>
+                    <Th>{t("common.email")}</Th>
+                    <Th>{t("customers.points")}</Th>
+                    <Th>{t("common.status")}</Th>
+                    <Th>{t("common.updatedAt")}</Th>
+                    <Th className="text-right">{t("common.actions")}</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item, index) => (
+                    <tr key={item.id}>
+                      <Td className="font-medium">{(page - 1) * PAGE_SIZE + index + 1}</Td>
+                      <Td>
+                        <div className="font-medium">{item.fullName}</div>
+                        <div className="text-xs text-muted-foreground">{item.address || "-"}</div>
+                      </Td>
+                      <Td>{item.phone}</Td>
+                      <Td>{item.email || "-"}</Td>
+                      <Td>{formatNumber(item.points)}</Td>
+                      <Td><StatusBadge status={item.status} /></Td>
+                      <Td>{formatDateTime(item.updatedAt)}</Td>
+                      <Td className="text-right">
+                        {isAdmin ? (
+                          <ActionMenu
+                            label={t("common.actions")}
+                            items={[
+                              { label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(item) },
+                              item.status === "ACTIVE"
+                                ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(item), variant: "destructive" }
+                                : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(item) }
+                            ]}
+                          />
+                        ) : "-"}
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </DataTable>
+            </CardContent>
+          </Card>
+        ) : null}
         <PaginationControls pagination={pagination} onPageChange={setPage} />
       </div>
     </RoleGuard>

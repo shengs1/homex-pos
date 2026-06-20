@@ -765,7 +765,7 @@ export default function ProductsPage() {
       </PageHeader>
 
       <ErrorState message={errorMessage} />
-      {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+      {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
       {toastMessage ? <div className="fixed right-5 top-5 z-[60] rounded-lg border bg-card px-4 py-3 text-sm font-medium shadow-xl">{toastMessage}</div> : null}
 
       {/* Filter toolbar and grouped product actions */}
@@ -925,7 +925,7 @@ export default function ProductsPage() {
       ) : null}
 
       {/* Product TanStack Data Table */}
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
         <CardContent className="p-0">
           <TanStackDataTable
             table={table}

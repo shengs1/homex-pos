@@ -2,24 +2,25 @@
 
 :root {
   --background: #f8fafc;
-  --foreground: #0f172a;
+  --foreground: #1e293b;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #1e293b;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
-  --primary: #2563eb;
+  --popover-foreground: #1e293b;
+  --primary: #0f766e;
   --primary-foreground: #ffffff;
-  --secondary: #e2e8f0;
-  --secondary-foreground: #0f172a;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #1e293b;
   --muted: #f1f5f9;
   --muted-foreground: #64748b;
-  --accent: #e0f2fe;
-  --accent-foreground: #075985;
-  --destructive: #dc2626;
+  --accent: #d97706;
+  --accent-foreground: #ffffff;
+  --destructive: #b91c1c;
   --destructive-foreground: #ffffff;
   --border: #e2e8f0;
-  --input: #cbd5e1;
-  --ring: #2563eb;
+  --input: #e2e8f0;
+  --ring: #0f766e;
+  --radius: 0.75rem;
 }
 
 @theme inline {
@@ -42,6 +43,10 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --font-sans: var(--font-inter);
 }
 
 * {
@@ -56,7 +61,7 @@ body {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), sans-serif;
 }
 
 button,
@@ -72,4 +77,20 @@ button svg {
 
 body {
   overflow-x: hidden;
+}
+
+/* Custom Utilities */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 9999px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--input);
 }

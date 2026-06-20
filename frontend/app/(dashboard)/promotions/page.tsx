@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/shared/messag
 import { PaginationControls } from "@/components/shared/pagination-controls";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ActionMenu } from "@/components/shared/action-menu";
+import { PageHeader } from "@/components/shared/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -285,20 +286,15 @@ export default function PromotionsPage() {
   return (
     <RoleGuard allowedRoles={["ADMIN"]}>
       <div className="space-y-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-gray-900">{t("promotions.title")}</h1>
-            <p className="mt-2 text-base text-muted-foreground">{t("promotions.description")}</p>
-          </div>
-
-          <Button onClick={openCreateForm} className="h-12 shrink-0 bg-blue-600 px-5 text-white hover:bg-blue-700">
+        <PageHeader title={t("promotions.title")} description={t("promotions.description")}>
+          <Button onClick={openCreateForm}>
             <Plus className="mr-2 h-4 w-4" />
             {t("promotions.add")}
           </Button>
-        </div>
+        </PageHeader>
 
         <ErrorState message={errorMessage} />
-        {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
+        {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
 
         <Card>
           <CardContent className="pt-6">
@@ -332,45 +328,49 @@ export default function PromotionsPage() {
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
 
         {!isLoading && items.length > 0 ? (
-          <DataTable noHorizontalScroll>
-            <thead>
-              <tr>
-                <Th className="w-[80px] whitespace-nowrap">{t("common.no")}</Th>
-                <Th>{t("promotions.code")}</Th>
-                <Th>{t("promotions.discountType")}</Th>
-                <Th>{t("promotions.discountValue")}</Th>
-                <Th>{t("promotions.minOrderAmount")}</Th>
-                <Th className="whitespace-nowrap">{t("promotions.quantity")}</Th>
-                <Th>{t("common.status")}</Th>
-                <Th className="w-[110px] whitespace-nowrap text-right">{t("common.actions")}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((promotion, index) => {
-                const statusValue = getPromotionStatus(promotion);
-                return (
-                  <tr key={promotion.id}>
-                    <Td>{(page - 1) * PAGE_SIZE + index + 1}</Td>
-                    <Td className="font-semibold">{promotion.code}</Td>
-                    <Td>{promotion.discountType === "AMOUNT" ? t("promotions.amountType") : t("promotions.percentType")}</Td>
-                    <Td>{promotion.discountType === "AMOUNT" ? formatCurrency(promotion.discountValue) : `${promotion.discountValue}%`}</Td>
-                    <Td>{formatCurrency(promotion.minOrderAmount)}</Td>
-                    <Td className="font-medium">{getRemainingUsageText(promotion, t("promotions.unlimited"))}</Td>
-                    <Td><StatusBadge status={statusValue} /></Td>
-                    <Td className="text-right">
-                      <ActionMenu
-                        label={t("common.actions")}
-                        items={[
-                          { label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(promotion) },
-                          { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, variant: "destructive", onClick: () => handleDelete(promotion) },
-                        ]}
-                      />
-                    </Td>
+          <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
+            <CardContent className="p-0">
+              <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
+                <thead>
+                  <tr>
+                    <Th className="w-[80px] whitespace-nowrap">{t("common.no")}</Th>
+                    <Th>{t("promotions.code")}</Th>
+                    <Th>{t("promotions.discountType")}</Th>
+                    <Th>{t("promotions.discountValue")}</Th>
+                    <Th>{t("promotions.minOrderAmount")}</Th>
+                    <Th className="whitespace-nowrap">{t("promotions.quantity")}</Th>
+                    <Th>{t("common.status")}</Th>
+                    <Th className="w-[110px] whitespace-nowrap text-right">{t("common.actions")}</Th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </DataTable>
+                </thead>
+                <tbody>
+                  {items.map((promotion, index) => {
+                    const statusValue = getPromotionStatus(promotion);
+                    return (
+                      <tr key={promotion.id}>
+                        <Td>{(page - 1) * PAGE_SIZE + index + 1}</Td>
+                        <Td className="font-semibold">{promotion.code}</Td>
+                        <Td>{promotion.discountType === "AMOUNT" ? t("promotions.amountType") : t("promotions.percentType")}</Td>
+                        <Td>{promotion.discountType === "AMOUNT" ? formatCurrency(promotion.discountValue) : `${promotion.discountValue}%`}</Td>
+                        <Td>{formatCurrency(promotion.minOrderAmount)}</Td>
+                        <Td className="font-medium">{getRemainingUsageText(promotion, t("promotions.unlimited"))}</Td>
+                        <Td><StatusBadge status={statusValue} /></Td>
+                        <Td className="text-right">
+                          <ActionMenu
+                            label={t("common.actions")}
+                            items={[
+                              { label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(promotion) },
+                              { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, variant: "destructive", onClick: () => handleDelete(promotion) },
+                            ]}
+                          />
+                        </Td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </DataTable>
+            </CardContent>
+          </Card>
         ) : null}
 
         <PaginationControls pagination={pagination} onPageChange={setPage} />
