@@ -15,15 +15,15 @@ export function PaginationControls({ pagination, onPageChange }: PaginationContr
   if (!pagination) return null;
 
   return (
-    <div className="flex flex-col gap-3 pt-4 text-xs font-semibold text-slate-500 md:flex-row md:items-center md:justify-between">
-      <span>
+    <div className="flex min-w-0 flex-col gap-3 pt-4 text-xs font-semibold text-slate-500 md:flex-row md:items-center md:justify-between">
+      <span className="min-w-0 truncate">
         {t("pagination.info", {
           page: pagination.page,
           totalPages: Math.max(pagination.totalPages, 1),
           totalItems: pagination.totalItems,
         })}
       </span>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         <Button
           variant="outline"
           size="sm"

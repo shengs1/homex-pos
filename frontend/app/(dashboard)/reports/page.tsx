@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { DataTable, Td, Th } from "@/components/shared/data-table";
@@ -14,7 +14,14 @@ import { getApiErrorMessage } from "@/lib/api";
 import { formatChartDateVN } from "@/lib/date-format";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { reportService } from "@/services/homex.service";
-import type { CustomerReportItem, Product, ReportSummary, RevenueReportItem, TopCustomerReportItem, TopProductReportItem } from "@/types/domain";
+import type { CustomerReportItem, Product, ProfitReportItem, ReportSummary, TopCustomerReportItem, TopProductReportItem } from "@/types/domain";
+
+function toLocalIsoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 function defaultDateRange() {
   const toDate = new Date();
@@ -24,18 +31,6 @@ function defaultDateRange() {
     fromDate: toLocalIsoDate(fromDate),
     toDate: toLocalIsoDate(toDate),
   };
-}
-
-function formatRevenueChartDate(value: string | number | Date | null | undefined) {
-  return formatChartDateVN(value);
-}
-
-
-function toLocalIsoDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function normalizeIsoDate(value: string | number | Date | null | undefined) {
@@ -68,26 +63,30 @@ function buildDateSeries(fromDate: string, toDate: string) {
   return result;
 }
 
-function fillRevenueChartData(items: RevenueReportItem[], fromDate: string, toDate: string) {
-  const revenueByDate = new Map<string, number>();
+function fillProfitChartData(items: ProfitReportItem[], fromDate: string, toDate: string) {
+  const profitByDate = new Map<string, ProfitReportItem>();
 
   items.forEach((item) => {
     const key = normalizeIsoDate(item.period);
-    if (!key) return;
-    revenueByDate.set(key, Number(item.revenue || 0));
+    if (key) profitByDate.set(key, item);
   });
 
-  return buildDateSeries(fromDate, toDate).map((period) => ({
-    period,
-    revenue: revenueByDate.get(period) || 0,
-  }));
+  return buildDateSeries(fromDate, toDate).map((period) => {
+    const item = profitByDate.get(period);
+    return {
+      period,
+      revenue: Number(item?.revenue || 0),
+      cogs: Number(item?.cogs || 0),
+      netProfit: Number(item?.netProfit || 0),
+    };
+  });
 }
 
 function SummaryBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border bg-card p-4 shadow-sm">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-2 truncate text-xl font-bold" title={value}>{value}</p>
+    <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{label}</p>
+      <p className="mt-2 truncate text-xl font-black text-slate-800" title={value}>{value}</p>
     </div>
   );
 }
@@ -98,7 +97,7 @@ export default function ReportsPage() {
   const [fromDate, setFromDate] = useState(initialDateRange.fromDate);
   const [toDate, setToDate] = useState(initialDateRange.toDate);
   const [summary, setSummary] = useState<ReportSummary | null>(null);
-  const [revenueItems, setRevenueItems] = useState<RevenueReportItem[]>([]);
+  const [profitItems, setProfitItems] = useState<ProfitReportItem[]>([]);
   const [topProducts, setTopProducts] = useState<TopProductReportItem[]>([]);
   const [topCustomers, setTopCustomers] = useState<TopCustomerReportItem[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
@@ -110,17 +109,18 @@ export default function ReportsPage() {
     try {
       setIsLoading(true);
       setErrorMessage("");
-      const params = { fromDate, toDate, limit: 8 };
-      const [summaryData, revenueData, topProductData, topCustomerData, lowStockData, customersData] = await Promise.all([
+      const params = { fromDate, toDate, limit: 10 };
+      const [summaryData, profitData, topProductData, topCustomerData, lowStockData, customersData] = await Promise.all([
         reportService.summary(params),
-        reportService.revenue({ ...params, groupBy: "day" }),
+        reportService.profit({ ...params, groupBy: "day" }),
         reportService.topProducts(params),
         reportService.topCustomers(params),
         reportService.lowStock({ limit: 8 }),
         reportService.customers(params),
       ]);
+
       setSummary(summaryData);
-      setRevenueItems(revenueData.items || []);
+      setProfitItems(profitData.items || []);
       setTopProducts(topProductData.items || []);
       setTopCustomers(topCustomerData.items || []);
       setLowStockProducts(lowStockData.items || []);
@@ -141,11 +141,24 @@ export default function ReportsPage() {
     loadReports();
   }
 
-  const revenueChartData = fillRevenueChartData(revenueItems, fromDate, toDate);
-  const topProductChartData = topProducts
-    .slice(0, 5)
-    .map((item) => ({ name: item.product?.name || `#${item.productId}`, quantity: Number(item.totalQuantity || 0) }));
-  const hasRevenueChartData = revenueChartData.some((item) => item.revenue > 0);
+  const profitChartData = useMemo(() => fillProfitChartData(profitItems, fromDate, toDate), [fromDate, profitItems, toDate]);
+  const profitTotals = useMemo(() => {
+    return profitChartData.reduce(
+      (total, item) => {
+        total.revenue += item.revenue;
+        total.cogs += item.cogs;
+        total.netProfit += item.netProfit;
+        return total;
+      },
+      { revenue: 0, cogs: 0, netProfit: 0 }
+    );
+  }, [profitChartData]);
+  const topProductChartData = topProducts.slice(0, 10).map((item) => ({
+    name: item.product?.name || String(item.productId),
+    quantity: Number(item.totalQuantity || 0),
+    revenue: Number(item.totalRevenue || 0),
+  }));
+  const hasProfitChartData = profitChartData.some((item) => item.revenue > 0 || item.cogs > 0 || item.netProfit !== 0);
   const hasTopProductChartData = topProductChartData.some((item) => item.quantity > 0);
 
   return (
@@ -154,22 +167,11 @@ export default function ReportsPage() {
         <PageHeader title={t("reports.title")} description={t("reports.description")} />
         <ErrorState message={errorMessage} />
 
-        {/* Compact filter toolbar */}
-        <Card className="w-full min-w-0">
+        <Card className="w-full min-w-0 rounded-2xl border-slate-200/80 shadow-sm">
           <CardContent className="pt-6">
             <form onSubmit={handleApply} className="flex w-full flex-wrap items-end gap-4">
-              <DateFilterInput
-                label={t("reports.fromDate")}
-                value={fromDate}
-                onChange={setFromDate}
-                className="w-full min-w-[200px] md:w-[220px]"
-              />
-              <DateFilterInput
-                label={t("reports.toDate")}
-                value={toDate}
-                onChange={setToDate}
-                className="w-full min-w-[200px] md:w-[220px]"
-              />
+              <DateFilterInput label={t("reports.fromDate")} value={fromDate} onChange={setFromDate} className="w-full min-w-[200px] md:w-[220px]" />
+              <DateFilterInput label={t("reports.toDate")} value={toDate} onChange={setToDate} className="w-full min-w-[200px] md:w-[220px]" />
               <Button type="submit" className="w-full md:w-auto">{t("reports.apply")}</Button>
             </form>
           </CardContent>
@@ -177,40 +179,40 @@ export default function ReportsPage() {
 
         {isLoading ? <LoadingState /> : null}
 
-        {/* Summary numbers */}
         {summary ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryBox label={t("dashboard.netRevenue")} value={formatCurrency(summary.netRevenue)} />
-            <SummaryBox label={t("dashboard.grossRevenue")} value={formatCurrency(summary.grossRevenue)} />
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <SummaryBox label={t("reports.revenue")} value={formatCurrency(profitTotals.revenue || summary.netRevenue)} />
+            <SummaryBox label={t("reports.cogs")} value={formatCurrency(profitTotals.cogs)} />
+            <SummaryBox label={t("reports.netProfit")} value={formatCurrency(profitTotals.netProfit)} />
             <SummaryBox label={t("dashboard.completedOrders")} value={formatNumber(summary.completedOrders)} />
-            <SummaryBox label={t("dashboard.lowStock")} value={formatNumber(summary.lowStockProducts)} />
           </div>
         ) : null}
 
-        {/* Chart grid */}
-        <div className="grid w-full min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card className="min-w-0">
-            <CardHeader><CardTitle>{t("reports.revenueChart")}</CardTitle></CardHeader>
+        <div className="grid w-full min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+          <Card className="min-w-0 rounded-2xl border-slate-200/80 shadow-sm">
+            <CardHeader><CardTitle>{t("reports.profitChart")}</CardTitle></CardHeader>
             <CardContent className="min-h-[320px] min-w-0">
-              {hasRevenueChartData ? (
+              {hasProfitChartData ? (
                 <ResponsiveContainer width="100%" height={320} minWidth={1} minHeight={1}>
-                  <LineChart data={revenueChartData} margin={{ left: 4, right: 12, top: 10, bottom: 10 }}>
+                  <LineChart data={profitChartData} margin={{ left: 4, right: 12, top: 10, bottom: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="period" tick={{ fontSize: 12 }} tickFormatter={formatRevenueChartDate} />
+                    <XAxis dataKey="period" tick={{ fontSize: 12 }} tickFormatter={formatChartDateVN} />
                     <YAxis tick={{ fontSize: 12 }} width={72} />
-                    <Tooltip formatter={(value) => formatCurrency(Number(value))} labelFormatter={(label) => formatRevenueChartDate(label)} />
+                    <Tooltip formatter={(value) => formatCurrency(Number(value))} labelFormatter={(label) => formatChartDateVN(label)} />
                     <Line type="monotone" dataKey="revenue" name={t("reports.revenue")} stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="cogs" name={t("reports.cogs")} stroke="#f59e0b" strokeWidth={2} dot={{ r: 2 }} />
+                    <Line type="monotone" dataKey="netProfit" name={t("reports.netProfit")} stroke="#059669" strokeWidth={3} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="flex h-[320px] items-center justify-center rounded-xl border border-dashed">
-                  <EmptyState message="Chưa có dữ liệu doanh thu trong khoảng thời gian đã chọn." />
+                  <EmptyState message={t("reports.noProfitData")} />
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card className="min-w-0">
+          <Card className="min-w-0 rounded-2xl border-slate-200/80 shadow-sm">
             <CardHeader><CardTitle>{t("reports.topProducts")}</CardTitle></CardHeader>
             <CardContent className="min-h-[320px] min-w-0">
               {hasTopProductChartData ? (
@@ -219,27 +221,25 @@ export default function ReportsPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis type="number" tick={{ fontSize: 12 }} />
                     <YAxis type="category" dataKey="name" width={118} tick={{ fontSize: 11 }} />
-                    <Tooltip />
+                    <Tooltip formatter={(value, name) => name === "revenue" ? formatCurrency(Number(value)) : formatNumber(Number(value))} />
                     <Bar dataKey="quantity" name={t("reports.quantity")} fill="#2563eb" radius={[0, 6, 6, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="flex h-[320px] items-center justify-center rounded-xl border border-dashed">
-                  <EmptyState message="Chưa có dữ liệu sản phẩm bán chạy trong khoảng thời gian đã chọn." />
+                  <EmptyState message={t("reports.noTopProductData")} />
                 </div>
               )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Data table grid */}
         <div className="grid w-full min-w-0 grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card className="min-w-0">
+          <Card className="min-w-0 rounded-2xl border-slate-200/80 shadow-sm">
             <CardHeader><CardTitle>{t("reports.topProducts")}</CardTitle></CardHeader>
             <CardContent className="min-w-0">
               {topProducts.length === 0 ? <EmptyState /> : (
                 <DataTable noHorizontalScroll>
-                  <colgroup><col className="w-[52%]" /><col className="w-[18%]" /><col className="w-[30%]" /></colgroup>
                   <thead><tr><Th>{t("products.product")}</Th><Th>{t("reports.quantity")}</Th><Th>{t("reports.revenue")}</Th></tr></thead>
                   <tbody>
                     {topProducts.map((item) => (
@@ -255,12 +255,11 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          <Card className="min-w-0">
+          <Card className="min-w-0 rounded-2xl border-slate-200/80 shadow-sm">
             <CardHeader><CardTitle>{t("reports.topCustomers")}</CardTitle></CardHeader>
             <CardContent className="min-w-0">
               {topCustomers.length === 0 ? <EmptyState /> : (
                 <DataTable noHorizontalScroll>
-                  <colgroup><col className="w-[52%]" /><col className="w-[18%]" /><col className="w-[30%]" /></colgroup>
                   <thead><tr><Th>{t("customers.title")}</Th><Th>{t("reports.totalOrders")}</Th><Th>{t("reports.totalSpent")}</Th></tr></thead>
                   <tbody>
                     {topCustomers.map((item, index) => (
@@ -276,12 +275,11 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          <Card className="min-w-0">
+          <Card className="min-w-0 rounded-2xl border-slate-200/80 shadow-sm">
             <CardHeader><CardTitle>{t("reports.lowStock")}</CardTitle></CardHeader>
             <CardContent className="min-w-0">
               {lowStockProducts.length === 0 ? <EmptyState message={t("message.noLowStock")} /> : (
                 <DataTable noHorizontalScroll>
-                  <colgroup><col className="w-[25%]" /><col className="w-[45%]" /><col className="w-[15%]" /><col className="w-[15%]" /></colgroup>
                   <thead><tr><Th>{t("products.sku")}</Th><Th>{t("products.product")}</Th><Th>{t("products.stock")}</Th><Th>{t("products.minStock")}</Th></tr></thead>
                   <tbody>
                     {lowStockProducts.map((item) => (
@@ -298,12 +296,11 @@ export default function ReportsPage() {
             </CardContent>
           </Card>
 
-          <Card className="min-w-0">
+          <Card className="min-w-0 rounded-2xl border-slate-200/80 shadow-sm">
             <CardHeader><CardTitle>{t("reports.customers")}</CardTitle></CardHeader>
             <CardContent className="min-w-0">
               {customerItems.length === 0 ? <EmptyState /> : (
                 <DataTable noHorizontalScroll>
-                  <colgroup><col className="w-[42%]" /><col className="w-[18%]" /><col className="w-[22%]" /><col className="w-[18%]" /></colgroup>
                   <thead><tr><Th>{t("customers.title")}</Th><Th>{t("reports.totalOrders")}</Th><Th>{t("reports.totalSpent")}</Th><Th>{t("reports.latestOrder")}</Th></tr></thead>
                   <tbody>
                     {customerItems.map((item) => (

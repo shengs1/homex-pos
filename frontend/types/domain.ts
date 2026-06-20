@@ -59,6 +59,7 @@ export type Customer = {
   email: string | null;
   address: string | null;
   points: number;
+  tier: "SILVER" | "GOLD" | "DIAMOND" | string;
   status: RecordStatus;
   createdAt: string;
   updatedAt: string;
@@ -148,8 +149,10 @@ export type Warranty = {
 
 export type UserAccount = {
   id: number;
+  employeeCode: string | null;
   fullName: string;
   email: string;
+  phone: string | null;
   roleId: number;
   role: {
     id: number;
@@ -157,6 +160,7 @@ export type UserAccount = {
     description?: string | null;
   };
   status: UserStatus;
+  lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -198,6 +202,14 @@ export type RevenueReportItem = {
   paymentCount: number;
 };
 
+export type ProfitReportItem = {
+  period: string;
+  revenue: number;
+  cogs: number;
+  netProfit: number;
+  orderCount: number;
+};
+
 export type TopProductReportItem = {
   productId: number;
   product: Product | null;
@@ -221,14 +233,31 @@ export type CustomerReportItem = Customer & {
 export type Setting = {
   id: number;
   storeName: string;
+  storeBranch: string | null;
+  taxCode: string | null;
+  businessHours: string | null;
+  currency: string;
   storeAddress: string | null;
   storeHotline: string | null;
   printPaperSize: string;
+  printCopies: number;
+  autoOpenPrint: boolean;
+  requireCustomerPhone: boolean;
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;
   vietQrTemplate: string | null;
+  transferContentTemplate: string | null;
+  defaultPaymentMethod: string;
+  productsPerPage: number;
+  autoLockMinutes: number;
+  allowOrderDiscount: boolean;
+  confirmBeforeCheckout: boolean;
+  barcodeAutoAdd: boolean;
+  compactPosMode: boolean;
   minStock: number;
+  warnLowStockSale: boolean;
+  allowOversell: boolean;
   maxDiscount: number;
   createdAt: string;
   updatedAt: string;

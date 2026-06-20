@@ -180,8 +180,13 @@ export default function InventoryPage() {
 
   return (
     <RoleGuard allowedRoles={["ADMIN"]}>
-      <div className="space-y-6">
-        <PageHeader title={t("inventory.title")} description={t("inventory.description")} />
+      <div className="min-w-0 space-y-5">
+        <PageHeader title={t("inventory.title")} description={t("inventory.description")}>
+          <Button type="button" variant="outline" onClick={() => window.location.assign("/purchase-orders")}>
+            <PackagePlus className="h-4 w-4" />
+            {t("purchaseOrders.title")}
+          </Button>
+        </PageHeader>
         <ErrorState message={errorMessage} />
         {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
 
@@ -252,7 +257,7 @@ export default function InventoryPage() {
           </Card>
         ) : null}
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader><CardTitle>{t("inventory.lowStockTitle")}</CardTitle></CardHeader>
           <CardContent>
             {lowStockItems.length === 0 ? <EmptyState message={t("message.noLowStock")} /> : (
@@ -265,7 +270,7 @@ export default function InventoryPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardContent className="pt-6">
             <form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[1fr_200px_auto_auto]">
               <Input placeholder={t("inventory.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} />

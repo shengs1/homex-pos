@@ -128,6 +128,12 @@ async function checkDuplicateCustomerPhone(
   }
 }
 
+function getCustomerTier(points: number) {
+  if (points >= 2000) return "DIAMOND";
+  if (points >= 500) return "GOLD";
+  return "SILVER";
+}
+
 // GET /api/customers?page=1&limit=10&search=&status=ACTIVE
 router.get(
   "/",
@@ -251,6 +257,7 @@ router.post(
         email: email || null,
         address: address || null,
         points: 0,
+        tier: getCustomerTier(0),
         status: RECORD_STATUS.ACTIVE,
       },
     });
@@ -299,6 +306,7 @@ router.put(
         email: email || null,
         address: address || null,
         points,
+        tier: points === undefined ? existingCustomer.tier : getCustomerTier(points),
       },
     });
 

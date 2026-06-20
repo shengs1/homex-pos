@@ -51,10 +51,12 @@ async function main() {
   await prisma.user.upsert({
     where: { email: "admin@homex.com" },
     update: {
+      employeeCode: "NV0001",
       roleId: adminRole.id,
       status: "ACTIVE",
     },
     create: {
+      employeeCode: "NV0001",
       fullName: "Admin Homex",
       email: "admin@homex.com",
       passwordHash,
@@ -66,10 +68,12 @@ async function main() {
   await prisma.user.upsert({
     where: { email: "cashier@homex.com" },
     update: {
+      employeeCode: "NV0002",
       roleId: cashierRole.id,
       status: "ACTIVE",
     },
     create: {
+      employeeCode: "NV0002",
       fullName: "Nhân viên bán hàng",
       email: "cashier@homex.com",
       passwordHash,
@@ -212,6 +216,8 @@ async function main() {
   console.log("Tài khoản demo:");
   console.log("- admin@homex.com / 123456");
   console.log("- cashier@homex.com / 123456");
+  console.log("- NV0001 / 123456");
+  console.log("- NV0002 / 123456");
 }
 
 main()

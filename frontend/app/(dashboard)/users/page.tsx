@@ -24,27 +24,37 @@ import { userService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
 import type { UserAccount } from "@/types/domain";
 
+const optionalEmailSchema = z.union([z.string().trim().email(), z.literal("")]).optional();
+
 const createSchema = z.object({
-  fullName: z.string().trim().min(1, "Họ tên không được để trống"),
-  email: z.string().trim().email("Email không hợp lệ"),
-  password: z.string().min(6, "Mật khẩu tối thiểu 6 ký tự"),
+  employeeCode: z.string().trim().max(20).optional(),
+  fullName: z.string().trim().min(1),
+  email: optionalEmailSchema,
+  phone: z.string().trim().max(20).optional(),
+  password: z.string().min(6),
   role: z.enum(["ADMIN", "CASHIER"]),
 });
 
 const updateSchema = z.object({
-  fullName: z.string().trim().min(1, "Họ tên không được để trống"),
-  email: z.string().trim().email("Email không hợp lệ"),
+  employeeCode: z.string().trim().max(20).optional(),
+  fullName: z.string().trim().min(1),
+  email: optionalEmailSchema,
+  phone: z.string().trim().max(20).optional(),
   role: z.enum(["ADMIN", "CASHIER"]),
   status: z.enum(["ACTIVE", "INACTIVE"]),
 });
 
-const passwordSchema = z.object({ newPassword: z.string().min(6, "Mật khẩu tối thiểu 6 ký tự") });
+const passwordSchema = z.object({ newPassword: z.string().min(6) });
 
 type CreateValues = z.infer<typeof createSchema>;
 type UpdateValues = z.infer<typeof updateSchema>;
 type PasswordValues = z.infer<typeof passwordSchema>;
 
 const PAGE_SIZE = 10;
+
+function isInternalEmail(email: string) {
+  return email.toLowerCase().endsWith("@homex.local");
+}
 
 export default function UsersPage() {
   const { t } = useLanguage();
@@ -63,9 +73,34 @@ export default function UsersPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  const createForm = useForm<CreateValues>({ resolver: zodResolver(createSchema), defaultValues: { fullName: "", email: "", password: "123456", role: "CASHIER" } });
-  const updateForm = useForm<UpdateValues>({ resolver: zodResolver(updateSchema), defaultValues: { fullName: "", email: "", role: "CASHIER", status: "ACTIVE" } });
-  const passwordForm = useForm<PasswordValues>({ resolver: zodResolver(passwordSchema), defaultValues: { newPassword: "123456" } });
+  const createForm = useForm<CreateValues>({
+    resolver: zodResolver(createSchema),
+    defaultValues: {
+      employeeCode: "",
+      fullName: "",
+      email: "",
+      phone: "",
+      password: "123456",
+      role: "CASHIER",
+    },
+  });
+
+  const updateForm = useForm<UpdateValues>({
+    resolver: zodResolver(updateSchema),
+    defaultValues: {
+      employeeCode: "",
+      fullName: "",
+      email: "",
+      phone: "",
+      role: "CASHIER",
+      status: "ACTIVE",
+    },
+  });
+
+  const passwordForm = useForm<PasswordValues>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: { newPassword: "123456" },
+  });
 
   async function loadData(currentPage = page) {
     try {
@@ -88,7 +123,14 @@ export default function UsersPage() {
   function openEdit(item: UserAccount) {
     setEditingItem(item);
     setPasswordItem(null);
-    updateForm.reset({ fullName: item.fullName, email: item.email, role: item.role.name, status: item.status });
+    updateForm.reset({
+      employeeCode: item.employeeCode || "",
+      fullName: item.fullName,
+      email: isInternalEmail(item.email) ? "" : item.email,
+      phone: item.phone || "",
+      role: item.role.name,
+      status: item.status,
+    });
     window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 50);
   }
 
@@ -108,7 +150,7 @@ export default function UsersPage() {
       setSuccessMessage(t("users.createSuccess"));
       setIsCreateOpen(false);
       setShowCreatePassword(false);
-      createForm.reset({ fullName: "", email: "", password: "123456", role: "CASHIER" });
+      createForm.reset({ employeeCode: "", fullName: "", email: "", phone: "", password: "123456", role: "CASHIER" });
       await loadData(page);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error));
@@ -143,7 +185,7 @@ export default function UsersPage() {
   }
 
   async function handleLock(item: UserAccount) {
-    if (!window.confirm(t("users.lockConfirm", { email: item.email }))) return;
+    if (!window.confirm(t("users.lockConfirm", { email: item.employeeCode || item.email }))) return;
     try {
       await userService.lock(item.id);
       await loadData(page);
@@ -153,7 +195,7 @@ export default function UsersPage() {
   }
 
   async function handleRestore(item: UserAccount) {
-    if (!window.confirm(t("users.restoreConfirm", { email: item.email }))) return;
+    if (!window.confirm(t("users.restoreConfirm", { email: item.employeeCode || item.email }))) return;
     try {
       await userService.restore(item.id);
       await loadData(page);
@@ -168,23 +210,31 @@ export default function UsersPage() {
     loadData(1);
   }
 
+  function roleLabel(value: "ADMIN" | "CASHIER") {
+    return t(`role.${value}`);
+  }
+
   return (
     <RoleGuard allowedRoles={["ADMIN"]}>
-      <div className="space-y-6">
-        <PageHeader title={t("users.title")} description={t("users.description")}>
-          <Button onClick={() => setIsCreateOpen((value) => !value)}><Plus className="h-4 w-4" />{t("users.add")}</Button>
+      <div className="min-w-0 space-y-6">
+        <PageHeader title={t("nav.employees")} description={t("users.description")}>
+          <Button onClick={() => setIsCreateOpen((value) => !value)}>
+            <Plus className="h-4 w-4" />
+            {t("users.add")}
+          </Button>
         </PageHeader>
+
         <ErrorState message={errorMessage} />
         {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
 
-        <Card>
+        <Card className="min-w-0">
           <CardContent className="pt-6">
-            <form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[1fr_180px_180px_auto]">
+            <form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px_180px_auto]">
               <Input placeholder={t("users.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} />
               <Select value={role} onChange={(event) => { setRole(event.target.value); setPage(1); }}>
                 <option value="">{t("common.allRoles")}</option>
-                <option value="ADMIN">ADMIN</option>
-                <option value="CASHIER">CASHIER</option>
+                <option value="ADMIN">{roleLabel("ADMIN")}</option>
+                <option value="CASHIER">{roleLabel("CASHIER")}</option>
               </Select>
               <Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
                 <option value="">{t("common.allStatus")}</option>
@@ -197,12 +247,14 @@ export default function UsersPage() {
         </Card>
 
         {isCreateOpen ? (
-          <Card>
+          <Card className="min-w-0">
             <CardHeader><CardTitle>{t("users.createTitle")}</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={createForm.handleSubmit(submitCreate)} className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2"><Label>{t("users.fullName")}</Label><Input {...createForm.register("fullName")} />{createForm.formState.errors.fullName ? <p className="text-sm text-destructive">{createForm.formState.errors.fullName.message}</p> : null}</div>
-                <div className="space-y-2"><Label>{t("common.email")}</Label><Input {...createForm.register("email")} />{createForm.formState.errors.email ? <p className="text-sm text-destructive">{createForm.formState.errors.email.message}</p> : null}</div>
+                <div className="space-y-2"><Label>{t("users.employeeCode")}</Label><Input placeholder={t("users.employeeCodeAuto")} {...createForm.register("employeeCode")} /></div>
+                <div className="space-y-2"><Label>{t("users.fullName")}</Label><Input {...createForm.register("fullName")} />{createForm.formState.errors.fullName ? <p className="text-sm text-destructive">{t("users.validationRequired")}</p> : null}</div>
+                <div className="space-y-2"><Label>{t("common.phone")}</Label><Input {...createForm.register("phone")} /></div>
+                <div className="space-y-2"><Label>{t("users.emailOptional")}</Label><Input {...createForm.register("email")} />{createForm.formState.errors.email ? <p className="text-sm text-destructive">{t("users.validationEmail")}</p> : null}</div>
                 <div className="space-y-2">
                   <Label>{t("users.password")}</Label>
                   <div className="flex gap-2">
@@ -211,43 +263,45 @@ export default function UsersPage() {
                       {showCreatePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
-                  {createForm.formState.errors.password ? <p className="text-sm text-destructive">{createForm.formState.errors.password.message}</p> : null}
+                  {createForm.formState.errors.password ? <p className="text-sm text-destructive">{t("users.validationPassword")}</p> : null}
                 </div>
-                <div className="space-y-2"><Label>{t("common.role")}</Label><Select {...createForm.register("role")}><option value="ADMIN">ADMIN</option><option value="CASHIER">CASHIER</option></Select></div>
-                <div className="flex gap-2 md:col-span-2"><Button type="submit">{t("common.create")}</Button><Button variant="outline" onClick={() => setIsCreateOpen(false)}>{t("common.cancel")}</Button></div>
+                <div className="space-y-2"><Label>{t("common.role")}</Label><Select {...createForm.register("role")}><option value="ADMIN">{roleLabel("ADMIN")}</option><option value="CASHIER">{roleLabel("CASHIER")}</option></Select></div>
+                <div className="flex gap-2 md:col-span-2"><Button type="submit">{t("common.create")}</Button><Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>{t("common.cancel")}</Button></div>
               </form>
             </CardContent>
           </Card>
         ) : null}
 
         {editingItem ? (
-          <Card>
-            <CardHeader><CardTitle>{t("users.updateTitle", { email: editingItem.email })}</CardTitle></CardHeader>
+          <Card className="min-w-0">
+            <CardHeader><CardTitle>{t("users.updateTitle", { email: editingItem.employeeCode || editingItem.email })}</CardTitle></CardHeader>
             <CardContent>
               <form onSubmit={updateForm.handleSubmit(submitUpdate)} className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2"><Label>{t("users.fullName")}</Label><Input {...updateForm.register("fullName")} />{updateForm.formState.errors.fullName ? <p className="text-sm text-destructive">{updateForm.formState.errors.fullName.message}</p> : null}</div>
-                <div className="space-y-2"><Label>{t("common.email")}</Label><Input {...updateForm.register("email")} />{updateForm.formState.errors.email ? <p className="text-sm text-destructive">{updateForm.formState.errors.email.message}</p> : null}</div>
-                <div className="space-y-2"><Label>{t("common.role")}</Label><Select {...updateForm.register("role")}><option value="ADMIN">ADMIN</option><option value="CASHIER">CASHIER</option></Select></div>
+                <div className="space-y-2"><Label>{t("users.employeeCode")}</Label><Input {...updateForm.register("employeeCode")} /></div>
+                <div className="space-y-2"><Label>{t("users.fullName")}</Label><Input {...updateForm.register("fullName")} />{updateForm.formState.errors.fullName ? <p className="text-sm text-destructive">{t("users.validationRequired")}</p> : null}</div>
+                <div className="space-y-2"><Label>{t("common.phone")}</Label><Input {...updateForm.register("phone")} /></div>
+                <div className="space-y-2"><Label>{t("users.emailOptional")}</Label><Input {...updateForm.register("email")} />{updateForm.formState.errors.email ? <p className="text-sm text-destructive">{t("users.validationEmail")}</p> : null}</div>
+                <div className="space-y-2"><Label>{t("common.role")}</Label><Select {...updateForm.register("role")}><option value="ADMIN">{roleLabel("ADMIN")}</option><option value="CASHIER">{roleLabel("CASHIER")}</option></Select></div>
                 <div className="space-y-2"><Label>{t("common.status")}</Label><Select {...updateForm.register("status")}><option value="ACTIVE">{t("status.ACTIVE")}</option><option value="INACTIVE">{t("status.INACTIVE")}</option></Select></div>
-                <div className="flex gap-2 md:col-span-2"><Button type="submit">{t("common.save")}</Button><Button variant="outline" onClick={() => setEditingItem(null)}>{t("common.cancel")}</Button></div>
+                <div className="flex gap-2 md:col-span-2"><Button type="submit">{t("common.save")}</Button><Button type="button" variant="outline" onClick={() => setEditingItem(null)}>{t("common.cancel")}</Button></div>
               </form>
             </CardContent>
           </Card>
         ) : null}
 
         {passwordItem ? (
-          <Card>
-            <CardHeader><CardTitle>{t("users.changePasswordTitle", { email: passwordItem.email })}</CardTitle></CardHeader>
+          <Card className="min-w-0">
+            <CardHeader><CardTitle>{t("users.changePasswordTitle", { email: passwordItem.employeeCode || passwordItem.email })}</CardTitle></CardHeader>
             <CardContent>
-              <form onSubmit={passwordForm.handleSubmit(submitPassword)} className="grid gap-4 md:grid-cols-[1fr_auto_auto_auto]">
+              <form onSubmit={passwordForm.handleSubmit(submitPassword)} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto_auto_auto]">
                 <div className="space-y-2">
                   <Label>{t("users.newPassword")}</Label>
                   <Input type={showChangePassword ? "text" : "password"} {...passwordForm.register("newPassword")} />
-                  {passwordForm.formState.errors.newPassword ? <p className="text-sm text-destructive">{passwordForm.formState.errors.newPassword.message}</p> : null}
+                  {passwordForm.formState.errors.newPassword ? <p className="text-sm text-destructive">{t("users.validationPassword")}</p> : null}
                 </div>
                 <div className="flex items-end"><Button type="button" variant="outline" onClick={() => setShowChangePassword((value) => !value)}>{showChangePassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}{showChangePassword ? t("common.hide") : t("common.show")}</Button></div>
                 <div className="flex items-end"><Button type="submit">{t("users.changePassword")}</Button></div>
-                <div className="flex items-end"><Button variant="outline" onClick={() => setPasswordItem(null)}>{t("common.cancel")}</Button></div>
+                <div className="flex items-end"><Button type="button" variant="outline" onClick={() => setPasswordItem(null)}>{t("common.cancel")}</Button></div>
               </form>
             </CardContent>
           </Card>
@@ -257,16 +311,30 @@ export default function UsersPage() {
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
         {!isLoading && items.length > 0 ? (
           <DataTable>
-            <thead><tr><Th className="w-[90px] whitespace-nowrap">{t("common.no")}</Th><Th>{t("users.fullName")}</Th><Th>{t("common.email")}</Th><Th>{t("common.role")}</Th><Th>{t("common.status")}</Th><Th>{t("common.createdAt")}</Th><Th className="w-[96px] whitespace-nowrap text-right">{t("common.actions")}</Th></tr></thead>
+            <thead>
+              <tr>
+                <Th className="w-[80px] whitespace-nowrap">{t("common.no")}</Th>
+                <Th>{t("users.employeeCode")}</Th>
+                <Th>{t("users.fullName")}</Th>
+                <Th>{t("common.phone")}</Th>
+                <Th>{t("common.email")}</Th>
+                <Th>{t("common.role")}</Th>
+                <Th>{t("common.status")}</Th>
+                <Th>{t("users.lastLoginAt")}</Th>
+                <Th className="w-[96px] whitespace-nowrap text-right">{t("common.actions")}</Th>
+              </tr>
+            </thead>
             <tbody>
               {items.map((item, index) => (
                 <tr key={item.id}>
                   <Td className="font-medium">{(page - 1) * PAGE_SIZE + index + 1}</Td>
+                  <Td className="font-black text-slate-700">{item.employeeCode || t("common.notAvailable")}</Td>
                   <Td className="font-medium">{item.fullName}</Td>
-                  <Td>{item.email}</Td>
-                  <Td>{item.role.name}</Td>
+                  <Td>{item.phone || t("common.notAvailable")}</Td>
+                  <Td>{isInternalEmail(item.email) ? t("common.notAvailable") : item.email}</Td>
+                  <Td>{roleLabel(item.role.name)}</Td>
                   <Td><StatusBadge status={item.status} /></Td>
-                  <Td>{formatDateTime(item.createdAt)}</Td>
+                  <Td>{item.lastLoginAt ? formatDateTime(item.lastLoginAt) : t("common.notAvailable")}</Td>
                   <Td className="text-right">
                     <ActionMenu
                       label={t("common.actions")}

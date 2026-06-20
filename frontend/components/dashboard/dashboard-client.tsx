@@ -380,9 +380,9 @@ export default function DashboardPage() {
   // CASHIER: Dashboard tối giản
   if (user.role === "CASHIER") {
     return (
-      <div className="space-y-6">
+      <div className="min-w-0 space-y-5">
         <PageHeader title={cashierText.title} description={cashierText.description} />
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid min-w-0 gap-4 lg:grid-cols-3">
           <CashierQuickCard title={cashierText.posTitle} description={cashierText.posDescription} href="/pos" icon={ShoppingCart} badge={cashierText.daily} />
           <CashierQuickCard title={cashierText.ordersTitle} description={cashierText.ordersDescription} href="/orders" icon={ReceiptText} badge={cashierText.quick} />
           <CashierQuickCard title={cashierText.warrantiesTitle} description={cashierText.warrantiesDescription} href="/warranties" icon={ShieldCheck} badge={cashierText.lookup} />
@@ -393,11 +393,11 @@ export default function DashboardPage() {
 
   // ─── ADMIN Dashboard ───
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-5">
       {/* Header */}
-      <div className="flex flex-col gap-1 border-b border-slate-200 pb-5">
-        <h1 className="text-xl font-black text-slate-800 tracking-tight">{t("dashboard.adminTitle")}</h1>
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t("dashboard.adminDescription")}</p>
+      <div className="flex min-w-0 flex-col gap-1 border-b border-slate-200 pb-4">
+        <h1 className="truncate text-xl font-black tracking-tight text-slate-800">{t("dashboard.adminTitle")}</h1>
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 line-clamp-2">{t("dashboard.adminDescription")}</p>
       </div>
 
       {errorMessage ? <ErrorState message={errorMessage} /> : null}
@@ -405,7 +405,7 @@ export default function DashboardPage() {
       {/* Loading Skeleton */}
       {isLoading && !summary ? (
         <div className="space-y-6">
-          <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
                 <Skeleton className="h-3 w-1/2 mb-3" />
@@ -418,7 +418,7 @@ export default function DashboardPage() {
 
       {/* KPI Cards - Row 1 (4 chính) */}
       {summary ? (
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <SummaryCard
               title={t("dashboard.netRevenue")}
               value={formatCurrency(summary.netRevenue)}
@@ -441,15 +441,15 @@ export default function DashboardPage() {
       ) : null}
 
       {/* Charts Section - Grid 12 cols */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12">
         {/* Revenue Line Chart */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-5">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-5">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-sm font-black uppercase text-slate-700 tracking-wide">{t("dashboard.revenue7Days")}</h2>
           </div>
-          <div className="min-h-[280px]">
+          <div className="min-h-[240px]">
             {hasRevenueChartData ? (
-              <ResponsiveContainer width="100%" height={280} minWidth={1} minHeight={1}>
+              <ResponsiveContainer width="100%" height={240} minWidth={1} minHeight={1}>
                 <LineChart data={revenueChartData} margin={{ left: 8, right: 16, top: 10, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="period" tick={{ fontSize: 10, fontWeight: 700, fill: "#94a3b8" }} tickFormatter={formatRevenueChartDate} />
@@ -459,7 +459,7 @@ export default function DashboardPage() {
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[280px] items-center justify-center">
+              <div className="flex h-[240px] items-center justify-center">
                 <EmptyState message={t("message.empty")} />
               </div>
             )}
@@ -467,13 +467,13 @@ export default function DashboardPage() {
         </div>
 
         {/* Category Bar Chart */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-4">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-4">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-sm font-black uppercase text-slate-700 tracking-wide">{t("dashboard.topProducts")}</h2>
           </div>
-          <div className="min-h-[280px]">
+          <div className="min-h-[240px]">
             {hasCategoryChartData ? (
-              <ResponsiveContainer width="100%" height={280} minWidth={1} minHeight={1}>
+              <ResponsiveContainer width="100%" height={240} minWidth={1} minHeight={1}>
                 <BarChart data={categoryChartData} layout="vertical" margin={{ left: 8, right: 16, top: 10, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis type="number" tick={{ fontSize: 10, fontWeight: 700, fill: "#94a3b8" }} />
@@ -483,7 +483,7 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex h-[280px] items-center justify-center">
+              <div className="flex h-[240px] items-center justify-center">
                 <EmptyState message={t("message.empty")} />
               </div>
             )}
@@ -491,17 +491,17 @@ export default function DashboardPage() {
         </div>
 
         {/* Payment Method Donut */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-3">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-3">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">{t("payments.method")}</h2>
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
               <CreditCard className="h-4 w-4" />
             </div>
           </div>
-          <div className="min-h-[280px]">
+          <div className="min-h-[240px]">
             {hasPaymentMethodData ? (
-              <div className="flex h-[280px] flex-col justify-between">
-                <ResponsiveContainer width="100%" height={180} minWidth={1} minHeight={1}>
+              <div className="flex h-[240px] flex-col justify-between">
+                <ResponsiveContainer width="100%" height={150} minWidth={1} minHeight={1}>
                   <PieChart>
                     <Pie data={paymentMethods} dataKey="total" nameKey="method" innerRadius={52} outerRadius={82} paddingAngle={3}>
                       {paymentMethods.map((entry, index) => (
@@ -524,7 +524,7 @@ export default function DashboardPage() {
                 </div>
               </div>
             ) : (
-              <div className="flex h-[280px] items-center justify-center">
+              <div className="flex h-[240px] items-center justify-center">
                 <EmptyState message={t("message.empty")} />
               </div>
             )}
@@ -533,8 +533,8 @@ export default function DashboardPage() {
       </div>
 
       {/* Tables Section - Grid 12 cols */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-5">
+      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-5">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">{t("orders.title")}</h2>
             <Button variant="outline" size="sm" className="text-[10px] font-bold" onClick={() => window.location.assign("/orders")}>
@@ -544,34 +544,24 @@ export default function DashboardPage() {
           {recentOrders.length === 0 ? (
             <div className="rounded-xl border border-dashed p-8 text-center text-xs font-semibold text-slate-400">{t("message.empty")}</div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-100">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="px-4 py-3 text-left text-[9px] font-black uppercase tracking-wider text-slate-400">{t("orders.orderCode")}</th>
-                    <th className="px-4 py-3 text-left text-[9px] font-black uppercase tracking-wider text-slate-400">{t("orders.createdAt")}</th>
-                    <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-wider text-slate-400">{t("orders.total")}</th>
-                    <th className="px-4 py-3 text-right text-[9px] font-black uppercase tracking-wider text-slate-400">{t("common.status")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {recentOrders.map((order) => (
-                    <tr key={order.id} className="transition-colors hover:bg-slate-50">
-                      <td className="px-4 py-3 font-black text-slate-800">{order.orderCode}</td>
-                      <td className="px-4 py-3 font-semibold text-slate-500">{formatRevenueChartDate(order.createdAt)}</td>
-                      <td className="px-4 py-3 text-right font-black text-slate-800">{formatCurrency(order.totalAmount)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <StatusBadge status={order.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
+              {recentOrders.map((order) => (
+                <div key={order.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-3 transition-colors hover:bg-slate-50">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <p className="truncate text-xs font-black text-slate-800" title={order.orderCode}>{order.orderCode}</p>
+                      <StatusBadge status={order.status} />
+                    </div>
+                    <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">{formatRevenueChartDate(order.createdAt)}</p>
+                  </div>
+                  <div className="shrink-0 text-right text-xs font-black text-slate-800">{formatCurrency(order.totalAmount)}</div>
+                </div>
+              ))}
             </div>
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-4">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-4">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">{t("dashboard.lowStock")}</h2>
             <Button variant="outline" size="sm" className="text-[10px] font-bold" onClick={() => window.location.assign("/inventory")}>
@@ -582,42 +572,26 @@ export default function DashboardPage() {
           {lowStockProducts.length === 0 ? (
             <div className="rounded-xl border border-dashed p-8 text-center text-xs font-semibold text-slate-400">{t("message.noLowStock")}</div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-slate-100">
-              <table className="w-full table-fixed text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100">
-                    <th className="w-[38%] px-4 py-3 text-left text-[9px] font-black uppercase tracking-wider text-slate-400">{t("products.name")}</th>
-                    <th className="w-[20%] px-4 py-3 text-left text-[9px] font-black uppercase tracking-wider text-slate-400">{t("products.sku")}</th>
-                    <th className="w-[18%] px-4 py-3 text-left text-[9px] font-black uppercase tracking-wider text-slate-400">{t("products.category")}</th>
-                    <th className="w-[12%] px-4 py-3 text-right text-[9px] font-black uppercase tracking-wider text-slate-400">{t("products.stock")}</th>
-                    <th className="w-[12%] px-4 py-3 text-right text-[9px] font-black uppercase tracking-wider text-slate-400">{t("products.salePrice")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {lowStockProducts.map((product) => (
-                    <tr key={product.id} className="transition-colors hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <div className="truncate font-bold text-slate-800" title={product.name}>{product.name}</div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="block truncate font-semibold text-slate-500" title={product.sku}>{product.sku}</span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className="block truncate font-semibold text-slate-500" title={product.category?.name || ""}>
-                          {product.category?.name || t("common.notAvailable")}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-black text-rose-600">{getStockLabel(product)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-700">{formatCurrency(product.salePrice)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
+              {lowStockProducts.map((product) => (
+                <div key={product.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-3 transition-colors hover:bg-slate-50">
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-black text-slate-800" title={product.name}>{product.name}</p>
+                    <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400" title={product.sku}>
+                      {product.sku} - {product.category?.name || t("common.notAvailable")}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs font-black text-rose-600">{getStockLabel(product)}</p>
+                    <p className="mt-1 text-[10px] font-bold text-slate-500">{formatCurrency(product.salePrice)}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
 
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm lg:col-span-3">
+        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-3">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">{t("dashboard.topProducts")}</h2>
             <Button variant="outline" size="sm" className="text-[10px] font-bold" onClick={() => window.location.assign("/reports")}>
@@ -629,13 +603,13 @@ export default function DashboardPage() {
           ) : (
             <div className="space-y-3">
               {topProducts.slice(0, 5).map((item, index) => (
-                <div key={item.productId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2.5">
+                <div key={item.productId} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2.5">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-[10px] font-black text-slate-600">
                       {index + 1}
                     </div>
                     <div className="min-w-0">
-                      <p className="truncate text-xs font-black text-slate-800">{item.product?.name || `#${item.productId}`}</p>
+                      <p className="truncate text-xs font-black text-slate-800" title={item.product?.name || `#${item.productId}`}>{item.product?.name || `#${item.productId}`}</p>
                       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{formatCurrency(item.totalRevenue)}</p>
                     </div>
                   </div>

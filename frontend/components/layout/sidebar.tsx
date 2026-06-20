@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Boxes,
-  CreditCard,
   FileClock,
   FileText,
   Home,
@@ -15,7 +14,6 @@ import {
   Package,
   ClipboardList,
   ReceiptText,
-  RotateCcw,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -33,32 +31,74 @@ type SidebarMenuItem = {
   titleKey: string;
   href: string;
   icon: React.ElementType;
-  roles: UserRole[];
 };
 
-const SIDEBAR_MENU_ITEMS: SidebarMenuItem[] = [
-  // CASHIER được phép thấy đúng 5 mục: Dashboard, POS, Orders, Customers, Warranties.
-  { titleKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "CASHIER"] },
-  { titleKey: "nav.pos", href: "/pos", icon: ShoppingCart, roles: ["ADMIN", "CASHIER"] },
-  { titleKey: "nav.orders", href: "/orders", icon: ReceiptText, roles: ["ADMIN", "CASHIER"] },
-  { titleKey: "nav.customers", href: "/customers", icon: Users, roles: ["ADMIN", "CASHIER"] },
-  { titleKey: "nav.warranties", href: "/warranties", icon: ShieldCheck, roles: ["ADMIN", "CASHIER"] },
+type SidebarMenuSection = {
+  titleKey: string;
+  items: SidebarMenuItem[];
+};
 
-  // Các mục quản trị chỉ ADMIN mới được nhìn thấy.
-  { titleKey: "nav.products", href: "/products", icon: Package, roles: ["ADMIN"] },
-  { titleKey: "nav.categories", href: "/categories", icon: Tags, roles: ["ADMIN"] },
-  { titleKey: "nav.suppliers", href: "/suppliers", icon: Truck, roles: ["ADMIN"] },
-  { titleKey: "nav.inventory", href: "/inventory", icon: Warehouse, roles: ["ADMIN"] },
-  { titleKey: "nav.purchaseOrders", href: "/purchase-orders", icon: ClipboardList, roles: ["ADMIN"] },
-  { titleKey: "nav.returnOrders", href: "/return-orders", icon: RotateCcw, roles: ["ADMIN"] },
-  { titleKey: "nav.shifts", href: "/shifts", icon: FileText, roles: ["ADMIN"] },
-  { titleKey: "nav.vatInvoices", href: "/vat-invoices", icon: FileClock, roles: ["ADMIN"] },
-  { titleKey: "nav.payments", href: "/payments", icon: CreditCard, roles: ["ADMIN"] },
-  { titleKey: "nav.promotions", href: "/promotions", icon: TicketPercent, roles: ["ADMIN"] },
-  { titleKey: "nav.reports", href: "/reports", icon: BarChart3, roles: ["ADMIN"] },
-  { titleKey: "nav.settings", href: "/settings", icon: Settings, roles: ["ADMIN"] },
-  { titleKey: "nav.users", href: "/users", icon: Boxes, roles: ["ADMIN"] },
-  { titleKey: "nav.auditLogs", href: "/audit-logs", icon: FileClock, roles: ["ADMIN"] },
+const ADMIN_SIDEBAR_SECTIONS: SidebarMenuSection[] = [
+  {
+    titleKey: "nav.groupOverview",
+    items: [{ titleKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard }],
+  },
+  {
+    titleKey: "nav.groupSales",
+    items: [
+      { titleKey: "nav.pos", href: "/pos", icon: ShoppingCart },
+      { titleKey: "nav.invoices", href: "/orders", icon: ReceiptText },
+      { titleKey: "nav.customers", href: "/customers", icon: Users },
+      { titleKey: "nav.warranties", href: "/warranties", icon: ShieldCheck },
+      { titleKey: "nav.promotions", href: "/promotions", icon: TicketPercent },
+      { titleKey: "nav.vatInvoices", href: "/vat-invoices", icon: FileClock },
+    ],
+  },
+  {
+    titleKey: "nav.groupInventory",
+    items: [
+      { titleKey: "nav.inventory", href: "/inventory", icon: Warehouse },
+      { titleKey: "nav.products", href: "/products", icon: Package },
+      { titleKey: "nav.categories", href: "/categories", icon: Tags },
+      { titleKey: "nav.suppliers", href: "/suppliers", icon: Truck },
+      { titleKey: "nav.purchaseOrders", href: "/purchase-orders", icon: ClipboardList },
+    ],
+  },
+  {
+    titleKey: "nav.groupOperations",
+    items: [
+      { titleKey: "nav.shifts", href: "/shifts", icon: FileText },
+      { titleKey: "nav.employees", href: "/users", icon: Boxes },
+    ],
+  },
+  {
+    titleKey: "nav.groupAdmin",
+    items: [
+      { titleKey: "nav.reports", href: "/reports", icon: BarChart3 },
+      { titleKey: "nav.settings", href: "/settings", icon: Settings },
+      { titleKey: "nav.auditLogs", href: "/audit-logs", icon: FileClock },
+    ],
+  },
+];
+
+const CASHIER_SIDEBAR_SECTIONS: SidebarMenuSection[] = [
+  {
+    titleKey: "nav.groupOverview",
+    items: [{ titleKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard }],
+  },
+  {
+    titleKey: "nav.groupSales",
+    items: [
+      { titleKey: "nav.pos", href: "/pos", icon: ShoppingCart },
+      { titleKey: "nav.invoices", href: "/orders", icon: ReceiptText },
+      { titleKey: "nav.customers", href: "/customers", icon: Users },
+      { titleKey: "nav.warranties", href: "/warranties", icon: ShieldCheck },
+    ],
+  },
+  {
+    titleKey: "nav.groupOperations",
+    items: [{ titleKey: "nav.shifts", href: "/shifts", icon: FileText }],
+  },
 ];
 
 type SidebarProps = {
@@ -73,8 +113,8 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
   const pathname = usePathname();
   const { t } = useLanguage();
 
-  const visibleMenuItems = useMemo(() => {
-    return SIDEBAR_MENU_ITEMS.filter((item) => item.roles.includes(role));
+  const visibleSections = useMemo(() => {
+    return role === "ADMIN" ? ADMIN_SIDEBAR_SECTIONS : CASHIER_SIDEBAR_SECTIONS;
   }, [role]);
 
   return (
@@ -100,33 +140,42 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 scrollbar-thin">
-        <ul className="space-y-0.5 px-3">
-          {visibleMenuItems.map((item) => {
-            const Icon = item.icon;
-            const label = t(item.titleKey);
-            const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+        <div className="space-y-4 px-3">
+          {visibleSections.map((section) => (
+            <div key={section.titleKey} className="min-w-0">
+              {!collapsed ? (
+                <p className="mb-1.5 px-3 text-[9px] font-black uppercase tracking-[0.16em] text-slate-600">{t(section.titleKey)}</p>
+              ) : null}
+              <ul className="space-y-0.5">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const label = t(item.titleKey);
+                  const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  title={collapsed ? label : undefined}
-                  onClick={onNavigate}
-                  className={cn(
-                    "flex items-center rounded-xl px-4 py-2.5 transition-all duration-200",
-                    collapsed ? "justify-center" : "gap-3",
-                    isActive
-                      ? "bg-primary text-white font-bold shadow-md shadow-primary/20"
-                      : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
-                  )}
-                >
-                  <Icon className="h-5 w-5 shrink-0" />
-                  {!collapsed ? <span className="truncate text-xs font-bold uppercase tracking-wide">{label}</span> : null}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        title={collapsed ? label : undefined}
+                        onClick={onNavigate}
+                        className={cn(
+                          "flex min-w-0 items-center rounded-xl px-3 py-2.5 transition-all duration-200",
+                          collapsed ? "justify-center" : "gap-3",
+                          isActive
+                            ? "bg-primary text-white font-bold shadow-md shadow-primary/20"
+                            : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                        )}
+                      >
+                        <Icon className="h-5 w-5 shrink-0" />
+                        {!collapsed ? <span className="truncate text-xs font-bold uppercase tracking-wide">{label}</span> : null}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
       </nav>
 
       {/* Logout Button - Bottom */}

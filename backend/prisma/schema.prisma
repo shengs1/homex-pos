@@ -80,11 +80,14 @@ model Role {
 
 model User {
   id           Int        @id @default(autoincrement())
+  employeeCode String?    @unique
   fullName     String
   email        String     @unique
+  phone        String?
   passwordHash String
   roleId       Int
   status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -158,6 +161,7 @@ model Customer {
   email     String?
   address   String?
   points    Int      @default(0)
+  tier      String   @default("SILVER")
   status    String   @default("ACTIVE")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -290,14 +294,31 @@ model Promotion {
 model Setting {
   id                Int      @id @default(1)
   storeName         String   @default("Homex POS")
+  storeBranch       String?
+  taxCode           String?
+  businessHours     String?
+  currency          String   @default("VND")
   storeAddress      String?
   storeHotline      String?
   printPaperSize    String   @default("K80")
+  printCopies       Int      @default(1)
+  autoOpenPrint     Boolean  @default(false)
+  requireCustomerPhone Boolean @default(false)
   bankName          String?
   bankAccountNumber String?
   bankAccountName   String?
   vietQrTemplate    String?
+  transferContentTemplate String?
+  defaultPaymentMethod String @default("CASH")
+  productsPerPage   Int      @default(24)
+  autoLockMinutes   Int      @default(30)
+  allowOrderDiscount Boolean @default(true)
+  confirmBeforeCheckout Boolean @default(true)
+  barcodeAutoAdd    Boolean  @default(true)
+  compactPosMode    Boolean  @default(false)
   minStock          Int      @default(0)
+  warnLowStockSale  Boolean  @default(true)
+  allowOversell     Boolean  @default(false)
   maxDiscount       Decimal  @default(0) @db.Decimal(12, 2)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt

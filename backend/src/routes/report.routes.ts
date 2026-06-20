@@ -305,6 +305,91 @@ router.get(
   })
 );
 
+// GET /api/reports/profit?fromDate=2026-01-01&toDate=2026-12-31&groupBy=day
+router.get(
+  "/profit",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const fromDate = getDateValue(req.query.fromDate, "Ngay bat dau");
+    const toDate = getDateValue(req.query.toDate, "Ngay ket thuc");
+    const groupByParam = String(req.query.groupBy || "day").trim().toLowerCase();
+
+    if (groupByParam !== "day" && groupByParam !== "month") {
+      throw new AppError("groupBy chi duoc la day hoac month", 400);
+    }
+
+    const groupBy = groupByParam as "day" | "month";
+    const dateRange = buildDateRange(fromDate, toDate);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        status: ORDER_STATUS.COMPLETED,
+        createdAt: dateRange,
+      },
+      select: {
+        id: true,
+        totalAmount: true,
+        createdAt: true,
+        orderDetails: {
+          where: {
+            status: RECORD_STATUS.ACTIVE,
+          },
+          select: {
+            quantity: true,
+            product: {
+              select: {
+                costPrice: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    const map = new Map<string, { revenue: number; cogs: number; orderCount: number }>();
+
+    for (const order of orders) {
+      const key = getDateKey(order.createdAt, groupBy);
+      const current = map.get(key) || {
+        revenue: 0,
+        cogs: 0,
+        orderCount: 0,
+      };
+
+      const orderCogs = order.orderDetails.reduce((sum, detail) => {
+        return sum + Number(detail.product.costPrice) * detail.quantity;
+      }, 0);
+
+      current.revenue += Number(order.totalAmount);
+      current.cogs += orderCogs;
+      current.orderCount += 1;
+
+      map.set(key, current);
+    }
+
+    const items = Array.from(map.entries()).map(([period, value]) => ({
+      period,
+      revenue: value.revenue,
+      cogs: value.cogs,
+      netProfit: value.revenue - value.cogs,
+      orderCount: value.orderCount,
+    }));
+
+    return res.json({
+      success: true,
+      message: "Profit report loaded successfully",
+      data: {
+        groupBy,
+        items,
+      },
+    });
+  })
+);
+
 // GET /api/reports/top-products?fromDate=2026-01-01&toDate=2026-12-31&limit=10
 router.get(
   "/top-products",

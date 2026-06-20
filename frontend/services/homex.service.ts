@@ -8,6 +8,7 @@ import type {
   Order,
   Payment,
   Product,
+  ProfitReportItem,
   PublicInvoice,
   PurchaseOrder,
   ReturnOrder,
@@ -266,6 +267,7 @@ export const paymentService = {
 export const reportService = {
   summary: (params?: ListParams) => getData<ReportSummary>("/reports/summary", params),
   revenue: (params?: ListParams) => getData<{ groupBy: "day" | "month"; items: RevenueReportItem[] }>("/reports/revenue", params),
+  profit: (params?: ListParams) => getData<{ groupBy: "day" | "month"; items: ProfitReportItem[] }>("/reports/profit", params),
   topProducts: (params?: ListParams) => getData<{ items: TopProductReportItem[] }>("/reports/top-products", params),
   topCustomers: (params?: ListParams) => getData<{ items: TopCustomerReportItem[] }>("/reports/top-customers", params),
   lowStock: (params?: ListParams) => getData<{ items: Product[] }>("/reports/low-stock", params),
@@ -273,8 +275,10 @@ export const reportService = {
 };
 
 export type UserPayload = {
+  employeeCode?: string;
   fullName: string;
-  email: string;
+  email?: string;
+  phone?: string;
   password?: string;
   role: "ADMIN" | "CASHIER";
   status?: "ACTIVE" | "INACTIVE";
@@ -283,8 +287,8 @@ export type UserPayload = {
 export const userService = {
   list: (params?: ListParams) => getPaginatedDataByIdAsc<UserAccount>("/users", params),
   detail: (id: number) => getData<UserAccount>(`/users/${id}`),
-  create: (body: Required<Pick<UserPayload, "fullName" | "email" | "password" | "role">>) => postData<UserAccount>("/users", body),
-  update: (id: number, body: Required<Pick<UserPayload, "fullName" | "email" | "role" | "status">>) => putData<UserAccount>(`/users/${id}`, body),
+  create: (body: Pick<UserPayload, "employeeCode" | "fullName" | "email" | "phone" | "role"> & { password: string }) => postData<UserAccount>("/users", body),
+  update: (id: number, body: Pick<UserPayload, "employeeCode" | "fullName" | "email" | "phone" | "role"> & { status: "ACTIVE" | "INACTIVE" }) => putData<UserAccount>(`/users/${id}`, body),
   changePassword: (id: number, body: { newPassword: string }) => patchData<UserAccount>(`/users/${id}/change-password`, body),
   lock: (id: number) => deleteData<UserAccount>(`/users/${id}`),
   restore: (id: number) => patchData<UserAccount>(`/users/${id}/restore`),

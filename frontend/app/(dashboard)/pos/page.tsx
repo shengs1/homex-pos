@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Banknote, CreditCard, Minus, Plus, QrCode, Search, ShoppingCart, Trash2, UserPlus, XCircle } from "lucide-react";
+import { Banknote, Download, Minus, Plus, Printer, QrCode, ReceiptText, Search, ShoppingCart, Trash2, UserPlus, XCircle } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { useLanguage } from "@/contexts/language-context";
@@ -31,7 +31,10 @@ type CartItem = {
 };
 
 const POS_RESUME_DRAFT_ORDER_ID_KEY = "homex_pos_resume_draft_order_id";
-const paymentMethods: PaymentMethod[] = ["CASH", "CARD", "TRANSFER", "WALLET"];
+type PosPaymentMethod = Extract<PaymentMethod, "CASH" | "TRANSFER">;
+type CheckoutStep = "confirm" | "cash" | "qr";
+
+const paymentMethods: PosPaymentMethod[] = ["CASH", "TRANSFER"];
 
 function sortByIdAsc<T extends { id: number }>(items: T[]) {
   return [...items].sort((a, b) => a.id - b.id);
@@ -82,7 +85,7 @@ export default function PosPage() {
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("CASH");
   const [cashReceivedInput, setCashReceivedInput] = useState("");
   const [openingCashInput, setOpeningCashInput] = useState("");
   const [closingCashInput, setClosingCashInput] = useState("");
@@ -95,6 +98,7 @@ export default function PosPage() {
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
   const [isCancelDraftDialogOpen, setIsCancelDraftDialogOpen] = useState(false);
   const [isCheckoutDialogOpen, setIsCheckoutDialogOpen] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("confirm");
   const [quickCustomerName, setQuickCustomerName] = useState("");
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
@@ -118,10 +122,13 @@ export default function PosPage() {
   const totalPayable = Math.max(subtotal - discountAmount, 0);
   const cashReceivedAmount = getMoneyInputAmount(cashReceivedInput);
   const changeAmount = paymentMethod === "CASH" ? Math.max(cashReceivedAmount - totalPayable, 0) : 0;
+  const selectedCustomer = useMemo(() => customers.find((customer) => String(customer.id) === customerId) || null, [customerId, customers]);
   const requiresShift = user?.role === "CASHIER";
   const isCashPaymentInvalid = paymentMethod === "CASH" && cashReceivedAmount < totalPayable;
   const isCheckoutDisabled = isSubmitting || cart.length === 0 || !isOnline || (requiresShift && !currentShift);
-  const transferQrValue = buildVietQrDemoValue(setting, totalPayable, draftOrder?.orderCode || "HOMEX POS");
+  const transferContent = draftOrder?.orderCode || "HOMEX POS";
+  const isBankConfigured = Boolean(setting?.bankName && setting?.bankAccountNumber && setting?.bankAccountName);
+  const transferQrValue = buildVietQrDemoValue(setting, totalPayable, transferContent);
   const lastInvoicePublicUrl =
     lastCompletedOrder && typeof window !== "undefined"
       ? `${window.location.origin}/invoice/${lastCompletedOrder.orderCode}`
@@ -282,8 +289,10 @@ export default function PosPage() {
       return;
     }
 
-    window.setTimeout(() => cashReceivedInputRef.current?.focus(), 0);
-  }, [isCheckoutDialogOpen]);
+    if (checkoutStep === "cash") {
+      window.setTimeout(() => cashReceivedInputRef.current?.focus(), 0);
+    }
+  }, [checkoutStep, isCheckoutDialogOpen]);
 
   useEffect(() => {
     function updateOnlineStatus() {
@@ -464,14 +473,41 @@ export default function PosPage() {
   }
 
   function startCheckout() {
-    if (paymentMethod === "CASH") {
-      setErrorMessage("");
-      setSuccessMessage("");
-      setIsCheckoutDialogOpen(true);
+    setErrorMessage("");
+    setSuccessMessage("");
+    setCheckoutStep("confirm");
+    setIsCheckoutDialogOpen(true);
+  }
+
+  async function prepareTransferCheckout() {
+    if (cart.length === 0) {
+      setErrorMessage(t("toast.pos.emptyCart"));
       return;
     }
 
-    void checkout();
+    if (!isOnline) {
+      setErrorMessage(t("network.checkoutDisabled"));
+      return;
+    }
+
+    if (requiresShift && !currentShift) {
+      setErrorMessage(t("shifts.required"));
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setErrorMessage("");
+      const orderToPay = draftOrder
+        ? await orderService.updateDraft(draftOrder.id, buildOrderBody())
+        : await orderService.createDraft(buildOrderBody());
+      setDraftOrder(orderToPay);
+      setCheckoutStep("qr");
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   async function checkout() {
@@ -521,6 +557,39 @@ export default function PosPage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  function startNewOrder() {
+    setLastCompletedOrder(null);
+    resetPosState();
+    setSuccessMessage("");
+    setErrorMessage("");
+    focusBarcodeInput();
+  }
+
+  function downloadReceipt(order: Order) {
+    const lines = [
+      `${t("invoice.title")} ${order.orderCode}`,
+      `${t("common.createdAt")}: ${new Date(order.createdAt).toLocaleString("vi-VN")}`,
+      `${t("customers.title")}: ${order.customer?.fullName || t("customers.retail")}`,
+      `${t("pos.cashier")}: ${order.user?.fullName || user?.fullName || "-"}`,
+      "",
+      ...order.orderDetails.map((detail) => {
+        return `${detail.product?.name || detail.productId} x ${detail.quantity} - ${formatCurrency(detail.lineTotal)}`;
+      }),
+      "",
+      `${t("pos.subtotal")}: ${formatCurrency(order.totalAmount)}`,
+      `${t("orders.total")}: ${formatCurrency(order.totalAmount)}`,
+      `${t("pos.cashReceived")}: ${order.payment?.cashReceived ? formatCurrency(order.payment.cashReceived) : "-"}`,
+      `${t("pos.changeAmount")}: ${order.payment?.changeAmount ? formatCurrency(order.payment.changeAmount) : formatCurrency(0)}`,
+    ];
+    const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${order.orderCode}.txt`;
+    link.click();
+    window.URL.revokeObjectURL(url);
   }
 
   async function cancelDraftOrder() {
@@ -680,6 +749,97 @@ export default function PosPage() {
     loadProducts();
   }
 
+  function renderReceiptView(order: Order) {
+    return (
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+        <div className="mx-auto flex max-w-4xl flex-col gap-4">
+          <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex min-w-0 items-center gap-2">
+                <ReceiptText className="h-5 w-5 shrink-0 text-emerald-700" />
+                <h2 className="truncate text-lg font-black text-emerald-900">{t("pos.receiptTitle")}</h2>
+              </div>
+              <p className="mt-1 text-xs font-semibold text-emerald-700">{t("pos.receiptDescription")}</p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <Button type="button" variant="outline" onClick={() => downloadReceipt(order)}>
+                <Download className="h-4 w-4" />
+                {t("pos.downloadInvoice")}
+              </Button>
+              <Button type="button" variant="outline" onClick={() => window.print()}>
+                <Printer className="h-4 w-4" />
+                {t("orders.printInvoice")}
+              </Button>
+              <Button type="button" onClick={startNewOrder}>{t("pos.newOrder")}</Button>
+            </div>
+          </div>
+
+          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="min-w-0 rounded-2xl border border-slate-100 p-4">
+              <div className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("orders.orderCode")}</p>
+                  <p className="truncate font-black text-slate-800">{order.orderCode}</p>
+                </div>
+                <div className="min-w-0 sm:text-right">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("common.createdAt")}</p>
+                  <p className="font-bold text-slate-700">{new Date(order.createdAt).toLocaleString("vi-VN")}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("customers.title")}</p>
+                  <p className="truncate font-bold text-slate-700">{order.customer?.fullName || t("customers.retail")}</p>
+                </div>
+                <div className="min-w-0 sm:text-right">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.cashier")}</p>
+                  <p className="truncate font-bold text-slate-700">{order.user?.fullName || user?.fullName || "-"}</p>
+                </div>
+              </div>
+
+              <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
+                {order.orderDetails.map((detail) => (
+                  <div key={detail.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-black text-slate-800">{detail.product?.name || `#${detail.productId}`}</p>
+                      <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        {detail.product?.sku || "-"} x {detail.quantity}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right text-xs font-black text-slate-800">{formatCurrency(detail.lineTotal)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="font-semibold text-slate-500">{t("pos.subtotal")}</span>
+                  <span className="font-black text-slate-800">{formatCurrency(order.totalAmount)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="font-semibold text-slate-500">{t("pos.discount")}</span>
+                  <span className="font-black text-slate-800">{formatCurrency(0)}</span>
+                </div>
+                <div className="flex justify-between gap-4 border-t border-slate-200 pt-3 text-base">
+                  <span className="font-black text-slate-900">{t("orders.total")}</span>
+                  <span className="font-black text-primary">{formatCurrency(order.totalAmount)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="font-semibold text-slate-500">{t("pos.cashReceived")}</span>
+                  <span className="font-black text-slate-800">{order.payment?.cashReceived ? formatCurrency(order.payment.cashReceived) : "-"}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="font-semibold text-slate-500">{t("pos.changeAmount")}</span>
+                  <span className="font-black text-emerald-700">{formatCurrency(order.payment?.changeAmount || 0)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
       <div className="flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden print:hidden">
@@ -731,16 +891,11 @@ export default function PosPage() {
               </div>
             )}
           </div>
-          {lastCompletedOrder ? (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card p-3 text-sm">
-              <span>{t("invoice.lastReady", { code: lastCompletedOrder.orderCode })}</span>
-              <Button type="button" variant="outline" onClick={() => window.print()}>{t("orders.printInvoice")}</Button>
-            </div>
-          ) : null}
         </div>
 
         {/* Main POS workspace: chỉ phần này */}
-        <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(380px,3fr)]">
+        {lastCompletedOrder ? renderReceiptView(lastCompletedOrder) : (
+        <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(360px,3fr)] xl:grid-cols-[minmax(0,7fr)_minmax(380px,3fr)]">
           {/* Cột trái: tìm kiếm và danh sách sản phẩm */}
           <div className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/50 bg-white shadow-sm overflow-hidden">
             <div className="shrink-0 p-4 space-y-3 border-b border-border/40">
@@ -890,7 +1045,7 @@ export default function PosPage() {
                     <option value="">{t("customers.retail")}</option>
                     {customers.map((customer) => (
                       <option key={customer.id} value={customer.id}>
-                        {customer.fullName} - {customer.phone}
+                        {customer.fullName} - {customer.phone} - {t(`customerTier.${customer.tier || "SILVER"}`)} / {formatNumber(customer.points)} {t("customers.points")}
                       </option>
                     ))}
                   </Select>
@@ -1034,9 +1189,9 @@ export default function PosPage() {
 
                 <div className="mt-1.5 space-y-1.5">
                   <Label className="block text-[10px] font-black text-muted-foreground uppercase tracking-wider">{t("pos.paymentMethod")}</Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {paymentMethods.filter((method) => method !== "WALLET").map((method) => {
-                      const PaymentIcon = method === "CASH" ? Banknote : method === "TRANSFER" ? QrCode : CreditCard;
+                  <div className="grid grid-cols-2 gap-2">
+                    {paymentMethods.map((method) => {
+                      const PaymentIcon = method === "CASH" ? Banknote : QrCode;
 
                       return (
                         <button
@@ -1057,19 +1212,6 @@ export default function PosPage() {
                     })}
                   </div>
                 </div>
-
-                {paymentMethod === "TRANSFER" ? (
-                  <div className="mt-1.5 grid gap-2 rounded-xl border border-border/50 bg-slate-50 p-3 text-center text-xs shadow-inner">
-                    <div className="mx-auto rounded-lg bg-white p-2 shadow-sm border border-border/40">
-                      <QRCodeSVG value={transferQrValue} size={120} />
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="font-medium">{setting?.bankName || t("settings.bankName")}</p>
-                      <p>{setting?.bankAccountNumber || "-"}</p>
-                      <p>{t("orders.total")}: {formatCurrency(totalPayable)}</p>
-                    </div>
-                  </div>
-                ) : null}
 
                 {draftOrder ? (
                   <div className="mt-1.5 truncate rounded-lg bg-muted px-2.5 py-1.5 text-xs sm:text-sm">
@@ -1103,68 +1245,173 @@ export default function PosPage() {
             </div>
           </div>
         </div>
+        )}
 
-      <Dialog open={isCheckoutDialogOpen} onOpenChange={setIsCheckoutDialogOpen}>
-          <DialogContent className="max-w-md">
+        <Dialog open={isCheckoutDialogOpen} onOpenChange={setIsCheckoutDialogOpen}>
+          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{t("pos.cashCheckoutTitle")}</DialogTitle>
-              <DialogDescription>{t("pos.cashCheckoutDescription")}</DialogDescription>
+              <DialogTitle>
+                {checkoutStep === "confirm" ? t("pos.confirmOrderTitle") : checkoutStep === "qr" ? t("pos.qrPaymentTitle") : t("pos.cashCheckoutTitle")}
+              </DialogTitle>
+              <DialogDescription>
+                {checkoutStep === "confirm" ? t("pos.confirmOrderDescription") : checkoutStep === "qr" ? t("pos.qrPaymentDescription") : t("pos.cashCheckoutDescription")}
+              </DialogDescription>
             </DialogHeader>
 
             <form
               className="space-y-4"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!isCashPaymentInvalid && !isSubmitting) {
+                if (checkoutStep === "confirm") {
+                  if (paymentMethod === "CASH") {
+                    setCheckoutStep("cash");
+                  } else {
+                    void prepareTransferCheckout();
+                  }
+                  return;
+                }
+
+                if (checkoutStep === "cash" && !isCashPaymentInvalid && !isSubmitting) {
+                  void checkout();
+                  return;
+                }
+
+                if (checkoutStep === "qr" && !isSubmitting) {
                   void checkout();
                 }
               }}
             >
-              <div className="space-y-2 rounded-xl border bg-muted/40 p-3 text-sm">
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">{t("pos.subtotal")}</span>
-                  <span className="font-medium">{formatCurrency(subtotal)}</span>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+                <div className="min-w-0 rounded-xl border border-slate-100">
+                  <div className="border-b border-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    {t("pos.orderItems")}
+                  </div>
+                  <div className="max-h-56 divide-y divide-slate-100 overflow-y-auto">
+                    {cart.map((item) => (
+                      <div key={item.product.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-black text-slate-800">{item.product.name}</p>
+                          <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            {item.product.sku} x {item.quantity}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-xs font-black text-slate-800">{formatCurrency(item.product.salePrice * item.quantity)}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex justify-between gap-4">
-                  <span className="text-muted-foreground">{t("pos.discount")}</span>
-                  <span className="font-medium">-{formatCurrency(discountAmount)}</span>
+
+                <div className="space-y-3 rounded-xl border bg-slate-50 p-3 text-sm">
+                  <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("customers.title")}</p>
+                  <p className="truncate font-bold text-slate-800">{selectedCustomer?.fullName || t("customers.retail")}</p>
+                  {selectedCustomer ? (
+                    <p className="mt-1 text-[11px] font-bold text-amber-700">
+                      {t(`customerTier.${selectedCustomer.tier || "SILVER"}`)} - {formatNumber(selectedCustomer.points)} {t("customers.points")}
+                    </p>
+                  ) : null}
                 </div>
-                <div className="flex justify-between gap-4 border-t pt-2 text-base font-bold">
-                  <span>{t("pos.totalPayable")}</span>
-                  <span className="text-primary">{formatCurrency(totalPayable)}</span>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.paymentMethod")}</p>
+                    <p className="truncate font-bold text-slate-800">{t(`paymentMethod.${paymentMethod}`)}</p>
+                  </div>
+                  <div className="space-y-2 border-t border-slate-200 pt-3">
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-500">{t("pos.subtotal")}</span>
+                      <span className="font-bold text-slate-800">{formatCurrency(subtotal)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="text-slate-500">{t("pos.discount")}</span>
+                      <span className="font-bold text-slate-800">-{formatCurrency(discountAmount)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 text-base">
+                      <span className="font-black text-slate-900">{t("pos.totalPayable")}</span>
+                      <span className="font-black text-primary">{formatCurrency(totalPayable)}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="pos-cash-received">{t("pos.cashReceived")}</Label>
-                <Input
-                  id="pos-cash-received"
-                  ref={cashReceivedInputRef}
-                  inputMode="numeric"
-                  value={cashReceivedInput}
-                  onChange={(event) => setCashReceivedInput(formatMoneyInput(event.target.value))}
-                  placeholder={t("pos.cashReceivedPlaceholder")}
-                  className="h-12 text-lg font-semibold"
-                  disabled={cart.length === 0 || isSubmitting}
-                />
-              </div>
-
-              <div className="rounded-xl border bg-card p-3">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm text-muted-foreground">{t("pos.changeAmount")}</span>
-                  <span className={cn("text-2xl font-bold", isCashPaymentInvalid ? "text-destructive" : "text-green-700")}>
-                    {formatCurrency(changeAmount)}
-                  </span>
+              {checkoutStep === "cash" ? (
+                <div className="grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="pos-cash-received">{t("pos.cashReceived")}</Label>
+                    <Input
+                      id="pos-cash-received"
+                      ref={cashReceivedInputRef}
+                      inputMode="numeric"
+                      value={cashReceivedInput}
+                      onChange={(event) => setCashReceivedInput(formatMoneyInput(event.target.value))}
+                      placeholder={t("pos.cashReceivedPlaceholder")}
+                      className="h-12 text-lg font-semibold"
+                      disabled={cart.length === 0 || isSubmitting}
+                    />
+                  </div>
+                  <div className="flex flex-col justify-center rounded-xl bg-slate-50 p-3">
+                    <span className="text-sm font-semibold text-muted-foreground">{t("pos.changeAmount")}</span>
+                    <span className={cn("text-2xl font-black", isCashPaymentInvalid ? "text-destructive" : "text-green-700")}>{formatCurrency(changeAmount)}</span>
+                    {isCashPaymentInvalid ? <p className="mt-2 text-sm text-destructive">{t("pos.cashNotEnough")}</p> : null}
+                  </div>
                 </div>
-                {isCashPaymentInvalid ? <p className="mt-2 text-sm text-destructive">{t("pos.cashNotEnough")}</p> : null}
-              </div>
+              ) : null}
+
+              {checkoutStep === "qr" ? (
+                <div className="grid gap-4 rounded-xl border bg-slate-50 p-4 md:grid-cols-[180px_minmax(0,1fr)]">
+                  <div className="mx-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <QRCodeSVG value={transferQrValue} size={150} />
+                  </div>
+                  <div className="min-w-0 space-y-3 text-sm">
+                    {!isBankConfigured ? (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+                        {t("pos.bankNotConfigured")}
+                        {user?.role === "ADMIN" ? (
+                          <Button type="button" variant="outline" size="sm" className="mt-2 w-full" onClick={() => router.push("/settings")}>
+                            {t("settings.title")}
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.beneficiary")}</p>
+                      <p className="truncate font-black text-slate-800">{setting?.bankAccountName || "-"}</p>
+                      <p className="truncate font-semibold text-slate-600">{setting?.bankName || "-"} - {setting?.bankAccountNumber || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.transferContent")}</p>
+                      <p className="truncate font-black text-primary">{transferContent}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("orders.total")}</p>
+                      <p className="text-xl font-black text-slate-900">{formatCurrency(totalPayable)}</p>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="grid gap-2 sm:grid-cols-2">
-                <Button type="button" variant="outline" className="w-full" onClick={() => setIsCheckoutDialogOpen(false)} disabled={isSubmitting}>
-                  {t("common.cancel")}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    if (checkoutStep === "confirm") {
+                      setIsCheckoutDialogOpen(false);
+                    } else {
+                      setCheckoutStep("confirm");
+                    }
+                  }}
+                  disabled={isSubmitting}
+                >
+                  {checkoutStep === "confirm" ? t("common.cancel") : t("common.back")}
                 </Button>
-                <Button type="submit" size="lg" className="w-full text-base font-semibold" disabled={isSubmitting || isCashPaymentInvalid}>
-                  {t("pos.confirmPayment")}
+                <Button type="submit" size="lg" className="w-full text-base font-semibold" disabled={isSubmitting || (checkoutStep === "cash" && isCashPaymentInvalid)}>
+                  {checkoutStep === "confirm"
+                    ? paymentMethod === "CASH"
+                      ? t("pos.continueToCash")
+                      : t("pos.continueToQr")
+                    : checkoutStep === "qr"
+                      ? t("pos.confirmReceivedTransfer")
+                      : t("pos.confirmPayment")}
                 </Button>
               </div>
             </form>

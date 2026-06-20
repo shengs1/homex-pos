@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { CalendarClock, CircleDollarSign, DoorClosed, DoorOpen, RefreshCw, Scale } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { DataTable, Td, Th } from "@/components/shared/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
@@ -8,10 +9,13 @@ import { PageHeader } from "@/components/shared/page-header";
 import { PaginationControls } from "@/components/shared/pagination-controls";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useLanguage } from "@/contexts/language-context";
 import { getApiErrorMessage } from "@/lib/api";
+import { getAuthUser } from "@/lib/auth";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { shiftService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
@@ -19,22 +23,57 @@ import type { Shift } from "@/types/domain";
 
 const PAGE_SIZE = 10;
 
+function numberFromInput(value: string) {
+  const normalizedValue = value.replace(/[^\d]/g, "");
+  return normalizedValue ? Number(normalizedValue) : 0;
+}
+
+function displayShiftDate(value: string | null) {
+  return value ? formatDateTime(value) : "-";
+}
+
 export default function ShiftsPage() {
   const { t } = useLanguage();
   const [items, setItems] = useState<Shift[]>([]);
+  const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
+  const [openingCash, setOpeningCash] = useState("0");
+  const [closingCash, setClosingCash] = useState("");
+  const [note, setNote] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  const currentUser = getAuthUser();
+  const isAdmin = currentUser?.role === "ADMIN";
+
+  const pageSummary = useMemo(() => {
+    return items.reduce(
+      (summary, item) => {
+        summary.total += 1;
+        if (item.status === "OPEN") summary.open += 1;
+        if (item.status === "CLOSED") summary.closed += 1;
+        summary.discrepancy += item.discrepancyAmount || 0;
+        return summary;
+      },
+      { total: 0, open: 0, closed: 0, discrepancy: 0 }
+    );
+  }, [items]);
 
   async function loadData(currentPage = page) {
     try {
       setIsLoading(true);
       setErrorMessage("");
-      const data = await shiftService.list({ page: currentPage, limit: PAGE_SIZE, status });
-      setItems(data.items);
-      setPagination(data.pagination);
+      const [current, listData] = await Promise.all([
+        shiftService.current(),
+        shiftService.list({ page: currentPage, limit: PAGE_SIZE, status }),
+      ]);
+      setCurrentShift(current);
+      setItems(listData.items);
+      setPagination(listData.pagination);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error));
     } finally {
@@ -46,28 +85,182 @@ export default function ShiftsPage() {
     loadData(page);
   }, [page, status]);
 
-  return (
-    <RoleGuard allowedRoles={["ADMIN"]}>
-      <div className="space-y-6">
-        <PageHeader title={t("shifts.title")} description={t("shifts.description")} />
-        <ErrorState message={errorMessage} />
-        <Card>
-          <CardContent className="flex flex-wrap gap-3 pt-6">
-            <Select className="max-w-[220px]" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
-              <option value="">{t("common.allStatus")}</option>
-              <option value="OPEN">{t("status.OPEN")}</option>
-              <option value="CLOSED">{t("status.CLOSED")}</option>
-            </Select>
-            <Button type="button" onClick={() => loadData(1)}>{t("common.filter")}</Button>
-          </CardContent>
-        </Card>
+  async function handleOpenShift(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      setIsSubmitting(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+      const shift = await shiftService.open({
+        openingCash: numberFromInput(openingCash),
+        note: note.trim() || undefined,
+      });
+      setCurrentShift(shift);
+      setOpeningCash("0");
+      setNote("");
+      setSuccessMessage(t("shifts.opened"));
+      await loadData(1);
+      setPage(1);
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
-        {isLoading ? <LoadingState /> : null}
-        {!isLoading && items.length === 0 ? <EmptyState /> : null}
-        {!isLoading && items.length > 0 ? (
-          <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
-            <CardContent className="p-0">
-              <DataTable noHorizontalScroll className="rounded-none border-0 shadow-none">
+  async function handleCloseShift(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!currentShift) return;
+
+    try {
+      setIsSubmitting(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+      const shift = await shiftService.close(currentShift.id, {
+        closingCash: numberFromInput(closingCash),
+        note: note.trim() || undefined,
+      });
+      setCurrentShift(null);
+      setClosingCash("");
+      setNote("");
+      setSuccessMessage(t("shifts.closed", { amount: formatCurrency(shift.discrepancyAmount || 0) }));
+      await loadData(1);
+      setPage(1);
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
+      <div className="min-w-0 space-y-5">
+        <PageHeader title={t("shifts.title")} description={t("shifts.description")}>
+          <Button type="button" variant="outline" onClick={() => loadData(page)} disabled={isLoading}>
+            <RefreshCw className="h-4 w-4" />
+            {t("shifts.refresh")}
+          </Button>
+        </PageHeader>
+
+        <ErrorState message={errorMessage} />
+        {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
+
+        <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Card className="rounded-2xl border-slate-200/80 shadow-sm">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><CalendarClock className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("shifts.totalShifts")}</p>
+                <p className="text-2xl font-black text-slate-800">{pageSummary.total}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border-slate-200/80 shadow-sm">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><DoorOpen className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("status.OPEN")}</p>
+                <p className="text-2xl font-black text-slate-800">{pageSummary.open}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border-slate-200/80 shadow-sm">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><DoorClosed className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("status.CLOSED")}</p>
+                <p className="text-2xl font-black text-slate-800">{pageSummary.closed}</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="rounded-2xl border-slate-200/80 shadow-sm">
+            <CardContent className="flex items-center gap-3 p-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600"><Scale className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("shifts.discrepancy")}</p>
+                <p className="truncate text-lg font-black text-slate-800">{formatCurrency(pageSummary.discrepancy)}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+          <Card className="min-w-0 rounded-2xl border-slate-200/80 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base font-black text-slate-800">
+                <CircleDollarSign className="h-5 w-5 text-primary" />
+                {currentShift ? t("shifts.currentOpen") : t("shifts.noOpen")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {currentShift ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="font-black text-emerald-800">{currentShift.user?.fullName || t("shifts.cashier")}</span>
+                    <StatusBadge status={currentShift.status} />
+                  </div>
+                  <dl className="grid gap-2 text-xs font-semibold text-emerald-900">
+                    <div className="flex justify-between gap-3"><dt>{t("shifts.openingCash")}</dt><dd>{formatCurrency(currentShift.openingCash)}</dd></div>
+                    <div className="flex justify-between gap-3"><dt>{t("shifts.openedAt")}</dt><dd className="text-right">{displayShiftDate(currentShift.openedAt)}</dd></div>
+                    <div className="flex justify-between gap-3"><dt>{t("common.note")}</dt><dd className="max-w-[180px] truncate text-right">{currentShift.note || t("common.notAvailable")}</dd></div>
+                  </dl>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed bg-slate-50 p-4 text-xs font-semibold text-slate-500">{t("shifts.required")}</div>
+              )}
+
+              {currentShift ? (
+                <form onSubmit={handleCloseShift} className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>{t("shifts.closingCash")}</Label>
+                    <Input inputMode="numeric" value={closingCash} onChange={(event) => setClosingCash(event.target.value)} placeholder="0" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("common.note")}</Label>
+                    <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder={t("shifts.notePlaceholder")} />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    <DoorClosed className="h-4 w-4" />
+                    {t("shifts.close")}
+                  </Button>
+                </form>
+              ) : (
+                <form onSubmit={handleOpenShift} className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>{t("shifts.openingCash")}</Label>
+                    <Input inputMode="numeric" value={openingCash} onChange={(event) => setOpeningCash(event.target.value)} placeholder="0" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t("common.note")}</Label>
+                    <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder={t("shifts.notePlaceholder")} />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    <DoorOpen className="h-4 w-4" />
+                    {t("shifts.open")}
+                  </Button>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="min-w-0 space-y-4">
+            <Card className="min-w-0 rounded-2xl border-slate-200/80 shadow-sm">
+              <CardContent className="flex flex-wrap gap-3 pt-6">
+                <Select className="max-w-[220px]" value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
+                  <option value="">{t("common.allStatus")}</option>
+                  <option value="OPEN">{t("status.OPEN")}</option>
+                  <option value="CLOSED">{t("status.CLOSED")}</option>
+                </Select>
+                <Button type="button" onClick={() => loadData(1)}>{t("common.filter")}</Button>
+                {isAdmin ? <span className="self-center text-xs font-semibold text-slate-500">{t("shifts.adminScope")}</span> : <span className="self-center text-xs font-semibold text-slate-500">{t("shifts.cashierScope")}</span>}
+              </CardContent>
+            </Card>
+
+            {isLoading ? <LoadingState /> : null}
+            {!isLoading && items.length === 0 ? <EmptyState message={t("shifts.empty")} /> : null}
+            {!isLoading && items.length > 0 ? (
+              <DataTable>
                 <thead>
                   <tr>
                     <Th>{t("shifts.cashier")}</Th>
@@ -83,22 +276,22 @@ export default function ShiftsPage() {
                 <tbody>
                   {items.map((item) => (
                     <tr key={item.id}>
-                      <Td>{item.user?.fullName || item.userId}</Td>
+                      <Td className="max-w-[180px] truncate font-bold">{item.user?.fullName || item.userId}</Td>
                       <Td>{formatCurrency(item.openingCash)}</Td>
                       <Td>{item.closingCash === null ? "-" : formatCurrency(item.closingCash)}</Td>
                       <Td>{item.expectedCash === null ? "-" : formatCurrency(item.expectedCash)}</Td>
                       <Td className={item.discrepancyAmount ? "font-semibold text-destructive" : ""}>{item.discrepancyAmount === null ? "-" : formatCurrency(item.discrepancyAmount)}</Td>
                       <Td><StatusBadge status={item.status} /></Td>
-                      <Td>{formatDateTime(item.openedAt)}</Td>
-                      <Td>{formatDateTime(item.closedAt)}</Td>
+                      <Td>{displayShiftDate(item.openedAt)}</Td>
+                      <Td>{displayShiftDate(item.closedAt)}</Td>
                     </tr>
                   ))}
                 </tbody>
               </DataTable>
-            </CardContent>
-          </Card>
-        ) : null}
-        <PaginationControls pagination={pagination} onPageChange={setPage} />
+            ) : null}
+            <PaginationControls pagination={pagination} onPageChange={setPage} />
+          </div>
+        </div>
       </div>
     </RoleGuard>
   );

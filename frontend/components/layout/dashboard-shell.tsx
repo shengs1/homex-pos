@@ -15,7 +15,7 @@ import type { AuthUser, UserRole } from "@/types/auth";
 const DEFAULT_ALLOWED_ROLES: UserRole[] = ["ADMIN", "CASHIER"];
 
 // CASHIER chỉ được truy cập 5 route này. Các route quản trị còn lại sẽ bị chặn dù gõ URL trực tiếp.
-const CASHIER_ALLOWED_ROUTE_PREFIXES = ["/dashboard", "/pos", "/orders", "/customers", "/warranties"];
+const CASHIER_ALLOWED_ROUTE_PREFIXES = ["/dashboard", "/pos", "/orders", "/customers", "/warranties", "/shifts"];
 
 function isCashierRouteAllowed(pathname: string) {
   return CASHIER_ALLOWED_ROUTE_PREFIXES.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
@@ -121,7 +121,7 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
   }
 
   return (
-    <div className="flex h-screen w-full bg-background overflow-hidden text-foreground">
+    <div className="flex h-screen w-full min-w-0 overflow-hidden bg-background text-foreground">
       <div className="z-30 hidden h-full md:block shrink-0">
         <Sidebar role={user.role} collapsed={isSidebarCollapsed} onToggleCollapsed={handleToggleSidebar} onLogout={handleLogout} />
       </div>
@@ -147,10 +147,10 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
         </div>
       ) : null}
 
-      <div className="flex flex-col flex-1 min-w-0 h-screen bg-slate-50">
+      <div className="flex h-screen min-w-0 flex-1 flex-col bg-slate-50">
         <Topbar user={user} onMenuClick={() => setIsMobileSidebarOpen(true)} onLogout={handleLogout} />
         <NetworkStatusBar />
-        <main className="flex flex-col flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-5 md:p-6">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-5 xl:p-6">
           <ErrorBoundary>
             {isRouteBlocked ? (
               <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground shadow-sm">{noPermissionMessage}</div>

@@ -97,8 +97,8 @@ async function fetchAllOrders(filters: OrderFilters) {
   return firstPage.items.concat(remainingPages.flatMap((pageData) => pageData.items));
 }
 
-function getOrderCustomerName(order: Order) {
-  return order.customer?.fullName || "Khách lẻ";
+function getOrderCustomerName(order: Order, fallback: string) {
+  return order.customer?.fullName || fallback;
 }
 
 function getOrderCashierName(order: Order) {
@@ -241,7 +241,7 @@ export default function OrdersPage() {
       ["orderCode", "customer", "cashier", "totalAmount", "status", "createdAt"],
       ...allOrders.map((order) => [
         order.orderCode,
-        getOrderCustomerName(order),
+        getOrderCustomerName(order, t("customers.retail")),
         getOrderCashierName(order),
         String(order.totalAmount),
         order.status,
@@ -266,9 +266,9 @@ export default function OrdersPage() {
 
   return (
     <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
-      <div className="space-y-6 print:hidden">
+      <div className="min-w-0 space-y-5 print:hidden">
         <PageHeader
-          title={t("orders.title")}
+          title={t("nav.invoices")}
           description={t("orders.description")}
         >
           <Button type="button" onClick={() => router.push("/pos")}>
@@ -280,7 +280,7 @@ export default function OrdersPage() {
         <ErrorState message={errorMessage} />
         {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
 
-        <Card>
+        <Card className="min-w-0">
           <CardContent className="pt-6">
             <form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px_auto_auto]">
               <Input
@@ -350,8 +350,8 @@ export default function OrdersPage() {
                           </div>
                         </Td>
                         <Td>
-                          <div className="truncate" title={getOrderCustomerName(order)}>
-                            {getOrderCustomerName(order)}
+                          <div className="truncate" title={getOrderCustomerName(order, t("customers.retail"))}>
+                            {getOrderCustomerName(order, t("customers.retail"))}
                           </div>
                         </Td>
                         <Td>
@@ -434,7 +434,7 @@ export default function OrdersPage() {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <div>
                     <p className="text-sm font-semibold">{t("orders.customer")}</p>
-                    <p>{getOrderCustomerName(selectedOrder)}</p>
+                    <p>{getOrderCustomerName(selectedOrder, t("customers.retail"))}</p>
                   </div>
                   <div>
                     <p className="text-sm font-semibold">{t("orders.cashier")}</p>
@@ -471,7 +471,7 @@ export default function OrdersPage() {
                       {selectedOrder.orderDetails.map((detail) => (
                         <tr key={detail.id}>
                           <Td>
-                            <div className="break-words font-medium">{detail.product?.name || `Sản phẩm #${detail.productId}`}</div>
+                            <div className="break-words font-medium">{detail.product?.name || `${t("products.name")} #${detail.productId}`}</div>
                             <div className="truncate text-xs text-muted-foreground">{detail.product?.sku || "-"}</div>
                           </Td>
                           <Td>{detail.quantity}</Td>

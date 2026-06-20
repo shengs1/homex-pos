@@ -38,6 +38,7 @@ const orderInclude = {
       email: true,
       address: true,
       points: true,
+      tier: true,
       status: true,
     },
   },
@@ -330,6 +331,12 @@ function addMonths(date: Date, months: number) {
   const result = new Date(date);
   result.setMonth(result.getMonth() + months);
   return result;
+}
+
+function getCustomerTier(points: number) {
+  if (points >= 2000) return "DIAMOND";
+  if (points >= 500) return "GOLD";
+  return "SILVER";
 }
 
 async function getUniqueOrderCode(tx: Prisma.TransactionClient) {
@@ -930,14 +937,23 @@ router.patch(
         const earnedPoints = Math.floor(finalAmount / 100000);
 
         if (earnedPoints > 0) {
+          const customer = await tx.customer.findUnique({
+            where: {
+              id: order.customerId,
+            },
+            select: {
+              points: true,
+            },
+          });
+          const newPoints = (customer?.points || 0) + earnedPoints;
+
           await tx.customer.update({
             where: {
               id: order.customerId,
             },
             data: {
-              points: {
-                increment: earnedPoints,
-              },
+              points: newPoints,
+              tier: getCustomerTier(newPoints),
             },
           });
         }
@@ -1109,6 +1125,7 @@ router.patch(
               },
               data: {
                 points: newPoints,
+                tier: getCustomerTier(newPoints),
               },
             });
           }

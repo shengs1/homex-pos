@@ -61,14 +61,14 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
   const formattedDate = currentTime.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   return (
-    <header className="z-20 flex h-16 shrink-0 items-center justify-between border-b border-border/50 bg-white px-4 md:px-6">
+    <header className="z-20 flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/50 bg-white px-3 md:px-4 xl:px-6">
       <div className="flex min-w-0 items-center gap-3">
         <Button variant="ghost" size="icon" className="h-9 w-9 min-w-9 md:hidden" onClick={onMenuClick}>
           <Menu className="h-5 w-5" />
         </Button>
 
         {/* Page title area with icon */}
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           <div className="hidden md:flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600">
             <Calendar className="h-3.5 w-3.5 text-slate-400" />
             <span>{formattedDate}</span>
@@ -80,7 +80,7 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 md:gap-3">
+      <div className="flex min-w-0 shrink-0 items-center gap-2 md:gap-3">
         <LanguageToggle />
 
         {/* Notifications */}
@@ -117,12 +117,12 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
         </DropdownMenu>
 
         {/* Profile Avatar + Name */}
-        <div className="flex items-center gap-2.5 border-l border-slate-200 pl-3">
+        <div className="flex min-w-0 items-center gap-2.5 border-l border-slate-200 pl-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[11px] font-black text-white shadow-sm">
             {getUserInitials(user.fullName)}
           </div>
-          <div className="hidden leading-none md:block">
-            <p className="text-xs font-bold text-slate-800">{user.fullName}</p>
+          <div className="hidden min-w-0 max-w-[140px] leading-none md:block">
+            <p className="truncate text-xs font-bold text-slate-800">{user.fullName}</p>
             <p className="mt-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">{user.role}</p>
           </div>
         </div>

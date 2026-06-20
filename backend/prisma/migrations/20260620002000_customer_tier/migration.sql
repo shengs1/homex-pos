@@ -1,0 +1,8 @@
+ALTER TABLE "Customer" ADD COLUMN "tier" TEXT NOT NULL DEFAULT 'SILVER';
+
+UPDATE "Customer"
+SET "tier" = CASE
+  WHEN "points" >= 2000 THEN 'DIAMOND'
+  WHEN "points" >= 500 THEN 'GOLD'
+  ELSE 'SILVER'
+END;

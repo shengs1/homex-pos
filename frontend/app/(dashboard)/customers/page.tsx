@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Download, Edit, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { Crown, Download, Edit, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { RoleGuard } from "@/components/auth/role-guard";
@@ -30,6 +30,12 @@ const formSchema = z.object({ fullName: z.string().trim().min(1, "Họ tên khô
 type FormValues = z.infer<typeof formSchema>;
 
 const PAGE_SIZE = 10;
+
+function tierClassName(tier: string) {
+  if (tier === "DIAMOND") return "border-blue-200 bg-blue-50 text-blue-700";
+  if (tier === "GOLD") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
 
 export default function CustomersPage() {
   const { t } = useLanguage();
@@ -63,7 +69,7 @@ export default function CustomersPage() {
   }
   async function handleDelete(item: Customer) { if (!isAdmin || !window.confirm(t("customers.deleteConfirm", { name: item.fullName }))) return; try { await customerService.remove(item.id); setSuccessMessage(t("message.deleted")); await loadData(page); } catch (error) { setErrorMessage(getApiErrorMessage(error)); } }
   async function handleRestore(item: Customer) { if (!isAdmin || !window.confirm(t("customers.restoreConfirm", { name: item.fullName }))) return; try { await customerService.restore(item.id); setSuccessMessage(t("message.restored")); await loadData(page); } catch (error) { setErrorMessage(getApiErrorMessage(error)); } }
-  async function exportCustomersCsv() { const data = await customerService.list({ page: 1, limit: 1000, search, status }); const rows = [["fullName", "phone", "email", "points", "status"], ...data.items.map((item) => [item.fullName, item.phone, item.email || "", String(item.points), item.status])]; const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n"); const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "customers.csv"; link.click(); URL.revokeObjectURL(url); }
+  async function exportCustomersCsv() { const data = await customerService.list({ page: 1, limit: 1000, search, status }); const rows = [["fullName", "phone", "email", "points", "tier", "status"], ...data.items.map((item) => [item.fullName, item.phone, item.email || "", String(item.points), item.tier || "SILVER", item.status])]; const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n"); const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "customers.csv"; link.click(); URL.revokeObjectURL(url); }
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setPage(1); loadData(1); }
 
   return (
@@ -87,6 +93,7 @@ export default function CustomersPage() {
                     <Th>{t("common.phone")}</Th>
                     <Th>{t("common.email")}</Th>
                     <Th>{t("customers.points")}</Th>
+                    <Th>{t("customers.tier")}</Th>
                     <Th>{t("common.status")}</Th>
                     <Th>{t("common.updatedAt")}</Th>
                     <Th className="text-right">{t("common.actions")}</Th>
@@ -103,6 +110,12 @@ export default function CustomersPage() {
                       <Td>{item.phone}</Td>
                       <Td>{item.email || "-"}</Td>
                       <Td>{formatNumber(item.points)}</Td>
+                      <Td>
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider ${tierClassName(item.tier || "SILVER")}`}>
+                          <Crown className="h-3 w-3" />
+                          {t(`customerTier.${item.tier || "SILVER"}`)}
+                        </span>
+                      </Td>
                       <Td><StatusBadge status={item.status} /></Td>
                       <Td>{formatDateTime(item.updatedAt)}</Td>
                       <Td className="text-right">
