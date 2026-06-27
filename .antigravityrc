@@ -1,0 +1,8 @@
+{
+  "agent_settings": {
+    "max_iterations": 12,
+    "max_output_tokens": 8192,
+    "loop_detection": true,
+    "budget_alert_threshold": 0.5
+  }
+}

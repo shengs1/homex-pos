@@ -6,14 +6,15 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Boxes,
-  ChevronLeft,
-  ChevronRight,
-  CreditCard,
   FileClock,
+  FileText,
   Home,
   LayoutDashboard,
+  LogOut,
   Package,
+  ClipboardList,
   ReceiptText,
+  Settings,
   ShieldCheck,
   ShoppingCart,
   Tags,
@@ -21,8 +22,9 @@ import {
   Truck,
   Users,
   Warehouse,
+  PanelLeftClose,
+  PanelLeft
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useLanguage } from "@/contexts/language-context";
 import { cn } from "@/lib/utils";
 import type { UserRole } from "@/types/auth";
@@ -31,27 +33,73 @@ type SidebarMenuItem = {
   titleKey: string;
   href: string;
   icon: React.ElementType;
-  roles: UserRole[];
 };
 
-const SIDEBAR_MENU_ITEMS: SidebarMenuItem[] = [
-  // CASHIER được phép thấy đúng 5 mục: Dashboard, POS, Orders, Customers, Warranties.
-  { titleKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["ADMIN", "CASHIER"] },
-  { titleKey: "nav.pos", href: "/pos", icon: ShoppingCart, roles: ["ADMIN", "CASHIER"] },
-  { titleKey: "nav.orders", href: "/orders", icon: ReceiptText, roles: ["ADMIN", "CASHIER"] },
-  { titleKey: "nav.customers", href: "/customers", icon: Users, roles: ["ADMIN", "CASHIER"] },
-  { titleKey: "nav.warranties", href: "/warranties", icon: ShieldCheck, roles: ["ADMIN", "CASHIER"] },
+type SidebarMenuSection = {
+  titleKey: string;
+  items: SidebarMenuItem[];
+};
 
-  // Các mục quản trị chỉ ADMIN mới được nhìn thấy.
-  { titleKey: "nav.products", href: "/products", icon: Package, roles: ["ADMIN"] },
-  { titleKey: "nav.categories", href: "/categories", icon: Tags, roles: ["ADMIN"] },
-  { titleKey: "nav.suppliers", href: "/suppliers", icon: Truck, roles: ["ADMIN"] },
-  { titleKey: "nav.inventory", href: "/inventory", icon: Warehouse, roles: ["ADMIN"] },
-  { titleKey: "nav.payments", href: "/payments", icon: CreditCard, roles: ["ADMIN"] },
-  { titleKey: "nav.promotions", href: "/promotions", icon: TicketPercent, roles: ["ADMIN"] },
-  { titleKey: "nav.reports", href: "/reports", icon: BarChart3, roles: ["ADMIN"] },
-  { titleKey: "nav.users", href: "/users", icon: Boxes, roles: ["ADMIN"] },
-  { titleKey: "nav.auditLogs", href: "/audit-logs", icon: FileClock, roles: ["ADMIN"] },
+const ADMIN_SIDEBAR_SECTIONS: SidebarMenuSection[] = [
+  {
+    titleKey: "nav.groupOverview",
+    items: [{ titleKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard }],
+  },
+  {
+    titleKey: "nav.groupSales",
+    items: [
+      { titleKey: "nav.pos", href: "/pos", icon: ShoppingCart },
+      { titleKey: "nav.invoices", href: "/orders", icon: ReceiptText },
+      { titleKey: "nav.customers", href: "/customers", icon: Users },
+      { titleKey: "nav.warranties", href: "/warranties", icon: ShieldCheck },
+      { titleKey: "nav.promotions", href: "/promotions", icon: TicketPercent },
+      { titleKey: "nav.vatInvoices", href: "/vat-invoices", icon: FileClock },
+    ],
+  },
+  {
+    titleKey: "nav.groupInventory",
+    items: [
+      { titleKey: "nav.inventory", href: "/inventory", icon: Warehouse },
+      { titleKey: "nav.products", href: "/products", icon: Package },
+      { titleKey: "nav.categories", href: "/categories", icon: Tags },
+      { titleKey: "nav.suppliers", href: "/suppliers", icon: Truck },
+    ],
+  },
+  {
+    titleKey: "nav.groupOperations",
+    items: [
+      { titleKey: "nav.shifts", href: "/shifts", icon: FileText },
+      { titleKey: "nav.employees", href: "/users", icon: Boxes },
+    ],
+  },
+  {
+    titleKey: "nav.groupAdmin",
+    items: [
+      { titleKey: "nav.reports", href: "/reports", icon: BarChart3 },
+      { titleKey: "nav.settings", href: "/settings", icon: Settings },
+      { titleKey: "nav.auditLogs", href: "/audit-logs", icon: FileClock },
+    ],
+  },
+];
+
+const CASHIER_SIDEBAR_SECTIONS: SidebarMenuSection[] = [
+  {
+    titleKey: "nav.groupOverview",
+    items: [{ titleKey: "nav.dashboard", href: "/dashboard", icon: LayoutDashboard }],
+  },
+  {
+    titleKey: "nav.groupSales",
+    items: [
+      { titleKey: "nav.pos", href: "/pos", icon: ShoppingCart },
+      { titleKey: "nav.invoices", href: "/orders", icon: ReceiptText },
+      { titleKey: "nav.customers", href: "/customers", icon: Users },
+      { titleKey: "nav.warranties", href: "/warranties", icon: ShieldCheck },
+    ],
+  },
+  {
+    titleKey: "nav.groupOperations",
+    items: [{ titleKey: "nav.shifts", href: "/shifts", icon: FileText }],
+  },
 ];
 
 type SidebarProps = {
@@ -59,73 +107,109 @@ type SidebarProps = {
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
   onNavigate?: () => void;
+  onLogout?: () => void;
 };
 
-export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate }: SidebarProps) {
+export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate, onLogout }: SidebarProps) {
   const pathname = usePathname();
   const { t } = useLanguage();
 
-  const visibleMenuItems = useMemo(() => {
-    return SIDEBAR_MENU_ITEMS.filter((item) => item.roles.includes(role));
+  const visibleSections = useMemo(() => {
+    return role === "ADMIN" ? ADMIN_SIDEBAR_SECTIONS : CASHIER_SIDEBAR_SECTIONS;
   }, [role]);
 
   return (
     <aside
       className={cn(
-        "relative flex h-full flex-col border-r bg-card transition-all duration-200",
-        collapsed ? "w-20" : "w-72"
+        "relative flex h-full flex-col bg-slate-900 text-slate-400 transition-all duration-200",
+        collapsed ? "w-20" : "w-64"
       )}
     >
-      <div className={cn("flex h-16 items-center border-b px-4", collapsed ? "justify-center" : "gap-3")}>
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+      {/* Logo Header */}
+      <div className={cn("flex h-16 shrink-0 items-center border-b border-[#1E293B] px-4", collapsed ? "justify-center" : "gap-3")}>
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
           <Home className="h-5 w-5" />
         </div>
 
         {!collapsed ? (
           <div className="min-w-0 flex-1">
-            <p className="truncate text-base font-bold leading-none">Homex POS</p>
-            <p className="mt-1 truncate text-xs text-muted-foreground">{t("app.subtitle")}</p>
+            <p className="truncate text-sm font-black leading-none tracking-tight text-white">Homex POS</p>
+            <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-wider text-slate-500">{t("app.subtitle")}</p>
           </div>
         ) : null}
 
         {onToggleCollapsed ? (
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="icon"
-            className={cn("hidden md:inline-flex", collapsed && "absolute left-[4.25rem]")}
-            title={collapsed ? t("topbar.expandSidebar") : t("topbar.collapseSidebar")}
             onClick={onToggleCollapsed}
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-white shrink-0",
+              collapsed ? "absolute -right-4 top-4 z-50 bg-slate-800 border border-slate-700 rounded-full shadow-md" : ""
+            )}
+            title={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+            aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
           >
-            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </Button>
+            {collapsed ? <PanelLeft className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
         ) : null}
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-        {visibleMenuItems.map((item) => {
-          const Icon = item.icon;
-          const label = t(item.titleKey);
-          const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-4 sidebar-scrollbar">
+        <div className="space-y-4 px-3">
+          {visibleSections.map((section) => (
+            <div key={section.titleKey} className="min-w-0">
+              {!collapsed ? (
+                <p className="mb-1.5 px-3 text-[9px] font-black uppercase tracking-[0.16em] text-slate-600">{t(section.titleKey)}</p>
+              ) : null}
+              <ul className="space-y-0.5">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const label = item.href === "/shifts" ? (role === "ADMIN" ? "Ca làm" : "Ca làm thu ngân") : t(item.titleKey);
+                  const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={collapsed ? label : undefined}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                collapsed ? "justify-center" : "gap-3",
-                isActive && "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground"
-              )}
-            >
-              <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed ? <span className="truncate">{label}</span> : null}
-            </Link>
-          );
-        })}
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        title={collapsed ? label : undefined}
+                        onClick={onNavigate}
+                        className={cn(
+                          "flex min-w-0 items-center rounded-xl px-3 py-2.5 transition-all duration-200",
+                          collapsed ? "justify-center" : "gap-3",
+                          isActive
+                            ? "bg-primary text-white font-bold shadow-md shadow-primary/20"
+                            : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                        )}
+                      >
+                        <Icon className="h-5 w-5 shrink-0" />
+                        {!collapsed ? <span className="truncate text-xs font-bold uppercase tracking-wide">{label}</span> : null}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
       </nav>
+
+      {/* Logout Button - Bottom */}
+      {onLogout ? (
+        <div className="shrink-0 border-t border-[#1E293B] p-3">
+          <button
+            type="button"
+            onClick={onLogout}
+            className={cn(
+              "flex w-full items-center justify-center rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 transition-all duration-200 hover:bg-red-950/30 hover:text-red-400",
+              collapsed ? "gap-0" : "gap-2"
+            )}
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!collapsed ? <span>{t("topbar.logout")}</span> : null}
+          </button>
+        </div>
+      ) : null}
     </aside>
   );
 }

@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import { Providers } from "@/app/providers";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin", "vietnamese"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "Homex POS",
@@ -9,8 +12,8 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="vi" suppressHydrationWarning>
-      <body suppressHydrationWarning>
+    <html lang="vi" suppressHydrationWarning className={`${inter.variable} font-sans`}>
+      <body className="font-sans antialiased bg-background text-foreground" suppressHydrationWarning>
         <Providers>{children}</Providers>
       </body>
     </html>

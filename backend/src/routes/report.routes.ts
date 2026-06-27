@@ -108,6 +108,13 @@ function formatMoney(value: Prisma.Decimal | number | null | undefined) {
   return Number(value || 0);
 }
 
+function normalizeProductPrice(value: Prisma.Decimal | number | string | null | undefined) {
+  const numberValue = Number(value || 0);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return 0;
+
+  return numberValue >= 10000 ? Math.round(numberValue / 1000) : numberValue;
+}
+
 function getDateKey(date: Date, groupBy: "day" | "month") {
   const vietnamDate = new Date(date.getTime() + VIETNAM_TIMEZONE_OFFSET_MS);
   const year = vietnamDate.getUTCFullYear();
@@ -142,6 +149,7 @@ router.get(
       activeProducts,
       lowStockProducts,
       activeWarranties,
+      productsSoldAgg,
     ] = await prisma.$transaction([
       prisma.payment.aggregate({
         where: {
@@ -213,6 +221,18 @@ router.get(
           status: WARRANTY_STATUS.ACTIVE,
         },
       }),
+      prisma.orderDetail.aggregate({
+        where: {
+          status: RECORD_STATUS.ACTIVE,
+          order: {
+            status: ORDER_STATUS.COMPLETED,
+            createdAt: dateRange,
+          },
+        },
+        _sum: {
+          quantity: true,
+        },
+      }),
     ]);
 
     const grossRevenue = formatMoney(paidPaymentAgg._sum.amount);
@@ -236,6 +256,7 @@ router.get(
         activeProducts,
         lowStockProducts,
         activeWarranties,
+        productsSold: productsSoldAgg._sum.quantity || 0,
       },
     });
   })
@@ -305,6 +326,93 @@ router.get(
   })
 );
 
+// GET /api/reports/profit?fromDate=2026-01-01&toDate=2026-12-31&groupBy=day
+router.get(
+  "/profit",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const fromDate = getDateValue(req.query.fromDate, "Ngay bat dau");
+    const toDate = getDateValue(req.query.toDate, "Ngay ket thuc");
+    const groupByParam = String(req.query.groupBy || "day").trim().toLowerCase();
+
+    if (groupByParam !== "day" && groupByParam !== "month") {
+      throw new AppError("groupBy chi duoc la day hoac month", 400);
+    }
+
+    const groupBy = groupByParam as "day" | "month";
+    const dateRange = buildDateRange(fromDate, toDate);
+
+    const orders = await prisma.order.findMany({
+      where: {
+        status: ORDER_STATUS.COMPLETED,
+        createdAt: dateRange,
+      },
+      select: {
+        id: true,
+        totalAmount: true,
+        createdAt: true,
+        orderDetails: {
+          where: {
+            status: RECORD_STATUS.ACTIVE,
+          },
+          select: {
+            quantity: true,
+            unitCost: true,
+            product: {
+              select: {
+                costPrice: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    const map = new Map<string, { revenue: number; cogs: number; orderCount: number }>();
+
+    for (const order of orders) {
+      const key = getDateKey(order.createdAt, groupBy);
+      const current = map.get(key) || {
+        revenue: 0,
+        cogs: 0,
+        orderCount: 0,
+      };
+
+      const orderCogs = order.orderDetails.reduce((sum, detail) => {
+        const cost = detail.unitCost !== null ? formatMoney(detail.unitCost) : normalizeProductPrice(detail.product.costPrice);
+        return sum + cost * detail.quantity;
+      }, 0);
+
+      current.revenue += Number(order.totalAmount);
+      current.cogs += orderCogs;
+      current.orderCount += 1;
+
+      map.set(key, current);
+    }
+
+    const items = Array.from(map.entries()).map(([period, value]) => ({
+      period,
+      revenue: value.revenue,
+      cogs: value.cogs,
+      netProfit: value.revenue - value.cogs,
+      orderCount: value.orderCount,
+    }));
+
+    return res.json({
+      success: true,
+      message: "Profit report loaded successfully",
+      data: {
+        groupBy,
+        items,
+      },
+    });
+  })
+);
+
 // GET /api/reports/top-products?fromDate=2026-01-01&toDate=2026-12-31&limit=10
 router.get(
   "/top-products",
@@ -353,6 +461,7 @@ router.get(
         stockQuantity: true,
         minStock: true,
         status: true,
+        imageUrl: true,
         category: {
           select: {
             id: true,
@@ -372,7 +481,7 @@ router.get(
         product: product
           ? {
               ...product,
-              salePrice: formatMoney(product.salePrice),
+              salePrice: normalizeProductPrice(product.salePrice),
             }
           : null,
         totalQuantity: groupedItem._sum.quantity || 0,
@@ -515,11 +624,12 @@ router.get(
       name: product.name,
       category: product.category,
       supplier: product.supplier,
-      salePrice: formatMoney(product.salePrice),
-      costPrice: formatMoney(product.costPrice),
+      salePrice: normalizeProductPrice(product.salePrice),
+      costPrice: normalizeProductPrice(product.costPrice),
       stockQuantity: product.stockQuantity,
       minStock: product.minStock,
       status: product.status,
+      imageUrl: product.imageUrl,
     }));
 
     return res.json({

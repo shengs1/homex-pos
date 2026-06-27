@@ -51,10 +51,12 @@ async function main() {
   await prisma.user.upsert({
     where: { email: "admin@homex.com" },
     update: {
+      employeeCode: "NV0001",
       roleId: adminRole.id,
       status: "ACTIVE",
     },
     create: {
+      employeeCode: "NV0001",
       fullName: "Admin Homex",
       email: "admin@homex.com",
       passwordHash,
@@ -66,10 +68,12 @@ async function main() {
   await prisma.user.upsert({
     where: { email: "cashier@homex.com" },
     update: {
+      employeeCode: "NV0002",
       roleId: cashierRole.id,
       status: "ACTIVE",
     },
     create: {
+      employeeCode: "NV0002",
       fullName: "Nhân viên bán hàng",
       email: "cashier@homex.com",
       passwordHash,
@@ -164,8 +168,8 @@ async function main() {
             description: "Nồi cơm điện dung tích 1.8L phù hợp gia đình 3-5 người",
             categoryId: kitchenCategory.id,
             supplierId: homeSupplier.id,
-            costPrice: 550000,
-            salePrice: 790000,
+            costPrice: 550,
+            salePrice: 790,
             stockQuantity: 20,
             minStock: 5,
             warrantyMonths: 12,
@@ -179,8 +183,8 @@ async function main() {
             description: "Máy xay sinh tố gia đình công suất 350W",
             categoryId: kitchenCategory.id,
             supplierId: homeSupplier.id,
-            costPrice: 420000,
-            salePrice: 650000,
+            costPrice: 420,
+            salePrice: 650,
             stockQuantity: 15,
             minStock: 4,
             warrantyMonths: 12,
@@ -194,8 +198,8 @@ async function main() {
             description: "Máy hút bụi mini dùng cho phòng ngủ và phòng khách",
             categoryId: cleaningCategory.id,
             supplierId: starSupplier.id,
-            costPrice: 700000,
-            salePrice: 990000,
+            costPrice: 700,
+            salePrice: 990,
             stockQuantity: 8,
             minStock: 3,
             warrantyMonths: 18,
@@ -212,6 +216,8 @@ async function main() {
   console.log("Tài khoản demo:");
   console.log("- admin@homex.com / 123456");
   console.log("- cashier@homex.com / 123456");
+  console.log("- NV0001 / 123456");
+  console.log("- NV0002 / 123456");
 }
 
 main()

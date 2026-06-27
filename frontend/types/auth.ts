@@ -2,6 +2,7 @@ export type UserRole = "ADMIN" | "CASHIER";
 
 export type AuthUser = {
   id: number;
+  employeeCode?: string | null;
   fullName: string;
   email: string;
   role: UserRole;

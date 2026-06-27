@@ -1,3 +1,4 @@
+import { compactProductPrice } from "@/lib/format";
 import type { ProductPayload } from "@/services/homex.service";
 import type { Category, Supplier } from "@/types/domain";
 
@@ -344,8 +345,8 @@ export function buildDemoProductPayloads(categories: Category[], suppliers: Supp
       description: `${template.description} Sản phẩm mẫu Homex - ảnh thật cố định theo template, lưu local trong public/assets/real-products, không dùng ảnh random online.`,
       categoryId: category.id,
       supplierId: supplier.id,
-      costPrice,
-      salePrice,
+      costPrice: compactProductPrice(costPrice),
+      salePrice: compactProductPrice(salePrice),
       stockQuantity: 15 + (index % 45),
       minStock: 5 + (index % 6),
       warrantyMonths: template.warrantyMonths,
@@ -367,6 +368,9 @@ export function parseProductImportFileContent(content: string): ProductPayload[]
 
     return rows.map((row, index) => ({
       ...row,
+      costPrice: compactProductPrice(row.costPrice),
+      salePrice: compactProductPrice(row.salePrice),
+      originalPrice: row.originalPrice ? compactProductPrice(row.originalPrice) : undefined,
       imageUrl: row.imageUrl || row.image || row.imageBase64 || resolveRealProductImageFromProductName(row.name || "", index),
     }));
   }
@@ -389,8 +393,8 @@ export function parseProductImportFileContent(content: string): ProductPayload[]
       description: row.description || "",
       categoryId: Number(row.categoryId),
       supplierId: Number(row.supplierId),
-      costPrice: Number(row.costPrice),
-      salePrice: Number(row.salePrice),
+      costPrice: compactProductPrice(row.costPrice),
+      salePrice: compactProductPrice(row.salePrice),
       stockQuantity: Number(row.stockQuantity || 0),
       minStock: Number(row.minStock || 0),
       warrantyMonths: Number(row.warrantyMonths || 0),

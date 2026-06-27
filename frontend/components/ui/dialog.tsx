@@ -25,7 +25,7 @@ export function Dialog({ open, onOpenChange, children }: DialogProps) {
   return (
     <DialogContext.Provider value={{ onOpenChange }}>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-black/45" onClick={() => onOpenChange(false)} />
+        <button type="button" aria-label="Close dialog" className="absolute inset-0 bg-black/45 backdrop-blur-sm transition-all" onClick={() => onOpenChange(false)} />
         {children}
       </div>
     </DialogContext.Provider>
@@ -41,7 +41,7 @@ export function DialogContent({ children, className }: DialogContentProps) {
   const { onOpenChange } = useDialogContext();
 
   return (
-    <div className={cn("relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border bg-card p-6 shadow-xl", className)}>
+    <div className={cn("relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border/50 bg-white p-6 shadow-2xl", className)}>
       <Button type="button" variant="ghost" size="icon" className="absolute right-3 top-3" onClick={() => onOpenChange(false)}>
         <X className="h-4 w-4" />
       </Button>

@@ -3,6 +3,7 @@ import { clearAuthStorage, getAuthToken } from "@/lib/auth";
 import type { ApiError } from "@/types/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+let hasDispatchedUnauthorized = false;
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -23,17 +24,23 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 });
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    hasDispatchedUnauthorized = false;
+    return response;
+  },
   (error: AxiosError<ApiError>) => {
     const status = error.response?.status;
 
     if (status === 401 && typeof window !== "undefined") {
       clearAuthStorage();
-      window.dispatchEvent(new Event("homex-pos:unauthorized"));
-
-      if (!window.location.pathname.startsWith("/login")) {
-        window.location.href = "/login?expired=1";
+      if (!hasDispatchedUnauthorized && !window.location.pathname.startsWith("/login")) {
+        hasDispatchedUnauthorized = true;
+        window.dispatchEvent(new Event("homex-pos:unauthorized"));
       }
+    }
+
+    if (status === 403 && error.response?.data?.message === "Demo mode restriction" && typeof window !== "undefined") {
+      window.dispatchEvent(new Event("homex-pos:demo-restriction"));
     }
 
     return Promise.reject(error);

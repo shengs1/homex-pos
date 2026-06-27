@@ -46,7 +46,36 @@ enum StockTransactionType {
 
 enum WarrantyStatus {
   ACTIVE
+  CLAIMED
+  COMPLETED
+  REJECTED
   EXPIRED
+  CANCELLED
+}
+
+enum VatInvoiceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ShiftStatus {
+  OPEN
+  CLOSED
+}
+
+enum ShiftType {
+  MORNING
+  EVENING
+}
+
+enum PurchaseOrderStatus {
+  COMPLETED
+  CANCELLED
+}
+
+enum ReturnOrderStatus {
+  COMPLETED
   CANCELLED
 }
 
@@ -59,11 +88,14 @@ model Role {
 
 model User {
   id           Int        @id @default(autoincrement())
+  employeeCode String?    @unique
   fullName     String
   email        String     @unique
+  phone        String?
   passwordHash String
   roleId       Int
   status       UserStatus @default(ACTIVE)
+  lastLoginAt  DateTime?
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -71,6 +103,10 @@ model User {
   orders            Order[]
   stockTransactions StockTransaction[]
   auditLogs         AuditLog[]
+  shifts            Shift[]
+  purchaseOrders    PurchaseOrder[]
+  returnOrders      ReturnOrder[]
+  notifications     Notification[]
 }
 
 model Category {
@@ -81,7 +117,8 @@ model Category {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  products Product[]
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
 }
 
 model Supplier {
@@ -89,12 +126,14 @@ model Supplier {
   name      String
   phone     String?
   email     String?
+  taxCode   String?
   address   String?
   status    ProductStatus @default(ACTIVE)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
-  products Product[]
+  products       Product[]
+  purchaseOrders PurchaseOrder[]
 }
 
 model Product {
@@ -106,6 +145,7 @@ model Product {
   supplierId     Int
   costPrice      Decimal       @db.Decimal(12, 2)
   salePrice      Decimal       @db.Decimal(12, 2)
+  originalPrice  Decimal?      @db.Decimal(12, 2)
   stockQuantity  Int           @default(0)
   minStock       Int           @default(0)
   warrantyMonths Int           @default(0)
@@ -115,10 +155,12 @@ model Product {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  category          Category           @relation(fields: [categoryId], references: [id])
-  supplier          Supplier           @relation(fields: [supplierId], references: [id])
-  orderDetails      OrderDetail[]
-  stockTransactions StockTransaction[]
+  category           Category            @relation(fields: [categoryId], references: [id])
+  supplier           Supplier            @relation(fields: [supplierId], references: [id])
+  orderDetails       OrderDetail[]
+  stockTransactions  StockTransaction[]
+  purchaseOrderItems PurchaseOrderItem[]
+  returnOrderItems   ReturnOrderItem[]
 }
 
 model Customer {
@@ -128,9 +170,13 @@ model Customer {
   email     String?
   address   String?
   points    Int      @default(0)
+  tier      String   @default("SILVER")
   status    String   @default("ACTIVE")
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt      DateTime  @updatedAt
+  lastPurchaseAt DateTime?
+  tierUpdatedAt  DateTime?
+  tierExpiresAt  DateTime?
 
   orders     Order[]
   warranties Warranty[]
@@ -141,16 +187,22 @@ model Order {
   orderCode   String      @unique
   userId      Int
   customerId  Int?
-  totalAmount Decimal     @db.Decimal(12, 2)
-  status      OrderStatus @default(DRAFT)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  totalAmount       Decimal     @db.Decimal(12, 2)
+  promotionCode     String?
+  discountAmount    Decimal?    @db.Decimal(12, 2)
+  shiftId           Int?
+  status            OrderStatus @default(DRAFT)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   user              User               @relation(fields: [userId], references: [id])
   customer          Customer?          @relation(fields: [customerId], references: [id])
+  shift             Shift?             @relation(fields: [shiftId], references: [id])
   orderDetails      OrderDetail[]
   payment           Payment?
   stockTransactions StockTransaction[]
+  vatInvoiceRequest VatInvoiceRequest?
+  returnOrders      ReturnOrder[]
 }
 
 model OrderDetail {
@@ -160,24 +212,28 @@ model OrderDetail {
   quantity  Int
   unitPrice Decimal  @db.Decimal(12, 2)
   lineTotal Decimal  @db.Decimal(12, 2)
+  unitCost  Decimal? @db.Decimal(12, 2)
   status    String   @default("ACTIVE")
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
-  order    Order     @relation(fields: [orderId], references: [id])
-  product  Product   @relation(fields: [productId], references: [id])
-  warranty Warranty?
+  order            Order             @relation(fields: [orderId], references: [id])
+  product          Product           @relation(fields: [productId], references: [id])
+  warranty         Warranty?
+  returnOrderItems ReturnOrderItem[]
 }
 
 model Payment {
-  id        Int           @id @default(autoincrement())
-  orderId   Int           @unique
-  method    PaymentMethod
-  amount    Decimal       @db.Decimal(12, 2)
-  status    PaymentStatus @default(PAID)
-  paidAt    DateTime?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
+  id           Int           @id @default(autoincrement())
+  orderId      Int           @unique
+  method       PaymentMethod
+  amount       Decimal       @db.Decimal(12, 2)
+  cashReceived Decimal?      @db.Decimal(12, 2)
+  changeAmount Decimal?      @db.Decimal(12, 2)
+  status       PaymentStatus @default(PAID)
+  paidAt       DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   order Order @relation(fields: [orderId], references: [id])
 }
@@ -201,15 +257,16 @@ model Warranty {
   id            Int            @id @default(autoincrement())
   warrantyCode  String         @unique
   orderDetailId Int            @unique
-  customerId    Int
+  customerId    Int?
   startDate     DateTime
   endDate       DateTime
   status        WarrantyStatus @default(ACTIVE)
+  note          String?        @db.Text
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @default(now()) @updatedAt
 
   orderDetail OrderDetail @relation(fields: [orderDetailId], references: [id])
-  customer    Customer    @relation(fields: [customerId], references: [id])
+  customer    Customer?   @relation(fields: [customerId], references: [id])
 }
 
 model AuditLog {
@@ -235,17 +292,182 @@ enum PromotionStatus {
 }
 
 model Promotion {
-  id             Int                   @id @default(autoincrement())
-  code           String                @unique
-  discountType   PromotionDiscountType
-  discountValue  Float
-  minOrderAmount Float                 @default(0)
-  usageLimit     Int?
-  usedCount      Int                   @default(0)
-  expiredAt      DateTime
-  status         PromotionStatus       @default(ACTIVE)
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  id                Int                   @id @default(autoincrement())
+  code              String                @unique
+  name              String?
+  discountType      PromotionDiscountType
+  discountValue     Float
+  maxDiscountAmount Decimal?              @db.Decimal(12, 2)
+  minOrderAmount    Float                 @default(0)
+  usageLimit        Int?
+  usedCount         Int                   @default(0)
+  customerLimit     Int?
+  eligibleTiers     String                @default("ALL")
+  startDate         DateTime              @default(now())
+  expiredAt         DateTime
+  status            PromotionStatus       @default(ACTIVE)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
   @@map("promotions")
+}
+
+model Setting {
+  id                Int      @id @default(1)
+  storeName         String   @default("Homex POS")
+  storeBranch       String?
+  taxCode           String?
+  businessHours     String?
+  currency          String   @default("VND")
+  storeAddress      String?
+  storeHotline      String?
+  printPaperSize    String   @default("K80")
+  printCopies       Int      @default(1)
+  autoOpenPrint     Boolean  @default(false)
+  requireCustomerPhone Boolean @default(false)
+  bankName          String?
+  bankAccountNumber String?
+  bankAccountName   String?
+  vietQrTemplate    String?
+  transferContentTemplate String?
+  defaultPaymentMethod String @default("CASH")
+  productsPerPage   Int      @default(24)
+  autoLockMinutes   Int      @default(30)
+  allowOrderDiscount Boolean @default(true)
+  confirmBeforeCheckout Boolean @default(true)
+  barcodeAutoAdd    Boolean  @default(true)
+  compactPosMode    Boolean  @default(false)
+  minStock          Int      @default(0)
+  warnLowStockSale  Boolean  @default(true)
+  allowOversell     Boolean  @default(false)
+  maxDiscount       Decimal  @default(0) @db.Decimal(12, 2)
+  maxEmployeesPerShift Int   @default(1)
+  vatEmailEnabled   Boolean  @default(false)
+  smtpHost          String?
+  smtpPort          Int?     @default(587)
+  smtpUser          String?
+  smtpPassword      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model VatInvoiceRequest {
+  id             Int              @id @default(autoincrement())
+  orderId        Int              @unique
+  companyName    String
+  taxCode        String
+  companyAddress String
+  buyerEmail     String?
+  note           String?
+  status         VatInvoiceStatus @default(PENDING)
+  redInvoiceCode String?
+  adminNote      String?
+  requestedAt    DateTime         @default(now())
+  reviewedAt     DateTime?
+  reviewedById   Int?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([status])
+}
+
+model Shift {
+  id                Int         @id @default(autoincrement())
+  userId            Int
+  openingCash       Decimal     @db.Decimal(12, 2)
+  closingCash       Decimal?    @db.Decimal(12, 2)
+  expectedCash      Decimal?    @db.Decimal(12, 2)
+  discrepancyAmount Decimal?    @db.Decimal(12, 2)
+  shiftType         ShiftType   @default(MORNING)
+  note              String?
+  status            ShiftStatus @default(OPEN)
+  openedAt          DateTime    @default(now())
+  closedAt          DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id])
+  orders Order[]
+
+  @@index([userId, status])
+}
+
+model PurchaseOrder {
+  id          Int                 @id @default(autoincrement())
+  code        String              @unique
+  supplierId  Int
+  userId      Int
+  totalAmount Decimal             @db.Decimal(12, 2)
+  note        String?
+  status      PurchaseOrderStatus @default(COMPLETED)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  supplier   Supplier            @relation(fields: [supplierId], references: [id])
+  user       User                @relation(fields: [userId], references: [id])
+  items      PurchaseOrderItem[]
+  category   Category?           @relation(fields: [categoryId], references: [id])
+  categoryId Int?
+}
+
+model PurchaseOrderItem {
+  id              Int      @id @default(autoincrement())
+  purchaseOrderId Int
+  productId       Int
+  quantity        Int
+  unitCost        Decimal  @db.Decimal(12, 2)
+  lineTotal       Decimal  @db.Decimal(12, 2)
+  createdAt       DateTime @default(now())
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
+  product       Product       @relation(fields: [productId], references: [id])
+}
+
+model ReturnOrder {
+  id          Int               @id @default(autoincrement())
+  returnCode  String            @unique
+  orderId     Int
+  userId      Int
+  totalAmount Decimal           @db.Decimal(12, 2)
+  reason      String?
+  status      ReturnOrderStatus @default(COMPLETED)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  order Order             @relation(fields: [orderId], references: [id])
+  user  User              @relation(fields: [userId], references: [id])
+  items ReturnOrderItem[]
+}
+
+model ReturnOrderItem {
+  id            Int      @id @default(autoincrement())
+  returnOrderId Int
+  orderDetailId Int
+  productId     Int
+  quantity      Int
+  unitPrice     Decimal  @db.Decimal(12, 2)
+  lineTotal     Decimal  @db.Decimal(12, 2)
+  createdAt     DateTime @default(now())
+
+  returnOrder ReturnOrder @relation(fields: [returnOrderId], references: [id])
+  orderDetail OrderDetail @relation(fields: [orderDetailId], references: [id])
+  product     Product     @relation(fields: [productId], references: [id])
+}
+
+model Notification {
+  id         Int       @id @default(autoincrement())
+  type       String
+  title      String
+  message    String
+  targetRole String?
+  userId     Int?
+  isRead     Boolean   @default(false)
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([isRead, createdAt])
 }

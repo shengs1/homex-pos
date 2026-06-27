@@ -18,7 +18,7 @@ import {
 } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
-import { createAuditLog } from "../utils/auditLog";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
 
