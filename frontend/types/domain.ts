@@ -5,7 +5,7 @@ export type OrderStatus = "DRAFT" | "COMPLETED" | "CANCELLED";
 export type PaymentMethod = "CASH" | "CARD" | "TRANSFER" | "WALLET";
 export type PaymentStatus = "PAID" | "PENDING" | "FAILED" | "REFUNDED";
 export type StockTransactionType = "IMPORT" | "SALE" | "ADJUSTMENT" | "RESTORE";
-export type WarrantyStatus = "ACTIVE" | "EXPIRED" | "CANCELLED";
+export type WarrantyStatus = "ACTIVE" | "CLAIMED" | "COMPLETED" | "REJECTED" | "EXPIRED" | "CANCELLED";
 export type UserStatus = "ACTIVE" | "INACTIVE";
 export type VatInvoiceStatus = "PENDING" | "APPROVED" | "REJECTED";
 export type ShiftStatus = "OPEN" | "CLOSED";
@@ -24,6 +24,7 @@ export type Supplier = {
   name: string;
   phone: string | null;
   email?: string | null;
+  taxCode?: string | null;
   address: string | null;
   status: RecordStatus;
   createdAt: string;
@@ -59,7 +60,8 @@ export type Customer = {
   email: string | null;
   address: string | null;
   points: number;
-  tier: "SILVER" | "GOLD" | "DIAMOND" | string;
+  tier: "NONE" | "SILVER" | "GOLD" | "DIAMOND" | string;
+  totalSpent?: number;
   status: RecordStatus;
   createdAt: string;
   updatedAt: string;
@@ -101,6 +103,8 @@ export type Order = {
   customerId: number | null;
   shiftId?: number | null;
   totalAmount: number;
+  promotionCode?: string | null;
+  discountAmount?: number | null;
   status: OrderStatus;
   createdAt: string;
   updatedAt: string;
@@ -112,6 +116,7 @@ export type Order = {
   customer?: Customer | null;
   orderDetails: OrderDetail[];
   payment?: Payment | null;
+  vatInvoiceRequest?: VatInvoiceRequest | null;
 };
 
 export type StockTransaction = {
@@ -136,15 +141,17 @@ export type Warranty = {
   id: number;
   warrantyCode: string;
   orderDetailId: number;
-  customerId: number;
+  customerId: number | null;
   startDate: string;
   endDate: string;
   status: WarrantyStatus;
+  note: string | null;
   createdAt: string;
   updatedAt?: string;
   customer?: Customer;
   orderDetail?: OrderDetail & {
     order?: Order;
+    product?: Product;
   };
 };
 
@@ -195,6 +202,7 @@ export type ReportSummary = {
   activeProducts: number;
   lowStockProducts: number;
   activeWarranties: number;
+  productsSold: number;
 };
 
 export type RevenueReportItem = {
@@ -260,6 +268,12 @@ export type Setting = {
   warnLowStockSale: boolean;
   allowOversell: boolean;
   maxDiscount: number;
+  maxEmployeesPerShift: number;
+  vatEmailEnabled: boolean;
+  smtpHost: string | null;
+  smtpPort: number | null;
+  smtpUser: string | null;
+  smtpPassword: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -281,6 +295,8 @@ export type VatInvoiceRequest = {
   order?: Order;
 };
 
+export type ShiftType = "MORNING" | "EVENING";
+
 export type Shift = {
   id: number;
   userId: number;
@@ -288,6 +304,10 @@ export type Shift = {
   closingCash: number | null;
   expectedCash: number | null;
   discrepancyAmount: number | null;
+  shiftType: ShiftType;
+  cashRevenue?: number;
+  transferRevenue?: number;
+  totalRevenue?: number;
   note: string | null;
   status: ShiftStatus;
   openedAt: string;
@@ -351,7 +371,7 @@ export type ReturnOrder = {
 
 export type NotificationItem = {
   id: number;
-  type: string;
+  type: "LOW_STOCK" | "OUT_OF_STOCK" | "VAT_PENDING" | "WARRANTY_EXPIRING" | "SHIFT_OPEN" | "ORDER_ISSUE" | "SYSTEM" | string;
   title: string;
   message: string;
   targetRole: string | null;
@@ -359,6 +379,8 @@ export type NotificationItem = {
   isRead: boolean;
   readAt: string | null;
   createdAt: string;
+  severity?: "INFO" | "WARNING" | "IMPORTANT";
+  href?: string;
 };
 
 export type PublicInvoice = Pick<Order, "id" | "orderCode" | "totalAmount" | "status" | "createdAt" | "orderDetails" | "payment"> & {
@@ -366,4 +388,26 @@ export type PublicInvoice = Pick<Order, "id" | "orderCode" | "totalAmount" | "st
   customer: Pick<Customer, "fullName" | "phone"> | null;
   vatInvoiceRequest: VatInvoiceRequest | null;
   setting: Setting;
+};
+
+export type PromotionDiscountType = "AMOUNT" | "PERCENT";
+export type PromotionStatus = "ACTIVE" | "INACTIVE";
+
+export type Promotion = {
+  id: number;
+  code: string;
+  name: string | null;
+  discountType: PromotionDiscountType;
+  discountValue: number;
+  maxDiscountAmount: number | null;
+  minOrderAmount: number;
+  usageLimit: number | null;
+  usedCount: number;
+  customerLimit: number | null;
+  eligibleTiers: string;
+  startDate: string;
+  expiredAt: string;
+  status: PromotionStatus;
+  createdAt: string;
+  updatedAt: string;
 };

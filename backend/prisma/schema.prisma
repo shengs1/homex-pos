@@ -46,6 +46,9 @@ enum StockTransactionType {
 
 enum WarrantyStatus {
   ACTIVE
+  CLAIMED
+  COMPLETED
+  REJECTED
   EXPIRED
   CANCELLED
 }
@@ -59,6 +62,11 @@ enum VatInvoiceStatus {
 enum ShiftStatus {
   OPEN
   CLOSED
+}
+
+enum ShiftType {
+  MORNING
+  EVENING
 }
 
 enum PurchaseOrderStatus {
@@ -118,6 +126,7 @@ model Supplier {
   name      String
   phone     String?
   email     String?
+  taxCode   String?
   address   String?
   status    ProductStatus @default(ACTIVE)
   createdAt DateTime      @default(now())
@@ -178,11 +187,13 @@ model Order {
   orderCode   String      @unique
   userId      Int
   customerId  Int?
-  totalAmount Decimal     @db.Decimal(12, 2)
-  shiftId     Int?
-  status      OrderStatus @default(DRAFT)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  totalAmount       Decimal     @db.Decimal(12, 2)
+  promotionCode     String?
+  discountAmount    Decimal?    @db.Decimal(12, 2)
+  shiftId           Int?
+  status            OrderStatus @default(DRAFT)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   user              User               @relation(fields: [userId], references: [id])
   customer          Customer?          @relation(fields: [customerId], references: [id])
@@ -246,15 +257,16 @@ model Warranty {
   id            Int            @id @default(autoincrement())
   warrantyCode  String         @unique
   orderDetailId Int            @unique
-  customerId    Int
+  customerId    Int?
   startDate     DateTime
   endDate       DateTime
   status        WarrantyStatus @default(ACTIVE)
+  note          String?        @db.Text
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @default(now()) @updatedAt
 
   orderDetail OrderDetail @relation(fields: [orderDetailId], references: [id])
-  customer    Customer    @relation(fields: [customerId], references: [id])
+  customer    Customer?   @relation(fields: [customerId], references: [id])
 }
 
 model AuditLog {
@@ -280,17 +292,22 @@ enum PromotionStatus {
 }
 
 model Promotion {
-  id             Int                   @id @default(autoincrement())
-  code           String                @unique
-  discountType   PromotionDiscountType
-  discountValue  Float
-  minOrderAmount Float                 @default(0)
-  usageLimit     Int?
-  usedCount      Int                   @default(0)
-  expiredAt      DateTime
-  status         PromotionStatus       @default(ACTIVE)
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  id                Int                   @id @default(autoincrement())
+  code              String                @unique
+  name              String?
+  discountType      PromotionDiscountType
+  discountValue     Float
+  maxDiscountAmount Decimal?              @db.Decimal(12, 2)
+  minOrderAmount    Float                 @default(0)
+  usageLimit        Int?
+  usedCount         Int                   @default(0)
+  customerLimit     Int?
+  eligibleTiers     String                @default("ALL")
+  startDate         DateTime              @default(now())
+  expiredAt         DateTime
+  status            PromotionStatus       @default(ACTIVE)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
 
   @@map("promotions")
 }
@@ -324,6 +341,12 @@ model Setting {
   warnLowStockSale  Boolean  @default(true)
   allowOversell     Boolean  @default(false)
   maxDiscount       Decimal  @default(0) @db.Decimal(12, 2)
+  maxEmployeesPerShift Int   @default(1)
+  vatEmailEnabled   Boolean  @default(false)
+  smtpHost          String?
+  smtpPort          Int?     @default(587)
+  smtpUser          String?
+  smtpPassword      String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
@@ -357,6 +380,7 @@ model Shift {
   closingCash       Decimal?    @db.Decimal(12, 2)
   expectedCash      Decimal?    @db.Decimal(12, 2)
   discrepancyAmount Decimal?    @db.Decimal(12, 2)
+  shiftType         ShiftType   @default(MORNING)
   note              String?
   status            ShiftStatus @default(OPEN)
   openedAt          DateTime    @default(now())

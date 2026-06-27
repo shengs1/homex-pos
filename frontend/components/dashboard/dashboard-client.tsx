@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -12,8 +14,9 @@ import {
   ShoppingCart,
   TrendingUp,
   Users,
+  Package,
 } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, Pie, PieChart, Tooltip, XAxis, YAxis, Label } from "recharts";
 import { PageHeader } from "@/components/shared/page-header";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -25,13 +28,86 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { getApiErrorMessage } from "@/lib/api";
 import { formatChartDateVN } from "@/lib/date-format";
 import { formatCurrency, formatNumber } from "@/lib/format";
-import { orderService, paymentService, reportService } from "@/services/homex.service";
-import type { Order, Payment, Product, ReportSummary, RevenueReportItem, TopProductReportItem } from "@/types/domain";
+import { orderService, paymentService, reportService, categoryService } from "@/services/homex.service";
+import type { Order, Payment, Product, ReportSummary, RevenueReportItem, TopProductReportItem, Category } from "@/types/domain";
+
+export function MoneyText({ value, size = "base" }: { value: number; size?: "sm" | "base" | "lg" | "xl" }) {
+  const sizeClasses = {
+    sm: "text-sm",
+    base: "text-base",
+    lg: "text-xl",
+    xl: "text-2xl xl:text-3xl",
+  };
+  return (
+    <span className="whitespace-nowrap">
+      <span className={`font-extrabold text-slate-950 ${sizeClasses[size]}`}>
+        {formatNumber(value)}
+      </span>
+      <span className="ml-1 text-[11px] font-bold text-slate-400">VND</span>
+    </span>
+  );
+}
+
+function resolveProductImage(product: any) {
+  const raw =
+    product?.imageUrl ||
+    product?.image ||
+    product?.thumbnail ||
+    product?.photoUrl ||
+    product?.productImage ||
+    "";
+
+  if (!raw || typeof raw !== "string") return "";
+
+  const value = raw.trim();
+
+  if (!value) return "";
+
+  if (value.startsWith("http://") || value.startsWith("https://")) {
+    return value;
+  }
+
+  if (value.startsWith("/assets/real-products/")) {
+    return value;
+  }
+
+  if (value.startsWith("assets/real-products/")) {
+    return `/${value}`;
+  }
+
+  if (value.startsWith("/")) {
+    return value;
+  }
+
+  return `/assets/real-products/${value}`;
+}
+
+function ProductThumb({ src, alt }: { src?: string | null; alt: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (!src || failed) {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-100 bg-slate-50 text-slate-400">
+        <Package className="h-5 w-5" />
+      </div>
+    );
+  }
+
+  return (
+    /* eslint-disable-next-line @next/next/no-img-element */
+    <img
+      src={src}
+      alt={alt}
+      className="h-10 w-10 shrink-0 rounded-lg border border-slate-100 object-cover"
+      onError={() => setFailed(true)}
+    />
+  );
+}
 
 /* ─── KPI Summary Card (SORA-style) ─── */
 type SummaryCardProps = {
   title: string;
-  value: string;
+  value: string | React.ReactNode;
   icon: LucideIcon;
   iconBg?: string;
   iconColor?: string;
@@ -46,23 +122,29 @@ function SummaryCard({
   icon: Icon,
   iconBg = "bg-blue-50",
   iconColor = "text-blue-600",
-  valueColor = "text-slate-800",
+  valueColor = "text-slate-950",
   growth,
   isWarning = false,
 }: SummaryCardProps) {
+  const { t } = useLanguage();
+
   return (
     <div
-      className={`rounded-2xl border bg-white p-5 shadow-sm transition-shadow hover:shadow-md ${isWarning ? "border-rose-200 ring-1 ring-rose-100" : "border-slate-200/80"}`}
+      className={`min-w-0 min-h-27 rounded-xl border ${isWarning ? "border-rose-200 bg-rose-50/30" : "border-slate-100 bg-white"} p-4 shadow-sm flex flex-col justify-between transition-shadow hover:shadow-md`}
     >
-      <div className="flex justify-between items-start">
-        <div className="space-y-1.5 min-w-0 flex-1">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{title}</p>
-          <p className={`text-xl md:text-2xl font-black tracking-tight ${valueColor}`}>{value}</p>
-          {growth ? <p className="text-[10px] font-bold text-emerald-600">{growth}</p> : null}
-        </div>
-        <div className={`w-10 h-10 rounded-xl ${iconBg} ${iconColor} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
+      <div className="flex justify-between items-start gap-4">
+        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
+        <div className={`w-10 h-10 rounded-xl ${iconBg} ${iconColor} flex items-center justify-center shrink-0`}>
           <Icon className="w-5 h-5" />
         </div>
+      </div>
+      <div className="mt-2 min-w-0">
+        <div className={`text-3xl font-extrabold tracking-tight truncate ${valueColor}`}>{value}</div>
+        {growth && growth !== t("dashboard.noComparisonData") && growth !== t("dashboard.safeStock") ? (
+           <span className={`mt-2 flex w-max items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${isWarning ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}>
+             {isWarning ? "↑" : "↗"} {growth}
+           </span>
+        ) : null}
       </div>
     </div>
   );
@@ -250,7 +332,9 @@ function buildPaymentMethodSummary(payments: Payment[]) {
     methodMap.set(method, current);
   });
 
-  return Array.from(methodMap.values()).sort((a, b) => b.total - a.total);
+  return Array.from(methodMap.values())
+    .filter(m => m.method !== "CARD")
+    .sort((a, b) => b.total - a.total);
 }
 
 /* ─── Custom Recharts Tooltip ─── */
@@ -259,9 +343,53 @@ function CustomTooltip({ active, payload, label }: { active?: boolean; payload?:
   return (
     <div className="rounded-xl bg-slate-900/95 px-3 py-2 text-white shadow-lg border border-slate-700">
       <p className="text-[10px] font-bold text-slate-300">{formatRevenueChartDate(label)}</p>
-      <p className="text-xs font-black mt-0.5">{formatCurrency(Number(payload[0].value))}</p>
+      <div className="mt-0.5 flex items-baseline gap-1">
+        <span className="text-xs font-black">{formatNumber(payload[0].value)}</span>
+        <span className="text-[10px] font-semibold text-slate-400">VND</span>
+      </div>
     </div>
   );
+}
+
+function DashboardChartFrame({ children }: { children: (width: number, height: number) => React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  const height = 260;
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+
+    const chartElement = element;
+
+    function updateWidth() {
+      const nextWidth = Math.floor(chartElement.getBoundingClientRect().width);
+      setWidth((current) => (current === nextWidth ? current : nextWidth));
+    }
+
+    updateWidth();
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(chartElement);
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="h-[260px] min-h-[260px] w-full min-w-[1px]">
+      {width > 0 ? children(width, height) : null}
+    </div>
+  );
+}
+function calculateGrowth(today: number, yesterday: number, t: (key: string, params?: Record<string, string | number>) => string) {
+  if (yesterday === 0) {
+    if (today === 0) return t("dashboard.noComparisonData");
+    return t("dashboard.comparedToYesterday", { percent: "+100%" });
+  }
+  const diff = today - yesterday;
+  const percent = (diff / yesterday) * 100;
+  const sign = percent >= 0 ? "+" : "";
+  return t("dashboard.comparedToYesterday", { percent: `${sign}${percent.toFixed(1)}%` });
 }
 
 /* ─── Main Component ─── */
@@ -269,6 +397,8 @@ export default function DashboardPage() {
   const user = useCurrentUser();
   const { language, t } = useLanguage();
   const [summary, setSummary] = useState<ReportSummary | null>(null);
+  const [yesterdaySummary, setYesterdaySummary] = useState<ReportSummary | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [revenueItems, setRevenueItems] = useState<RevenueReportItem[]>([]);
   const [topProducts, setTopProducts] = useState<TopProductReportItem[]>([]);
   const [lowStockProducts, setLowStockProducts] = useState<Product[]>([]);
@@ -276,6 +406,14 @@ export default function DashboardPage() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [topProductRange, setTopProductRange] = useState<"7days" | "30days">("7days");
+
+  const productRangeFilter = useMemo(() => {
+    const toDate = new Date();
+    const fromDate = new Date(toDate);
+    fromDate.setDate(toDate.getDate() - (topProductRange === "7days" ? 6 : 29));
+    return { fromDate: toLocalIsoDate(fromDate), toDate: toLocalIsoDate(toDate) };
+  }, [topProductRange]);
 
   const range = useMemo(() => chartDateRange(), []);
 
@@ -318,31 +456,35 @@ export default function DashboardPage() {
         setIsLoading(true);
         setErrorMessage("");
 
-        const [summaryData, revenueData, topProductData, lowStockData, recentOrderData, paymentData] = await Promise.all([
-          reportService.summary(),
+        const todayStr = toLocalIsoDate(new Date());
+        const yesterdayDate = new Date();
+        yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+        const yesterdayStr = toLocalIsoDate(yesterdayDate);
+
+        const [summaryData, yesterdaySummaryData, revenueData, lowStockData, recentOrderData, paymentData] = await Promise.all([
+          reportService.summary({ fromDate: todayStr, toDate: todayStr }),
+          reportService.summary({ fromDate: yesterdayStr, toDate: yesterdayStr }),
           reportService.revenue({ fromDate: range.fromDate, toDate: range.toDate, groupBy: "day" }),
-          reportService.topProducts({ fromDate: range.fromDate, toDate: range.toDate, limit: 5 }),
+          // topProducts fetched separately
           reportService.lowStock({ limit: 8 }),
           orderService.list({ page: 1, limit: 5, status: "COMPLETED", sortBy: "createdAt", sortOrder: "desc" }),
           paymentService.list({ page: 1, limit: 1000, status: "PAID" }),
         ]);
 
         let nextRevenueItems = revenueData.items || [];
-        let nextTopProducts = topProductData.items || [];
+        
 
-        if (nextRevenueItems.length === 0 || nextTopProducts.length === 0) {
+        if (nextRevenueItems.length === 0) {
           const fallbackData = await buildFallbackDashboardCharts(range.fromDate, range.toDate);
           if (nextRevenueItems.length === 0 && fallbackData.fallbackRevenueItems.length > 0) {
             nextRevenueItems = fallbackData.fallbackRevenueItems;
           }
-          if (nextTopProducts.length === 0 && fallbackData.fallbackTopProducts.length > 0) {
-            nextTopProducts = fallbackData.fallbackTopProducts;
-          }
         }
 
         setSummary(summaryData);
+        setYesterdaySummary(yesterdaySummaryData);
         setRevenueItems(nextRevenueItems);
-        setTopProducts(nextTopProducts);
+        
         setLowStockProducts(lowStockData.items || []);
         setRecentOrders(recentOrderData.items || []);
         setPaymentMethods(buildPaymentMethodSummary(paymentData.items || []));
@@ -356,21 +498,26 @@ export default function DashboardPage() {
     loadDashboard();
   }, [range.fromDate, range.toDate, user?.role]);
 
+  useEffect(() => {
+    if (user?.role !== "ADMIN") return;
+    async function loadTopProducts() {
+      try {
+        const [data, categoryData] = await Promise.all([
+          reportService.topProducts({ fromDate: productRangeFilter.fromDate, toDate: productRangeFilter.toDate, limit: 100 }),
+          categoryService.list({ limit: 100 })
+        ]);
+        setTopProducts(data.items || []);
+        setCategories(categoryData.items || []);
+      } catch (error) {
+        console.error("Failed to load top products", error);
+      }
+    }
+    loadTopProducts();
+  }, [productRangeFilter, user?.role]);
+
   const revenueChartData = fillRevenueChartData(revenueItems, range.fromDate, range.toDate);
 
-  const categoryChartData = Array.from(
-    topProducts.reduce((categoryMap, item) => {
-      const categoryName = item.product?.category?.name || t("common.notAvailable");
-      categoryMap.set(categoryName, (categoryMap.get(categoryName) || 0) + Number(item.totalQuantity || 0));
-      return categoryMap;
-    }, new Map<string, number>())
-  )
-    .map(([name, quantity]) => ({ name, quantity }))
-    .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, 5);
-
   const hasRevenueChartData = revenueChartData.some((item) => item.revenue > 0);
-  const hasCategoryChartData = categoryChartData.some((item) => item.quantity > 0);
   const hasPaymentMethodData = paymentMethods.some((item) => item.total > 0);
 
   if (!user) {
@@ -393,21 +540,17 @@ export default function DashboardPage() {
 
   // ─── ADMIN Dashboard ───
   return (
-    <div className="min-w-0 space-y-5">
-      {/* Header */}
-      <div className="flex min-w-0 flex-col gap-1 border-b border-slate-200 pb-4">
-        <h1 className="truncate text-xl font-black tracking-tight text-slate-800">{t("dashboard.adminTitle")}</h1>
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 line-clamp-2">{t("dashboard.adminDescription")}</p>
-      </div>
+    <div className="min-w-0 space-y-4">
+      <PageHeader title={t("dashboard.adminTitle") || "Tổng quan quản trị"} description={t("dashboard.adminDescription") || "Báo cáo tổng hợp số liệu kinh doanh hôm nay"} />
 
       {errorMessage ? <ErrorState message={errorMessage} /> : null}
 
       {/* Loading Skeleton */}
       {isLoading && !summary ? (
-        <div className="space-y-6">
+        <div className="space-y-4">
           <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+              <div key={i} className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
                 <Skeleton className="h-3 w-1/2 mb-3" />
                 <Skeleton className="h-7 w-24" />
               </div>
@@ -416,176 +559,173 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {/* KPI Cards - Row 1 (4 chính) */}
+      {/* Row 1: KPI Cards */}
       {summary ? (
-        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard
-              title={t("dashboard.netRevenue")}
-              value={formatCurrency(summary.netRevenue)}
-              icon={TrendingUp}
-              iconBg="bg-blue-50"
-              iconColor="text-blue-600"
-            />
-          <SummaryCard title={t("orders.title")} value={formatNumber(summary.totalOrders)} icon={ReceiptText} iconBg="bg-violet-50" iconColor="text-violet-600" />
-          <SummaryCard title={t("dashboard.customers")} value={formatNumber(summary.totalCustomers)} icon={Users} iconBg="bg-emerald-50" iconColor="text-emerald-600" />
-            <SummaryCard
-              title={t("dashboard.lowStock")}
-              value={formatNumber(summary.lowStockProducts)}
-              icon={AlertTriangle}
-              iconBg="bg-rose-50"
-              iconColor="text-rose-600"
-              valueColor="text-rose-600"
-              isWarning={summary.lowStockProducts > 0}
-            />
+        <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-4">
+          <SummaryCard
+            title={t("dashboard.todayRevenue")}
+            value={<MoneyText value={summary.netRevenue} size="xl" />}
+            icon={TrendingUp}
+            iconBg="bg-blue-50"
+            iconColor="text-blue-600"
+            growth={calculateGrowth(summary.netRevenue, yesterdaySummary?.netRevenue || 0, t)}
+          />
+          <SummaryCard 
+            title={t("dashboard.orders")}
+            value={`${formatNumber(summary.totalOrders)} ${t("orders.title")}`}
+            icon={ReceiptText} 
+            iconBg="bg-violet-50" 
+            iconColor="text-violet-600" 
+            growth={calculateGrowth(summary.totalOrders, yesterdaySummary?.totalOrders || 0, t)}
+          />
+          <SummaryCard 
+            title={t("dashboard.productsSold")}
+            value={`${formatNumber(summary.productsSold)} ${t("products.title")}`}
+            icon={Package} 
+            iconBg="bg-emerald-50" 
+            iconColor="text-emerald-600" 
+            growth={calculateGrowth(summary.productsSold, yesterdaySummary?.productsSold || 0, t)}
+          />
+          <SummaryCard
+            title={t("dashboard.lowStockWarning")}
+            value={`${formatNumber(summary.lowStockProducts)} ${t("products.title")}`}
+            icon={AlertTriangle}
+            iconBg="bg-rose-50"
+            iconColor="text-rose-600"
+            valueColor="text-rose-600"
+            isWarning={summary.lowStockProducts > 0}
+            growth={summary.lowStockProducts > 0 ? t("dashboard.lowStockCount", { count: summary.lowStockProducts }) : t("dashboard.safeStock")}
+          />
         </div>
       ) : null}
 
-      {/* Charts Section - Grid 12 cols */}
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* Revenue Line Chart */}
-        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-5">
+      {/* Row 2: Chart chính (Doanh thu & Phương thức TT) */}
+      <div className="grid min-w-0 grid-cols-12 gap-4 mb-4 items-stretch">
+        {/* Doanh thu 7 ngày */}
+        <div className="col-span-12 xl:col-span-8 min-w-0 flex h-[360px] flex-col rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-sm font-black uppercase text-slate-700 tracking-wide">{t("dashboard.revenue7Days")}</h2>
+            <h2 className="text-sm font-extrabold uppercase text-slate-900 tracking-wide">{t("dashboard.revenue7Days")}</h2>
+            <select className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 outline-none focus:border-primary focus:ring-1 focus:ring-primary">
+              <option value="7days">7 ngày qua</option>
+              <option value="30days">30 ngày qua</option>
+            </select>
           </div>
-          <div className="min-h-[240px]">
+          <div className="min-h-[260px] flex-1">
             {hasRevenueChartData ? (
-              <ResponsiveContainer width="100%" height={240} minWidth={1} minHeight={1}>
-                <LineChart data={revenueChartData} margin={{ left: 8, right: 16, top: 10, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="period" tick={{ fontSize: 10, fontWeight: 700, fill: "#94a3b8" }} tickFormatter={formatRevenueChartDate} />
-                  <YAxis tick={{ fontSize: 10, fontWeight: 700, fill: "#94a3b8" }} width={70} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="revenue" name={t("dashboard.revenue")} stroke="#0f766e" strokeWidth={3} dot={{ r: 4, fill: "#0f766e", strokeWidth: 2, stroke: "#ffffff" }} activeDot={{ r: 6, fill: "#0f766e" }} />
-                </LineChart>
-              </ResponsiveContainer>
+              <DashboardChartFrame>
+                {(width, height) => (
+                  <AreaChart width={width} height={height} data={revenueChartData} margin={{ left: 8, right: 16, top: 10, bottom: 0 }}>
+<defs>
+                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis dataKey="period" tick={{ fontSize: 10, fontWeight: 700, fill: "#94a3b8" }} tickFormatter={formatRevenueChartDate} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fontWeight: 700, fill: "#94a3b8" }} width={45} tickFormatter={(val) => val >= 1000000 ? `${(val / 1000000).toFixed(0)}M` : formatNumber(val)} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} cursor={{stroke: '#cbd5e1', strokeWidth: 1, strokeDasharray: '3 3'}} />
+                  <Area type="monotone" dataKey="revenue" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" activeDot={{ r: 6, fill: "#3b82f6", stroke: "#ffffff", strokeWidth: 2 }} />
+                  </AreaChart>
+                )}
+              </DashboardChartFrame>
             ) : (
-              <div className="flex h-[240px] items-center justify-center">
+              <div className="flex h-full items-center justify-center">
                 <EmptyState message={t("message.empty")} />
               </div>
             )}
           </div>
         </div>
 
-        {/* Category Bar Chart */}
-        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-4">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-sm font-black uppercase text-slate-700 tracking-wide">{t("dashboard.topProducts")}</h2>
+        {/* Phương thức thanh toán */}
+        <div className="col-span-12 xl:col-span-4 min-w-0 flex h-[360px] flex-col rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-900">{t("dashboard.categoryTracker")}</h2>
           </div>
-          <div className="min-h-[240px]">
-            {hasCategoryChartData ? (
-              <ResponsiveContainer width="100%" height={240} minWidth={1} minHeight={1}>
-                <BarChart data={categoryChartData} layout="vertical" margin={{ left: 8, right: 16, top: 10, bottom: 10 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis type="number" tick={{ fontSize: 10, fontWeight: 700, fill: "#94a3b8" }} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fontWeight: 700, fill: "#475569" }} width={120} />
-                  <Tooltip />
-                  <Bar dataKey="quantity" name={t("dashboard.quantity")} fill="#0f766e" radius={[0, 6, 6, 0]}>
-                    <LabelList dataKey="quantity" position="right" style={{ fontSize: 10, fontWeight: 700, fill: "#475569" }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-[240px] items-center justify-center">
-                <EmptyState message={t("message.empty")} />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Payment Method Donut */}
-        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-3">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">{t("payments.method")}</h2>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-              <CreditCard className="h-4 w-4" />
+          {categories.length === 0 ? (
+            <div className="flex flex-1 items-center justify-center">
+              <EmptyState message={t("message.empty")} />
             </div>
-          </div>
-          <div className="min-h-[240px]">
-            {hasPaymentMethodData ? (
-              <div className="flex h-[240px] flex-col justify-between">
-                <ResponsiveContainer width="100%" height={150} minWidth={1} minHeight={1}>
-                  <PieChart>
-                    <Pie data={paymentMethods} dataKey="total" nameKey="method" innerRadius={52} outerRadius={82} paddingAngle={3}>
-                      {paymentMethods.map((entry, index) => (
-                        <Cell key={entry.method} fill={PAYMENT_METHOD_COLORS[index % PAYMENT_METHOD_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(value, name) => [formatCurrency(Number(value)), t(`paymentMethod.${String(name)}`)]} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="space-y-2">
-                  {paymentMethods.slice(0, 4).map((item, index) => (
-                    <div key={item.method} className="flex items-center justify-between gap-3 text-xs">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: PAYMENT_METHOD_COLORS[index % PAYMENT_METHOD_COLORS.length] }} />
-                        <span className="truncate font-bold text-slate-600">{t(`paymentMethod.${item.method}`)}</span>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1 space-y-2">
+              {(() => {
+                const categoryTrackerItems = categories.map((category) => {
+                  const matchingProduct = topProducts.filter(p => p.product?.category?.id === category.id);
+                  const totalQty = matchingProduct.reduce((sum, item) => sum + Number(item.totalQuantity || 0), 0);
+                  const totalRev = matchingProduct.reduce((sum, item) => sum + Number(item.totalRevenue || 0), 0);
+                  return { category, totalQty, totalRev };
+                }).sort((a, b) => {
+                  if (b.totalQty !== a.totalQty) {
+                    return b.totalQty - a.totalQty;
+                  }
+                  if (b.totalRev !== a.totalRev) {
+                    return b.totalRev - a.totalRev;
+                  }
+                  return String(a.category.name || "").localeCompare(String(b.category.name || ""), "vi");
+                });
+
+                const maxQty = Math.max(0, ...categoryTrackerItems.map(c => c.totalQty));
+
+                return categoryTrackerItems.map(({ category, totalQty, totalRev }) => {
+                  const percent = maxQty > 0 ? (totalQty / maxQty) * 100 : (totalRev > 0 ? 3 : 0);
+                  return (
+                    <div key={category.id} className="rounded-lg border border-slate-100 bg-slate-50/70 p-2.5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="line-clamp-1 text-sm font-bold text-slate-900" title={category.name}>
+                            {category.name}
+                          </p>
+                          <p className="mt-0.5 text-xs text-slate-500">
+                            {t("dashboard.sold")}: {formatNumber(totalQty)} món
+                          </p>
+                        </div>
+                        <MoneyText value={totalRev} size="sm" />
                       </div>
-                      <span className="shrink-0 font-black text-slate-800">{formatCurrency(item.total)}</span>
+                      <div className="mt-2 h-1.5 rounded-full bg-slate-200">
+                        <div
+                          className="h-1.5 rounded-full bg-emerald-500 transition-all duration-500"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="flex h-[240px] items-center justify-center">
-                <EmptyState message={t("message.empty")} />
-              </div>
-            )}
-          </div>
+                  );
+                });
+              })()}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Tables Section - Grid 12 cols */}
-      <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">{t("orders.title")}</h2>
-            <Button variant="outline" size="sm" className="text-[10px] font-bold" onClick={() => window.location.assign("/orders")}>
-              {t("common.view")}
-            </Button>
+      {/* Row 4: Sắp hết hàng & Top bán chạy */}
+      <div className="grid min-w-0 grid-cols-12 gap-4 items-stretch mb-6">
+        {/* Sắp hết hàng */}
+        <div className="col-span-12 xl:col-span-6 min-w-0 flex h-[360px] flex-col rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-900">{t("dashboard.lowStockProducts")}</h2>
+            <Link href="/inventory" className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-600 transition-colors hover:bg-emerald-100">
+              {t("dashboard.viewAll")}
+            </Link>
           </div>
-          {recentOrders.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center text-xs font-semibold text-slate-400">{t("message.empty")}</div>
-          ) : (
-            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
-              {recentOrders.map((order) => (
-                <div key={order.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-3 transition-colors hover:bg-slate-50">
-                  <div className="min-w-0">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <p className="truncate text-xs font-black text-slate-800" title={order.orderCode}>{order.orderCode}</p>
-                      <StatusBadge status={order.status} />
-                    </div>
-                    <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400">{formatRevenueChartDate(order.createdAt)}</p>
-                  </div>
-                  <div className="shrink-0 text-right text-xs font-black text-slate-800">{formatCurrency(order.totalAmount)}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-4">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">{t("dashboard.lowStock")}</h2>
-            <Button variant="outline" size="sm" className="text-[10px] font-bold" onClick={() => window.location.assign("/inventory")}>
-              {t("nav.inventory")}
-            </Button>
-          </div>
-
           {lowStockProducts.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center text-xs font-semibold text-slate-400">{t("message.noLowStock")}</div>
+            <div className="rounded-lg border border-dashed p-6 text-center text-xs font-semibold text-slate-400">{t("dashboard.noData")}</div>
           ) : (
-            <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
-              {lowStockProducts.map((product) => (
-                <div key={product.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-3 transition-colors hover:bg-slate-50">
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-black text-slate-800" title={product.name}>{product.name}</p>
-                    <p className="mt-1 truncate text-[10px] font-semibold uppercase tracking-wider text-slate-400" title={product.sku}>
-                      {product.sku} - {product.category?.name || t("common.notAvailable")}
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              {lowStockProducts.slice(0, 5).map((product) => (
+                <div key={product.id} className="flex items-center gap-3 border-b border-slate-100 py-2.5 last:border-b-0">
+                  <ProductThumb src={resolveProductImage(product)} alt={product.name} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-slate-900" title={product.name}>{product.name}</p>
+                    <p className="truncate text-xs text-slate-500" title={`${product.sku} ${product.category?.name ? `- ${product.category.name}` : ""}`}>
+                      {product.sku} {product.category?.name ? `- ${product.category.name}` : ""}
                     </p>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p className="text-xs font-black text-rose-600">{getStockLabel(product)}</p>
-                    <p className="mt-1 text-[10px] font-bold text-slate-500">{formatCurrency(product.salePrice)}</p>
+                  <div className="shrink-0 flex flex-col items-end gap-1.5">
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black tracking-widest ${product.stockQuantity <= 0 ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-600"}`}>
+                      {product.stockQuantity <= 0 ? t("dashboard.outOfStock") : t("dashboard.low")}
+                    </span>
+                    <p className="text-xs font-semibold text-slate-500">
+                      {t("dashboard.stock")}: <strong className="text-slate-800">{formatNumber(product.stockQuantity)}</strong>
+                    </p>
                   </div>
                 </div>
               ))}
@@ -593,31 +733,29 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="min-w-0 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm lg:col-span-3">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">{t("dashboard.topProducts")}</h2>
-            <Button variant="outline" size="sm" className="text-[10px] font-bold" onClick={() => window.location.assign("/reports")}>
-              {t("nav.reports")}
-            </Button>
+        {/* Top bán chạy */}
+        <div className="col-span-12 xl:col-span-6 min-w-0 flex h-[360px] flex-col rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-slate-900">{t("dashboard.topSelling")}</h2>
+            <Link href="/reports" className="rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-600 transition-colors hover:bg-emerald-100">
+              {t("dashboard.viewAll")}
+            </Link>
           </div>
           {topProducts.length === 0 ? (
-            <div className="rounded-xl border border-dashed p-8 text-center text-xs font-semibold text-slate-400">{t("message.empty")}</div>
+            <div className="rounded-lg border border-dashed p-6 text-center text-xs font-semibold text-slate-400">{t("dashboard.noData")}</div>
           ) : (
-            <div className="space-y-3">
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
               {topProducts.slice(0, 5).map((item, index) => (
-                <div key={item.productId} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2.5">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-[10px] font-black text-slate-600">
-                      {index + 1}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-black text-slate-800" title={item.product?.name || `#${item.productId}`}>{item.product?.name || `#${item.productId}`}</p>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{formatCurrency(item.totalRevenue)}</p>
-                    </div>
+                <div key={item.productId} className="flex items-center gap-3 border-b border-slate-100 py-2.5 last:border-b-0">
+                  <span className="w-5 text-sm font-bold text-slate-300">{index + 1}</span>
+                  <ProductThumb src={resolveProductImage(item.product)} alt={item.product?.name || ""} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-slate-900" title={item.product?.name || `#${item.productId}`}>
+                      {item.product?.name || `#${item.productId}`}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">{t("dashboard.sold")}: {formatNumber(item.totalQuantity)}</p>
                   </div>
-                  <span className="shrink-0 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
-                    {formatNumber(item.totalQuantity)}
-                  </span>
+                  <MoneyText value={item.totalRevenue} size="sm" />
                 </div>
               ))}
             </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Eye, MoreHorizontal, RotateCcw, Search, ShieldCheck, ShieldX, TimerOff } from "lucide-react";
+import { Eye, MoreHorizontal, RotateCcw, Search, ShieldAlert, ShieldCheck, ShieldOff, Shield, ShieldX, TimerOff } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { DataTable, Td, Th } from "@/components/shared/data-table";
 import { DateFilterInput } from "@/components/shared/date-filter-input";
@@ -11,6 +11,7 @@ import { PaginationControls } from "@/components/shared/pagination-controls";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuPortal, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,7 @@ import { Select } from "@/components/ui/select";
 import { useLanguage } from "@/contexts/language-context";
 import { getApiErrorMessage } from "@/lib/api";
 import { formatDateVN } from "@/lib/date-format";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { orderService, warrantyService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
@@ -120,6 +121,7 @@ export default function WarrantiesPage() {
   const { t } = useLanguage();
   const detailRef = useRef<HTMLDivElement | null>(null);
   const [items, setItems] = useState<Warranty[]>([]);
+  const [allItems, setAllItems] = useState<Warranty[]>([]);
   const [selectedWarranty, setSelectedWarranty] = useState<Warranty | null>(null);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [page, setPage] = useState(1);
@@ -136,11 +138,33 @@ export default function WarrantiesPage() {
   const [isManualOrderLoading, setIsManualOrderLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [isManualFormOpen, setIsManualFormOpen] = useState(false);
 
   const manualOrderDetails = useMemo(() => {
     if (!manualOrder?.orderDetails) return [];
     return manualOrder.orderDetails.filter((detail) => detail.status !== "INACTIVE");
   }, [manualOrder]);
+
+  const stats = useMemo(() => {
+    const active = allItems.filter(item => item.status === "ACTIVE").length;
+    const expiringSoon = allItems.filter(item => {
+      if (item.status !== "ACTIVE" || !item.endDate) return false;
+      const end = new Date(item.endDate);
+      const now = new Date();
+      const diffTime = end.getTime() - now.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays <= 30 && diffDays >= 0;
+    }).length;
+    const expired = allItems.filter(item => item.status === "EXPIRED").length;
+    const cancelled = allItems.filter(item => item.status === "CANCELLED").length;
+    return {
+      total: allItems.length,
+      active,
+      expiringSoon,
+      expired,
+      cancelled
+    };
+  }, [allItems]);
 
   function scrollToDetail() {
     window.setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
@@ -159,6 +183,7 @@ export default function WarrantiesPage() {
       const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
 
       setItems(pageItems);
+      setAllItems(allWarranties);
       setPagination({
         page: currentPage,
         limit: PAGE_SIZE,
@@ -250,6 +275,7 @@ export default function WarrantiesPage() {
       setManualOrderDetailId("");
       setManualStartDate("");
       setSuccessMessage(t("warranties.manualCreated"));
+      setIsManualFormOpen(false);
       await loadData(page);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error));
@@ -308,9 +334,59 @@ export default function WarrantiesPage() {
   return (
     <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
       <div className="w-full min-w-0 space-y-6 overflow-visible">
-        <PageHeader title={t("warranties.title")} description={t("warranties.description")} />
+        <PageHeader title={t("warranties.title")} description={t("warranties.description")}>
+          <RoleGuard allowedRoles={["ADMIN"]}>
+            <Button onClick={() => setIsManualFormOpen(true)} className="flex items-center gap-2">
+              + {t("warranties.createManual")}
+            </Button>
+          </RoleGuard>
+        </PageHeader>
         <ErrorState message={errorMessage} />
         {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
+
+        {/* 5 stats cards */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Tổng phiếu bảo hành</p>
+              <p className="text-2xl font-black text-slate-900">{formatNumber(stats.total)}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Tổng số phiếu bảo hành đã tạo</p>
+            </div>
+            <Shield className="h-8 w-8 text-slate-300" />
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Đang hoạt động</p>
+              <p className="text-2xl font-black text-emerald-600">{formatNumber(stats.active)}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Phiếu còn hiệu lực xử lý</p>
+            </div>
+            <ShieldCheck className="h-8 w-8 text-emerald-500/50" />
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Sắp hết hạn</p>
+              <p className="text-2xl font-black text-amber-600">{formatNumber(stats.expiringSoon)}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Phiếu gần đến ngày hết hạn</p>
+            </div>
+            <ShieldAlert className="h-8 w-8 text-amber-500/50" />
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Đã hết hạn</p>
+              <p className="text-2xl font-black text-slate-600">{formatNumber(stats.expired)}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Phiếu đã quá thời hạn bảo hành</p>
+            </div>
+            <ShieldOff className="h-8 w-8 text-slate-500/50" />
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Đã hủy</p>
+              <p className="text-2xl font-black text-rose-600">{formatNumber(stats.cancelled)}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Phiếu đã bị hủy</p>
+            </div>
+            <ShieldX className="h-8 w-8 text-rose-500/50" />
+          </div>
+        </div>
 
         {/* Unified filter and lookup toolbar */}
         <Card className="w-full min-w-0">
@@ -354,15 +430,15 @@ export default function WarrantiesPage() {
           </CardContent>
         </Card>
 
-        {/* Manual warranty form: order code -> product select -> hidden orderDetailId */}
+        {/* Manual warranty Dialog */}
         <RoleGuard allowedRoles={["ADMIN"]}>
-          <Card className="w-full min-w-0">
-            <CardHeader>
-              <CardTitle>{t("warranties.createManual")}</CardTitle>
-            </CardHeader>
-            <CardContent>
+          <Dialog open={isManualFormOpen} onOpenChange={setIsManualFormOpen}>
+            <DialogContent className="max-w-2xl bg-white rounded-2xl p-6 shadow-xl border border-slate-100">
+              <DialogHeader>
+                <DialogTitle>{t("warranties.createManual")}</DialogTitle>
+              </DialogHeader>
               <form onSubmit={createManualWarranty} className="space-y-5">
-                {/* Hàng 1: mã hóa đơn + nút tìm đơn hàng. items-end giúp chân Input và Button thẳng hàng. */}
+                {/* Hàng 1: mã hóa đơn + nút tìm đơn hàng */}
                 <div className="space-y-2">
                   <div className="flex w-full flex-wrap items-end gap-4 md:flex-nowrap">
                     <div className="min-w-[260px] flex-1 space-y-2">
@@ -374,7 +450,6 @@ export default function WarrantiesPage() {
                         onChange={(event) => setManualOrderCode(event.target.value)}
                       />
                     </div>
-
                     <Button
                       type="button"
                       variant="outline"
@@ -389,7 +464,7 @@ export default function WarrantiesPage() {
                   <p className="text-xs text-muted-foreground">{t("warranties.orderCodeHint")}</p>
                 </div>
 
-                {/* Hàng 2: sản phẩm trong hóa đơn + ngày bắt đầu + nút tạo. Hint tách riêng để không kéo lệch nút. */}
+                {/* Hàng 2: sản phẩm trong hóa đơn + ngày bắt đầu + nút tạo */}
                 <div className="space-y-2">
                   <div className="flex w-full flex-wrap items-end gap-4 md:flex-nowrap">
                     <div className="min-w-[300px] flex-[1.4] space-y-2">
@@ -406,7 +481,6 @@ export default function WarrantiesPage() {
                         ))}
                       </Select>
                     </div>
-
                     <DateFilterInput
                       label={t("warranties.startDate")}
                       value={manualStartDate}
@@ -414,7 +488,6 @@ export default function WarrantiesPage() {
                       className="min-w-[190px]"
                       inputClassName="h-11"
                     />
-
                     <Button type="submit" className="h-11 w-full shrink-0 md:w-auto">
                       <ShieldCheck className="h-4 w-4" />
                       {t("common.create")}
@@ -442,15 +515,15 @@ export default function WarrantiesPage() {
                   </div>
                 ) : null}
               </form>
-            </CardContent>
-          </Card>
+            </DialogContent>
+          </Dialog>
         </RoleGuard>
 
         {/* Warranty data table */}
         {isLoading ? <LoadingState /> : null}
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
         {!isLoading && items.length > 0 ? (
-          <DataTable className="overflow-visible" tableClassName="table-fixed w-full">
+          <DataTable tableClassName="table-fixed w-full">
             <colgroup>
               <col className="w-[16%]" />
               <col className="w-[18%]" />

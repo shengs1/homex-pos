@@ -18,7 +18,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useLanguage } from "@/contexts/language-context";
+import { useToast } from "@/contexts/toast-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getApiErrorMessage } from "@/lib/api";
 import { formatDateTime, formatNumber } from "@/lib/format";
@@ -49,12 +51,25 @@ export default function CustomersPage() {
   const [editingItem, setEditingItem] = useState<Customer | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
   const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: { fullName: "", phone: "", email: "", address: "" } });
 
+  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+  const vipCustomersCount = allCustomers.filter(c => c.tier === "GOLD" || c.tier === "DIAMOND").length;
+  const totalPointsCount = allCustomers.reduce((sum, c) => sum + (c.points || 0), 0);
+
   async function loadData(currentPage = page) {
-    try { setIsLoading(true); setErrorMessage(""); const data = await customerService.list({ page: currentPage, limit: PAGE_SIZE, search, status }); setItems(data.items); setPagination(data.pagination); }
+    try { 
+      setIsLoading(true); setErrorMessage(""); 
+      const [data, allData] = await Promise.all([
+        customerService.list({ page: currentPage, limit: PAGE_SIZE, search, status }),
+        customerService.list({ page: 1, limit: 1000 })
+      ]);
+      setItems(data.items); 
+      setPagination(data.pagination); 
+      setAllCustomers(allData.items);
+    }
     catch (error) { setErrorMessage(getApiErrorMessage(error)); }
     finally { setIsLoading(false); }
   }
@@ -64,12 +79,12 @@ export default function CustomersPage() {
   function openEditForm(item: Customer) { setEditingItem(item); form.reset({ fullName: item.fullName, phone: item.phone, email: item.email || "", address: item.address || "" }); setIsFormOpen(true); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
   async function onSubmit(values: FormValues) {
-    try { setErrorMessage(""); setSuccessMessage(""); if (editingItem) { await customerService.update(editingItem.id, values); setSuccessMessage(t("message.updated")); } else { await customerService.create(values); setSuccessMessage(t("message.created")); } setIsFormOpen(false); await loadData(page); }
-    catch (error) { setErrorMessage(getApiErrorMessage(error)); }
+    try { setErrorMessage(""); if (editingItem) { await customerService.update(editingItem.id, values); toast.success(t("message.updated")); } else { await customerService.create(values); toast.success(t("message.created")); } setIsFormOpen(false); await loadData(page); }
+    catch (error) { toast.error(getApiErrorMessage(error)); }
   }
-  async function handleDelete(item: Customer) { if (!isAdmin || !window.confirm(t("customers.deleteConfirm", { name: item.fullName }))) return; try { await customerService.remove(item.id); setSuccessMessage(t("message.deleted")); await loadData(page); } catch (error) { setErrorMessage(getApiErrorMessage(error)); } }
-  async function handleRestore(item: Customer) { if (!isAdmin || !window.confirm(t("customers.restoreConfirm", { name: item.fullName }))) return; try { await customerService.restore(item.id); setSuccessMessage(t("message.restored")); await loadData(page); } catch (error) { setErrorMessage(getApiErrorMessage(error)); } }
-  async function exportCustomersCsv() { const data = await customerService.list({ page: 1, limit: 1000, search, status }); const rows = [["fullName", "phone", "email", "points", "tier", "status"], ...data.items.map((item) => [item.fullName, item.phone, item.email || "", String(item.points), item.tier || "SILVER", item.status])]; const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n"); const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "customers.csv"; link.click(); URL.revokeObjectURL(url); }
+  async function handleDelete(item: Customer) { if (!isAdmin || !window.confirm(t("customers.deleteConfirm", { name: item.fullName }))) return; try { await customerService.remove(item.id); toast.success(t("message.deleted")); await loadData(page); } catch (error) { toast.error(getApiErrorMessage(error)); } }
+  async function handleRestore(item: Customer) { if (!isAdmin || !window.confirm(t("customers.restoreConfirm", { name: item.fullName }))) return; try { await customerService.restore(item.id); toast.success(t("message.restored")); await loadData(page); } catch (error) { toast.error(getApiErrorMessage(error)); } }
+  async function exportCustomersCsv() { try { const data = await customerService.list({ page: 1, limit: 1000, search, status }); const rows = [["fullName", "phone", "email", "points", "tier", "status"], ...data.items.map((item) => [item.fullName, item.phone, item.email || "", String(item.points), item.tier || "SILVER", item.status])]; const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n"); const blob = new Blob([csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = "customers.csv"; link.click(); URL.revokeObjectURL(url); } catch (error) { toast.error(getApiErrorMessage(error)); } }
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setPage(1); loadData(1); }
 
   return (
@@ -77,9 +92,75 @@ export default function CustomersPage() {
       <div className="space-y-6">
         <PageHeader title={t("customers.title")} description={t("customers.description")}><Button onClick={openCreateForm}><Plus className="h-4 w-4" />{t("customers.add")}</Button></PageHeader>
         <ErrorState message={errorMessage} />
-        {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
+        
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-slate-500 uppercase">Tổng khách hàng</p>
+              <p className="text-2xl font-black text-slate-900">{formatNumber(allCustomers.length)}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Tổng số khách đã lưu trên hệ thống</p>
+            </div>
+            <Crown className="h-8 w-8 text-slate-300" />
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-slate-500 uppercase">Khách hàng hoạt động</p>
+              <p className="text-2xl font-black text-emerald-600">{formatNumber(allCustomers.filter(c => c.status === "ACTIVE").length)}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Khách hàng đang có thể mua hàng</p>
+            </div>
+            <Crown className="h-8 w-8 text-emerald-500/50" />
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-slate-500 uppercase">Tổng điểm</p>
+              <p className="text-2xl font-black text-blue-600">{formatNumber(totalPointsCount)}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Tổng điểm tích lũy hiện có</p>
+            </div>
+            <Crown className="h-8 w-8 text-blue-500/50" />
+          </div>
+          <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+            <div className="space-y-1">
+              <p className="text-xs font-bold text-slate-500 uppercase">Khách hàng VIP</p>
+              <p className="text-2xl font-black text-amber-600">{formatNumber(vipCustomersCount)}</p>
+              <p className="mt-1 text-xs font-medium text-slate-500">Khách đạt hạng cao trong hệ thống</p>
+            </div>
+            <Crown className="h-8 w-8 text-amber-500/50" />
+          </div>
+        </div>
+
         <Card><CardContent className="pt-6"><form onSubmit={handleSearchSubmit} className="grid gap-4 md:grid-cols-[1fr_180px_auto_auto]"><Input placeholder={t("customers.searchPlaceholder")} value={search} onChange={(event) => setSearch(event.target.value)} /><Select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}><option value="ACTIVE">{t("status.ACTIVE")}</option><option value="INACTIVE">{t("status.INACTIVE")}</option><option value="">{t("common.all")}</option></Select><Button type="submit">{t("common.search")}</Button><Button type="button" variant="outline" onClick={exportCustomersCsv}><Download className="h-4 w-4" />{t("common.export")}</Button></form></CardContent></Card>
-        {isFormOpen ? <Card><CardHeader><CardTitle>{editingItem ? t("customers.updateTitle") : t("customers.createTitle")}</CardTitle></CardHeader><CardContent><form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2"><div className="space-y-2"><Label>{t("customers.fullName")}</Label><Input {...form.register("fullName")} />{form.formState.errors.fullName ? <p className="text-sm text-destructive">{form.formState.errors.fullName.message}</p> : null}</div><div className="space-y-2"><Label>{t("common.phone")}</Label><Input {...form.register("phone")} />{form.formState.errors.phone ? <p className="text-sm text-destructive">{form.formState.errors.phone.message}</p> : null}</div><div className="space-y-2"><Label>{t("common.email")}</Label><Input {...form.register("email")} />{form.formState.errors.email ? <p className="text-sm text-destructive">{form.formState.errors.email.message}</p> : null}</div><div className="space-y-2 md:col-span-2"><Label>{t("customers.address")}</Label><Textarea {...form.register("address")} /></div><div className="flex gap-2 md:col-span-2"><Button type="submit" disabled={form.formState.isSubmitting}>{editingItem ? t("common.saveChanges") : t("common.createNew")}</Button><Button variant="outline" onClick={() => setIsFormOpen(false)}>{t("common.cancel")}</Button></div></form></CardContent></Card> : null}
+        <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+          <DialogContent className="max-w-2xl bg-white rounded-2xl p-6 shadow-xl border border-slate-100">
+            <DialogHeader>
+              <DialogTitle>{editingItem ? t("customers.updateTitle") : t("customers.createTitle")}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2 mt-2">
+              <div className="space-y-2">
+                <Label>{t("customers.fullName")}</Label>
+                <Input {...form.register("fullName")} />
+                {form.formState.errors.fullName ? <p className="text-sm text-destructive">{form.formState.errors.fullName.message}</p> : null}
+              </div>
+              <div className="space-y-2">
+                <Label>{t("common.phone")}</Label>
+                <Input {...form.register("phone")} />
+                {form.formState.errors.phone ? <p className="text-sm text-destructive">{form.formState.errors.phone.message}</p> : null}
+              </div>
+              <div className="space-y-2">
+                <Label>{t("common.email")}</Label>
+                <Input {...form.register("email")} />
+                {form.formState.errors.email ? <p className="text-sm text-destructive">{form.formState.errors.email.message}</p> : null}
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>{t("customers.address")}</Label>
+                <Textarea {...form.register("address")} />
+              </div>
+              <div className="flex gap-2 md:col-span-2 justify-end">
+                <Button variant="outline" type="button" onClick={() => setIsFormOpen(false)}>{t("common.cancel")}</Button>
+                <Button type="submit" disabled={form.formState.isSubmitting}>{editingItem ? t("common.saveChanges") : t("common.createNew")}</Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
         {isLoading ? <LoadingState /> : null}
         {!isLoading && items.length === 0 ? <EmptyState /> : null}
         {!isLoading && items.length > 0 ? (

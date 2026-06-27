@@ -100,12 +100,6 @@ const CASHIER_SIDEBAR_SECTIONS: SidebarMenuSection[] = [
     titleKey: "nav.groupOperations",
     items: [{ titleKey: "nav.shifts", href: "/shifts", icon: FileText }],
   },
-  {
-    titleKey: "nav.groupInventory",
-    items: [
-      { titleKey: "nav.products", href: "/products", icon: Package },
-    ],
-  },
 ];
 
 type SidebarProps = {
@@ -132,7 +126,7 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
       )}
     >
       {/* Logo Header */}
-      <div className={cn("flex h-16 shrink-0 items-center border-b border-slate-800/40 px-4", collapsed ? "justify-center" : "gap-3")}>
+      <div className={cn("flex h-16 shrink-0 items-center border-b border-[#1E293B] px-4", collapsed ? "justify-center" : "gap-3")}>
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/20 text-primary">
           <Home className="h-5 w-5" />
         </div>
@@ -161,7 +155,7 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto py-4 scrollbar-thin">
+      <nav className="flex-1 overflow-y-auto py-4 sidebar-scrollbar">
         <div className="space-y-4 px-3">
           {visibleSections.map((section) => (
             <div key={section.titleKey} className="min-w-0">
@@ -171,7 +165,7 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
               <ul className="space-y-0.5">
                 {section.items.map((item) => {
                   const Icon = item.icon;
-                  const label = t(item.titleKey);
+                  const label = item.href === "/shifts" ? (role === "ADMIN" ? "Ca làm" : "Ca làm thu ngân") : t(item.titleKey);
                   const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
                   return (
@@ -202,7 +196,7 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
 
       {/* Logout Button - Bottom */}
       {onLogout ? (
-        <div className="shrink-0 border-t border-slate-800/40 p-3">
+        <div className="shrink-0 border-t border-[#1E293B] p-3">
           <button
             type="button"
             onClick={onLogout}

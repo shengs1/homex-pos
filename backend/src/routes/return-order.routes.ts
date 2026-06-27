@@ -3,6 +3,8 @@ import { z } from "zod";
 import prisma from "../lib/prisma";
 import { authenticateToken, authorizeRoles, AuthRequest } from "../middlewares/auth.middleware";
 import { ORDER_STATUS, RECORD_STATUS, STOCK_TRANSACTION_TYPE, USER_ROLES } from "../constants/app.constants";
+import { getCustomerTier } from "../utils/tier";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
 
@@ -244,6 +246,53 @@ router.post(
           });
         }
 
+        if (order.customerId) {
+          const pointsToRemove = Math.floor(totalAmount / 10000);
+          if (pointsToRemove > 0) {
+            const customer = await tx.customer.findUnique({
+              where: { id: order.customerId },
+            });
+            if (customer) {
+              const newPoints = Math.max(customer.points - pointsToRemove, 0);
+              await tx.customer.update({
+                where: { id: order.customerId },
+                data: {
+                  points: newPoints,
+                  tier: getCustomerTier(newPoints),
+                },
+              });
+            }
+          }
+        }
+
+        for (const item of returnItems) {
+          const detail = details.find(d => d.id === item.orderDetailId);
+          if (!detail) continue;
+
+          const existingWarranty = await tx.warranty.findUnique({
+            where: { orderDetailId: detail.id },
+          });
+
+          if (existingWarranty && existingWarranty.status !== "CANCELLED") {
+            const alreadyReturned = previousReturnMap.get(detail.id) || 0;
+            const totalReturned = alreadyReturned + item.quantity;
+            
+            if (totalReturned >= detail.quantity) {
+              await tx.warranty.update({
+                where: { id: existingWarranty.id },
+                data: { status: "CANCELLED" },
+              });
+            } else {
+              const dateStr = new Date().toLocaleDateString("vi-VN");
+              const currentNote = existingWarranty.note ? `${existingWarranty.note}\n` : "";
+              await tx.warranty.update({
+                where: { id: existingWarranty.id },
+                data: { note: `${currentNote}Đơn hàng đã trả một phần sản phẩm vào ${dateStr}.` },
+              });
+            }
+          }
+        }
+
         return tx.returnOrder.findUnique({
           where: { id: returnOrder.id },
           include: {
@@ -252,6 +301,14 @@ router.post(
             items: { include: { product: true, orderDetail: true } },
           },
         });
+      });
+
+      await createAuditLog({
+        req: req as any,
+        action: "RETURN_ORDER",
+        entityType: "RETURN_ORDER",
+        entityId: createdReturn!.id,
+        metadata: { code: createdReturn!.returnCode, totalAmount: Number(createdReturn!.totalAmount) },
       });
 
       return res.status(201).json({

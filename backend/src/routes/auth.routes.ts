@@ -3,6 +3,7 @@ import * as bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import prisma from "../lib/prisma";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
 
@@ -99,6 +100,17 @@ router.post("/login", async (req, res) => {
       data: {
         lastLoginAt: new Date(),
       },
+    });
+
+    await createAuditLog({
+      req: req as any,
+      userId: user.id,
+      userName: user.email,
+      role: user.role.name,
+      action: "LOGIN",
+      entityType: "AUTH",
+      entityId: user.id,
+      metadata: { employeeCode: user.employeeCode },
     });
 
     return res.json({

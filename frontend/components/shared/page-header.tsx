@@ -24,7 +24,7 @@ export function PageHeader({ title, description, children, className }: PageHead
       {description ? (
         <>
           <div className="h-4 w-px shrink-0 bg-slate-300 hidden md:block"></div>
-          <p className="hidden flex-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 truncate lg:block" title={description}>
+          <p className="hidden flex-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 truncate lg:block max-w-[280px] xl:max-w-[400px]" title={description}>
             {description}
           </p>
         </>

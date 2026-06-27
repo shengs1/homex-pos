@@ -3,6 +3,7 @@ import { z } from "zod";
 import prisma from "../lib/prisma";
 import { authenticateToken, authorizeRoles, AuthRequest } from "../middlewares/auth.middleware";
 import { RECORD_STATUS, STOCK_TRANSACTION_TYPE, USER_ROLES } from "../constants/app.constants";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
 
@@ -217,6 +218,14 @@ router.post(
             items: { include: { product: true } },
           },
         });
+      });
+
+      await createAuditLog({
+        req: req as any,
+        action: "STOCK_IN",
+        entityType: "PURCHASE_ORDER",
+        entityId: createdOrder!.id,
+        metadata: { code: createdOrder!.code, totalAmount: payload.items.reduce((sum, item) => sum + item.quantity * item.unitCost, 0) },
       });
 
       return res.status(201).json({

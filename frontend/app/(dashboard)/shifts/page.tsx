@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, CircleDollarSign, DoorClosed, DoorOpen, RefreshCw, Scale } from "lucide-react";
+import { CalendarClock, CircleDollarSign, DoorClosed, DoorOpen, RefreshCw, Scale, Clock, Unlock, Lock, Wallet } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { DataTable, Td, Th } from "@/components/shared/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
@@ -16,12 +16,28 @@ import { Select } from "@/components/ui/select";
 import { useLanguage } from "@/contexts/language-context";
 import { getApiErrorMessage } from "@/lib/api";
 import { getAuthUser } from "@/lib/auth";
-import { formatCurrency, formatDateTime } from "@/lib/format";
-import { shiftService } from "@/services/homex.service";
+import { formatCurrency, formatDateTime, formatNumber } from "@/lib/format";
+import { shiftService, userService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
-import type { Shift } from "@/types/domain";
+import type { Shift, UserAccount } from "@/types/domain";
 
 const PAGE_SIZE = 10;
+
+type ShiftSummary = {
+  totalShifts: number;
+  openShifts: number;
+  closedShifts: number;
+  totalCashInDrawer: number;
+  totalDifference: number;
+};
+
+const EMPTY_SHIFT_SUMMARY: ShiftSummary = {
+  totalShifts: 0,
+  openShifts: 0,
+  closedShifts: 0,
+  totalCashInDrawer: 0,
+  totalDifference: 0,
+};
 
 function numberFromInput(value: string) {
   const normalizedValue = value.replace(/[^\d]/g, "");
@@ -37,43 +53,43 @@ export default function ShiftsPage() {
   const [items, setItems] = useState<Shift[]>([]);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [shiftSummary, setShiftSummary] = useState<ShiftSummary>(EMPTY_SHIFT_SUMMARY);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [openingCash, setOpeningCash] = useState("0");
+  const [shiftType, setShiftType] = useState<"MORNING" | "EVENING">("MORNING");
   const [closingCash, setClosingCash] = useState("");
   const [note, setNote] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [usersList, setUsersList] = useState<UserAccount[]>([]);
+  const [selectedUserId, setSelectedUserId] = useState<string>("");
 
   const currentUser = getAuthUser();
   const isAdmin = currentUser?.role === "ADMIN";
 
-  const pageSummary = useMemo(() => {
-    return items.reduce(
-      (summary, item) => {
-        summary.total += 1;
-        if (item.status === "OPEN") summary.open += 1;
-        if (item.status === "CLOSED") summary.closed += 1;
-        summary.discrepancy += item.discrepancyAmount || 0;
-        return summary;
-      },
-      { total: 0, open: 0, closed: 0, discrepancy: 0 }
-    );
-  }, [items]);
+  const latestClosedShift = useMemo(() => items.find((item) => item.status === "CLOSED"), [items]);
+  const personalDiscrepancy = currentShift?.discrepancyAmount ?? latestClosedShift?.discrepancyAmount ?? 0;
 
   async function loadData(currentPage = page) {
     try {
       setIsLoading(true);
       setErrorMessage("");
-      const [current, listData] = await Promise.all([
+      const promises: [Promise<Shift | null>, Promise<{ items: Shift[]; pagination: Pagination; summary?: ShiftSummary }>, Promise<{ items: UserAccount[] }> | null] = [
         shiftService.current(),
         shiftService.list({ page: currentPage, limit: PAGE_SIZE, status }),
-      ]);
+        isAdmin ? userService.list({ page: 1, limit: 100 }) : null
+      ];
+      const [current, listData, usersData] = await Promise.all(promises);
       setCurrentShift(current);
       setItems(listData.items);
       setPagination(listData.pagination);
+      setShiftSummary({ ...EMPTY_SHIFT_SUMMARY, ...(listData.summary || {}) });
+      if (usersData) {
+        setUsersList(usersData.items);
+      }
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error));
     } finally {
@@ -94,10 +110,13 @@ export default function ShiftsPage() {
       const shift = await shiftService.open({
         openingCash: numberFromInput(openingCash),
         note: note.trim() || undefined,
+        shiftType: isAdmin ? shiftType : new Date().getHours() < 14 ? "MORNING" : "EVENING",
+        userId: selectedUserId ? Number(selectedUserId) : undefined,
       });
-      setCurrentShift(shift);
       setOpeningCash("0");
       setNote("");
+      setSelectedUserId("");
+      setShiftType("MORNING");
       setSuccessMessage(t("shifts.opened"));
       await loadData(1);
       setPage(1);
@@ -136,7 +155,7 @@ export default function ShiftsPage() {
   return (
     <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
       <div className="min-w-0 space-y-5">
-        <PageHeader title={t("shifts.title")} description={t("shifts.description")}>
+        <PageHeader title={isAdmin ? "Quản lý ca làm" : "Ca làm thu ngân"} description={t("shifts.description")}>
           <Button type="button" variant="outline" onClick={() => loadData(page)} disabled={isLoading}>
             <RefreshCw className="h-4 w-4" />
             {t("shifts.refresh")}
@@ -146,51 +165,84 @@ export default function ShiftsPage() {
         <ErrorState message={errorMessage} />
         {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
 
-        <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Card className="rounded-2xl border-slate-200/80 shadow-sm">
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-blue-600"><CalendarClock className="h-5 w-5" /></div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("shifts.totalShifts")}</p>
-                <p className="text-2xl font-black text-slate-800">{pageSummary.total}</p>
+        {isAdmin ? (
+          <div className="grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-500 uppercase">Tổng số ca</p>
+                <p className="text-2xl font-black text-slate-900">{formatNumber(shiftSummary.totalShifts)}</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">Tất cả ca của toàn bộ nhân viên</p>
               </div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border-slate-200/80 shadow-sm">
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><DoorOpen className="h-5 w-5" /></div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("status.OPEN")}</p>
-                <p className="text-2xl font-black text-slate-800">{pageSummary.open}</p>
+              <Clock className="h-8 w-8 text-slate-300" />
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-500 uppercase">Thu ngân đang trực</p>
+                <p className="text-2xl font-black text-emerald-600">{formatNumber(shiftSummary.openShifts)}</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">Nhân viên hiện đang mở ca</p>
               </div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border-slate-200/80 shadow-sm">
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-600"><DoorClosed className="h-5 w-5" /></div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("status.CLOSED")}</p>
-                <p className="text-2xl font-black text-slate-800">{pageSummary.closed}</p>
+              <Unlock className="h-8 w-8 text-emerald-500/50" />
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-500 uppercase">Tổng tiền mặt két</p>
+                <p className="text-2xl font-black text-amber-600">{formatCurrency(shiftSummary.totalCashInDrawer)}</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">Tiền mặt hiện có ở các két đang mở</p>
               </div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl border-slate-200/80 shadow-sm">
-            <CardContent className="flex items-center gap-3 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600"><Scale className="h-5 w-5" /></div>
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("shifts.discrepancy")}</p>
-                <p className="break-words whitespace-normal line-clamp-2 text-lg font-black text-slate-800">{formatCurrency(pageSummary.discrepancy)}</p>
+              <Wallet className="h-8 w-8 text-amber-500/50" />
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-500 uppercase">Tổng lệch quỹ</p>
+                <p className="text-2xl font-black text-rose-600">{formatCurrency(shiftSummary.totalDifference)}</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">Chênh lệch sau đối soát toàn hệ thống</p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+              <Scale className="h-8 w-8 text-rose-500/50" />
+            </div>
+          </div>
+        ) : (
+          <div className="grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-500 uppercase">Trạng thái ca</p>
+                <p className={`text-2xl font-black ${currentShift ? "text-emerald-600" : "text-rose-600"}`}>{currentShift ? "Đang trong ca" : "Chưa mở ca"}</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">Trạng thái ca làm hiện tại</p>
+              </div>
+              {currentShift ? <Unlock className="h-8 w-8 text-emerald-500/50" /> : <Lock className="h-8 w-8 text-rose-500/50" />}
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-500 uppercase">Vốn đầu ca</p>
+                <p className="text-2xl font-black text-slate-900">{formatCurrency(currentShift?.openingCash || 0)}</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">Tiền mặt nhận bàn giao</p>
+              </div>
+              <CircleDollarSign className="h-8 w-8 text-slate-300" />
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-500 uppercase">Doanh thu đã thu</p>
+                <p className="text-2xl font-black text-emerald-600">{formatCurrency(currentShift?.totalRevenue || 0)}</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">Doanh thu trong ca hiện tại</p>
+              </div>
+              <Wallet className="h-8 w-8 text-emerald-500/50" />
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-slate-500 uppercase">Lệch tiền cá nhân</p>
+                <p className="text-2xl font-black text-rose-600">{formatCurrency(personalDiscrepancy)}</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">Chênh lệch ca gần nhất của bạn</p>
+              </div>
+              <Scale className="h-8 w-8 text-rose-500/50" />
+            </div>
+          </div>
+        )}
 
         <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
-          <Card className="min-w-0 rounded-2xl border-slate-200/80 shadow-sm">
+          <Card className="min-w-0 rounded-2xl border-slate-200/80 shadow-sm h-fit">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base font-black text-slate-800">
                 <CircleDollarSign className="h-5 w-5 text-primary" />
-                {currentShift ? t("shifts.currentOpen") : t("shifts.noOpen")}
+                {isAdmin ? "Mở Ca Cho Nhân Viên" : "Trạng thái ca làm"}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -206,9 +258,9 @@ export default function ShiftsPage() {
                     <div className="flex justify-between gap-3"><dt>{t("common.note")}</dt><dd className="max-w-[180px] break-words whitespace-normal line-clamp-2 text-right">{currentShift.note || t("common.notAvailable")}</dd></div>
                   </dl>
                 </div>
-              ) : (
-                <div className="rounded-xl border border-dashed bg-slate-50 p-4 text-xs font-semibold text-slate-500">{t("shifts.required")}</div>
-              )}
+              ) : !isAdmin ? (
+                <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-700">Thu ngân cần mở ca trước khi thanh toán.</div>
+              ) : null}
 
               {currentShift ? (
                 <form onSubmit={handleCloseShift} className="space-y-3">
@@ -225,8 +277,24 @@ export default function ShiftsPage() {
                     {t("shifts.close")}
                   </Button>
                 </form>
-              ) : (
+              ) : isAdmin ? (
                 <form onSubmit={handleOpenShift} className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>{t("shifts.selectEmployee")}</Label>
+                    <Select value={selectedUserId} onChange={(event) => setSelectedUserId(event.target.value)} required>
+                      <option value="">{t("shifts.selectEmployee")}</option>
+                      {usersList.filter(u => u.status === "ACTIVE").map((u) => (
+                        <option key={u.id} value={u.id}>{u.fullName} ({u.role.name})</option>
+                      ))}
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Khung giờ</Label>
+                    <Select value={shiftType} onChange={(event) => setShiftType(event.target.value as "MORNING" | "EVENING")} required>
+                      <option value="MORNING">Sáng</option>
+                      <option value="EVENING">Chiều</option>
+                    </Select>
+                  </div>
                   <div className="space-y-2">
                     <Label>{t("shifts.openingCash")}</Label>
                     <Input inputMode="numeric" value={openingCash} onChange={(event) => setOpeningCash(event.target.value)} placeholder="0" />
@@ -240,6 +308,11 @@ export default function ShiftsPage() {
                     {t("shifts.open")}
                   </Button>
                 </form>
+              ) : (
+                <div className="rounded-xl border border-dashed bg-slate-50 p-6 text-center space-y-2">
+                  <p className="text-sm font-semibold text-slate-500">Chưa mở ca</p>
+                  <p className="text-xs text-slate-400">Vui lòng liên hệ Quản trị viên để mở ca làm việc của bạn.</p>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -276,7 +349,7 @@ export default function ShiftsPage() {
                 <tbody>
                   {items.map((item) => (
                     <tr key={item.id}>
-                      <Td className="max-w-[180px] break-words whitespace-normal line-clamp-2 font-bold">{item.user?.fullName || item.userId}</Td>
+                      <Td><div className="max-w-[180px] break-words whitespace-normal line-clamp-2 font-bold">{item.user?.fullName || item.userId}</div></Td>
                       <Td>{formatCurrency(item.openingCash)}</Td>
                       <Td>{item.closingCash === null ? "-" : formatCurrency(item.closingCash)}</Td>
                       <Td>{item.expectedCash === null ? "-" : formatCurrency(item.expectedCash)}</Td>

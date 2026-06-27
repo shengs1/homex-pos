@@ -6,9 +6,11 @@ import {
   authenticateToken,
   authorizeRoles,
 } from "../middlewares/auth.middleware";
-import { USER_ROLES, RECORD_STATUS } from "../constants/app.constants";
+import { USER_ROLES, RECORD_STATUS, ORDER_STATUS } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
+import { getCustomerTier } from "../utils/tier";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
 
@@ -128,10 +130,21 @@ async function checkDuplicateCustomerPhone(
   }
 }
 
-function getCustomerTier(points: number) {
-  if (points >= 2000) return "DIAMOND";
-  if (points >= 500) return "GOLD";
-  return "SILVER";
+function formatCustomer(customer: any) {
+  let currentTier = getCustomerTier(customer.points);
+
+  const totalSpent = customer.orders?.reduce((sum: number, order: any) => {
+    const orderAmount = Number(order.totalAmount);
+    const returnedAmount = order.returnOrders?.reduce((rSum: number, ro: any) => rSum + Number(ro.totalAmount), 0) || 0;
+    return sum + (orderAmount - returnedAmount);
+  }, 0) || 0;
+
+  return {
+    ...customer,
+    tier: currentTier,
+    totalSpent,
+    orders: undefined,
+  };
 }
 
 // GET /api/customers?page=1&limit=10&search=&status=ACTIVE
@@ -181,6 +194,16 @@ router.get(
     const [customers, totalItems] = await prisma.$transaction([
       prisma.customer.findMany({
         where,
+        include: {
+          orders: {
+            where: { status: ORDER_STATUS.COMPLETED },
+            include: {
+              returnOrders: {
+                where: { status: "COMPLETED" }
+              }
+            }
+          }
+        },
         orderBy: {
           createdAt: "desc",
         },
@@ -198,7 +221,7 @@ router.get(
       success: true,
       message: "Lấy danh sách khách hàng thành công",
       data: {
-        items: customers,
+        items: customers.map(formatCustomer),
         pagination: {
           page,
           limit,
@@ -222,6 +245,16 @@ router.get(
       where: {
         id: customerId,
       },
+      include: {
+        orders: {
+          where: { status: ORDER_STATUS.COMPLETED },
+          include: {
+            returnOrders: {
+              where: { status: "COMPLETED" }
+            }
+          }
+        }
+      }
     });
 
     if (!customer) {
@@ -231,7 +264,7 @@ router.get(
     return res.json({
       success: true,
       message: "Lấy chi tiết khách hàng thành công",
-      data: customer,
+      data: formatCustomer(customer),
     });
   })
 );
@@ -262,10 +295,18 @@ router.post(
       },
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "CREATE",
+      entityType: "CUSTOMER",
+      entityId: customer.id,
+      metadata: { phone: customer.phone, fullName: customer.fullName },
+    });
+
     return res.status(201).json({
       success: true,
       message: "Thêm khách hàng thành công",
-      data: customer,
+      data: { ...customer, tier: getCustomerTier(0), totalSpent: 0 },
     });
   })
 );
@@ -310,10 +351,18 @@ router.put(
       },
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "UPDATE",
+      entityType: "CUSTOMER",
+      entityId: updatedCustomer.id,
+      metadata: { phone: updatedCustomer.phone, fullName: updatedCustomer.fullName, points: updatedCustomer.points },
+    });
+
     return res.json({
       success: true,
       message: "Cập nhật khách hàng thành công",
-      data: updatedCustomer,
+      data: { ...updatedCustomer, tier: getCustomerTier(updatedCustomer.points) },
     });
   })
 );
@@ -347,6 +396,14 @@ router.delete(
       data: {
         status: RECORD_STATUS.INACTIVE,
       },
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "DELETE",
+      entityType: "CUSTOMER",
+      entityId: deletedCustomer.id,
+      metadata: { phone: deletedCustomer.phone, fullName: deletedCustomer.fullName },
     });
 
     return res.json({
@@ -386,6 +443,14 @@ router.patch(
       data: {
         status: RECORD_STATUS.ACTIVE,
       },
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "RESTORE",
+      entityType: "CUSTOMER",
+      entityId: restoredCustomer.id,
+      metadata: { phone: restoredCustomer.phone, fullName: restoredCustomer.fullName },
     });
 
     return res.json({

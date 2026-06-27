@@ -195,4 +195,89 @@ router.patch(
   }
 );
 
+router.delete(
+  "/:id",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const notificationId = Number(req.params.id);
+
+      if (!Number.isInteger(notificationId) || notificationId <= 0) {
+        return res.status(400).json({
+          success: false,
+          message: "ID thông báo không hợp lệ",
+        });
+      }
+
+      const notification = await prisma.notification.findUnique({
+        where: { id: notificationId },
+      });
+
+      if (!notification) {
+        return res.status(404).json({
+          success: false,
+          message: "Không tìm thấy thông báo",
+        });
+      }
+
+      // Check role/ownership (optional but good practice)
+      // Since it's delete, just delete if it matches the where clause.
+      await prisma.notification.delete({
+        where: { id: notificationId },
+      });
+
+      return res.json({
+        success: true,
+        message: "Đã xóa thông báo",
+      });
+    } catch (error) {
+      console.error("Delete notification error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Không thể xóa thông báo",
+      });
+    }
+  }
+);
+
+router.delete(
+  "/",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  async (req, res) => {
+    try {
+      const authReq = req as AuthRequest;
+      const readOnly = String(req.query.read || "").toLowerCase() === "true";
+
+      if (!readOnly) {
+        return res.status(400).json({
+          success: false,
+          message: "Chỉ được xóa thông báo đã đọc",
+        });
+      }
+
+      const result = await prisma.notification.deleteMany({
+        where: {
+          ...buildNotificationWhere(authReq),
+          isRead: true,
+        },
+      });
+
+      return res.json({
+        success: true,
+        message: "Đã xóa tất cả thông báo đã đọc",
+        data: { count: result.count },
+      });
+    } catch (error) {
+      console.error("Delete read notifications error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Không thể xóa thông báo",
+      });
+    }
+  }
+);
+
 export default router;

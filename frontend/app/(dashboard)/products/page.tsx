@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode, type SyntheticEvent } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createColumnHelper, getCoreRowModel, useReactTable, type ColumnDef, type RowSelectionState } from "@tanstack/react-table";
-import { AlertTriangle, CheckSquare, Clipboard, Database, Edit, FileUp, ImageIcon, LockKeyhole, MoreHorizontal, Plus, Printer, QrCode, RotateCcw, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, CheckSquare, Clipboard, Database, Edit, FileUp, ImageIcon, LockKeyhole, MoreHorizontal, Plus, Printer, QrCode, RotateCcw, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -25,7 +25,7 @@ import { useLanguage } from "@/contexts/language-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getApiErrorMessage } from "@/lib/api";
 import { buildDemoProductPayloads, parseProductImportFileContent, resolveRealProductImageFromProductName, REAL_PRODUCT_FALLBACK_IMAGE } from "@/lib/demo-products";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { compactProductPrice, formatCurrency, formatMoneyInputValue, formatNumber, formatDateTime, parseMoneyInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { categoryService, productService, supplierService, type ProductPayload } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
@@ -37,9 +37,9 @@ const formSchema = z.object({
   description: z.string().trim().max(500, "Mô tả tối đa 500 ký tự").optional(),
   categoryId: z.coerce.number().int().positive("Vui lòng chọn danh mục"),
   supplierId: z.coerce.number().int().positive("Vui lòng chọn nhà cung cấp"),
-  costPrice: z.coerce.number().min(0, "Giá nhập không được âm"),
-  salePrice: z.coerce.number().positive("Giá bán phải lớn hơn 0"),
-  originalPrice: z.coerce.number().min(0).optional(),
+  costPrice: z.preprocess((value) => parseMoneyInput(value as string | number), z.number().min(0, "Giá nhập không được âm")),
+  salePrice: z.preprocess((value) => parseMoneyInput(value as string | number), z.number().positive("Giá bán phải lớn hơn 0")),
+  originalPrice: z.preprocess((value) => parseMoneyInput(value as string | number), z.number().min(0).optional()),
   stockQuantity: z.coerce.number().int().min(0).optional(),
   minStock: z.coerce.number().int().min(0).optional(),
   warrantyMonths: z.coerce.number().int().min(0).optional(),
@@ -83,8 +83,8 @@ const jsonStructureExample = `[
     "name": "Nồi cơm điện 1.8L Homex NC000001",
     "categoryId": 1,
     "supplierId": 1,
-    "costPrice": 520000,
-    "salePrice": 750000,
+    "costPrice": 520,
+    "salePrice": 750,
     "stockQuantity": 30,
     "minStock": 5,
     "warrantyMonths": 24,
@@ -94,7 +94,7 @@ const jsonStructureExample = `[
 ]`;
 
 const csvStructureExample = `sku,name,categoryId,supplierId,costPrice,salePrice,stockQuantity,minStock,warrantyMonths,imageUrl
-KIT-SH-NC000001,Nồi cơm điện 1.8L Homex NC000001,1,1,520000,750000,30,5,24,/assets/real-products/rice-cooker.jpg`;
+KIT-SH-NC000001,Nồi cơm điện 1.8L Homex NC000001,1,1,520,750,30,5,24,/assets/real-products/rice-cooker.jpg`;
 
 function sortByIdAsc<T extends { id: number }>(items: T[]) {
   return [...items].sort((a, b) => a.id - b.id);
@@ -151,6 +151,7 @@ export default function ProductsPage() {
   const [isImportGuideOpen, setIsImportGuideOpen] = useState(false);
   const [isDeleteAllDialogOpen, setIsDeleteAllDialogOpen] = useState(false);
   const [deleteAllPassword, setDeleteAllPassword] = useState("");
+  const [deleteAllMode, setDeleteAllMode] = useState<"soft" | "hard">("soft");
   const [lastDeletedProductIds, setLastDeletedProductIds] = useState<number[]>([]);
   const [toastMessage, setToastMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -163,6 +164,13 @@ export default function ProductsPage() {
   const selectedIds = useMemo(() => Object.keys(rowSelection).filter((key) => rowSelection[key]).map((key) => Number(key)), [rowSelection]);
   const selectedCount = selectedIds.length;
   const currentImageUrl = form.watch("imageUrl");
+  const costPriceInput = form.watch("costPrice") as string | number | null | undefined;
+  const salePriceInput = form.watch("salePrice") as string | number | null | undefined;
+  const originalPriceInput = form.watch("originalPrice") as string | number | null | undefined;
+
+  function setMoneyFormField(field: "costPrice" | "salePrice" | "originalPrice", value: string) {
+    form.setValue(field, formatMoneyInputValue(value) as any, { shouldDirty: true, shouldValidate: true });
+  }
 
   function handleProductImageError(event: SyntheticEvent<HTMLImageElement>, _productName?: string) {
     event.currentTarget.onerror = null;
@@ -261,7 +269,14 @@ export default function ProductsPage() {
     try {
       setErrorMessage("");
       setSuccessMessage("");
-      const payload = { ...values, qrCode: values.qrCode || values.sku, imageUrl: values.imageUrl || resolveRealProductImageFromProductName(values.name) };
+      const payload = {
+        ...values,
+        costPrice: compactProductPrice(values.costPrice),
+        salePrice: compactProductPrice(values.salePrice),
+        originalPrice: values.originalPrice ? compactProductPrice(values.originalPrice) : 0,
+        qrCode: values.qrCode || values.sku,
+        imageUrl: values.imageUrl || resolveRealProductImageFromProductName(values.name),
+      };
       if (editingItem) {
         await productService.update(editingItem.id, payload);
         setSuccessMessage(t("message.updated"));
@@ -354,7 +369,15 @@ export default function ProductsPage() {
 
     for (let index = 0; index < payloads.length; index += 10) {
       const batch = payloads.slice(index, index + 10);
-      const results = await Promise.allSettled(batch.map((payload) => productService.create({ ...payload, qrCode: payload.qrCode || payload.sku })));
+      const results = await Promise.allSettled(
+        batch.map((payload) => productService.create({
+          ...payload,
+          costPrice: compactProductPrice(payload.costPrice),
+          salePrice: compactProductPrice(payload.salePrice),
+          originalPrice: payload.originalPrice ? compactProductPrice(payload.originalPrice) : undefined,
+          qrCode: payload.qrCode || payload.sku,
+        }))
+      );
       created += results.filter((result) => result.status === "fulfilled").length;
       failed += results.filter((result) => result.status === "rejected").length;
     }
@@ -455,6 +478,28 @@ export default function ProductsPage() {
     return { deleted, failed, deletedIds };
   }
 
+  async function hardDeleteProducts(productIds: number[]) {
+    let deleted = 0;
+    let failed = 0;
+
+    for (let index = 0; index < productIds.length; index += 10) {
+      const batch = productIds.slice(index, index + 10);
+      const results = await Promise.allSettled(
+        batch.map((id) => productService.hardRemove(id, { adminPassword: deleteAllPassword }))
+      );
+
+      results.forEach((result) => {
+        if (result.status === "fulfilled") {
+          deleted += 1;
+        } else {
+          failed += 1;
+        }
+      });
+    }
+
+    return { deleted, failed };
+  }
+
   async function handleBulkDelete() {
     if (selectedIds.length === 0) return;
     if (!window.confirm(t("products.bulkDeleteConfirm", { count: selectedIds.length }))) return;
@@ -493,28 +538,48 @@ export default function ProductsPage() {
 
       while (safeLoop < 200) {
         safeLoop += 1;
-        const data = await productService.list({ page: 1, limit: 100, status: "ACTIVE" });
+        const data = await productService.list({ page: 1, limit: 100, status: deleteAllMode === "soft" ? "ACTIVE" : "" });
         const targetIds = data.items.map((item) => item.id);
 
         if (targetIds.length === 0) {
           break;
         }
 
-        const result = await softDeleteProducts(targetIds);
-        totalDeleted += result.deleted;
-        totalFailed += result.failed;
-        deletedIds.push(...result.deletedIds);
+        if (deleteAllMode === "soft") {
+          const result = await softDeleteProducts(targetIds);
+          totalDeleted += result.deleted;
+          totalFailed += result.failed;
+          deletedIds.push(...result.deletedIds);
 
-        if (result.deleted === 0 && result.failed > 0) {
-          break;
+          if (result.deleted === 0 && result.failed > 0) {
+            break;
+          }
+        } else {
+          const result = await hardDeleteProducts(targetIds);
+          totalDeleted += result.deleted;
+          totalFailed += result.failed;
+
+          if (result.deleted === 0 && result.failed > 0) {
+            break;
+          }
         }
       }
 
-      rememberLastDeletedProductIds(deletedIds);
+      if (deleteAllMode === "soft") {
+        rememberLastDeletedProductIds(deletedIds);
+      } else {
+        clearLastDeletedProductIds();
+      }
+
       setRowSelection({});
       setDeleteAllPassword("");
+      setDeleteAllMode("soft");
       setIsDeleteAllDialogOpen(false);
-      setSuccessMessage(`Đã xóa mềm ${totalDeleted} sản phẩm. Lỗi: ${totalFailed}. Có thể bấm Khôi phục sản phẩm để chỉ khôi phục batch vừa xóa này.`);
+      setSuccessMessage(
+        deleteAllMode === "soft"
+          ? `Đã xóa mềm ${totalDeleted} sản phẩm. Lỗi: ${totalFailed}. Có thể bấm Khôi phục sản phẩm để chỉ khôi phục batch vừa xóa này.`
+          : `Đã xóa vĩnh viễn ${totalDeleted} sản phẩm. Lỗi: ${totalFailed}. Sản phẩm đã phát sinh đơn hàng/giao dịch kho có thể không xóa cứng được.`
+      );
       setPage(1);
       await loadData(1);
     } catch (error) {
@@ -523,7 +588,6 @@ export default function ProductsPage() {
       setIsBulkLoading(false);
     }
   }
-
   function handleProductImageFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -653,22 +717,7 @@ export default function ProductsPage() {
         ),
         meta: { headerClassName: "px-2 text-center whitespace-nowrap", cellClassName: "px-2" },
       }),
-      columnHelper.display({
-        id: "qr",
-        size: 62,
-        header: t("products.qrCode"),
-        cell: ({ row }) => {
-          const qrValue = row.original.qrCode || row.original.sku;
-          return (
-            <div className="text-center">
-              <button type="button" className="inline-flex rounded-md border bg-white p-1 transition hover:scale-105" title={t("products.openQr")} onClick={() => setSelectedQrProduct(row.original)}>
-                <QRCodeSVG value={qrValue} size={36} />
-              </button>
-            </div>
-          );
-        },
-        meta: { headerClassName: "px-2 text-center whitespace-nowrap", cellClassName: "px-2 text-center" },
-      }),
+
       columnHelper.display({
         id: "product",
         size: 230,
@@ -764,6 +813,7 @@ export default function ProductsPage() {
               label={t("common.actions")}
               items={[
                 { label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(row.original) },
+                { label: "Xem mã QR", icon: <QrCode className="h-4 w-4" />, onClick: () => setSelectedQrProduct(row.original) },
                 row.original.status === "ACTIVE"
                   ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(row.original), variant: "destructive" }
                   : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(row.original) },
@@ -778,6 +828,32 @@ export default function ProductsPage() {
     return cols;
   }, [t, rowSelection, isAdmin]);
 
+  const headerActions = isAdmin ? (
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <Button type="button" onClick={openCreateForm}>
+        <Plus className="h-4 w-4" />
+        {t("common.addNew")}
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button variant="outline" className="h-10 gap-2"><Upload className="h-4 w-4" />Nhập / Xuất</Button></DropdownMenuTrigger>
+        <DropdownMenuPortal>
+          <DropdownMenuContent align="end" className="w-48 bg-white border border-slate-100 p-1 shadow-lg rounded-lg">
+            <DropdownMenuItem onClick={() => setIsImportGuideOpen(true)} disabled={isBulkLoading} className="gap-2 cursor-pointer"><FileUp className="h-4 w-4" />Nhập JSON/CSV</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleBulkDemoImport} disabled={isBulkLoading} className="gap-2 cursor-pointer"><Database className="h-4 w-4" />Nhập dữ liệu mẫu</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenuPortal>
+      </DropdownMenu>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button variant="outline" className="h-10 gap-2"><SlidersHorizontal className="h-4 w-4" />Thao tác khác</Button></DropdownMenuTrigger>
+        <DropdownMenuPortal>
+          <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-100 p-1 shadow-lg rounded-lg">
+            <DropdownMenuItem onClick={handleRestoreLastDeletedBatch} disabled={isBulkLoading} className="gap-2 cursor-pointer"><RotateCcw className="h-4 w-4" />{lastDeletedProductIds.length > 0 ? `Khôi phục sản phẩm (${lastDeletedProductIds.length})` : "Khôi phục sản phẩm"}</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setIsDeleteAllDialogOpen(true)} disabled={isBulkLoading} className="text-destructive hover:text-destructive gap-2 cursor-pointer"><Trash2 className="h-4 w-4" />Xóa tất cả sản phẩm</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenuPortal>
+      </DropdownMenu>
+    </div>
+  ) : null;
   const table = useReactTable({
     data: items,
     columns,
@@ -790,14 +866,7 @@ export default function ProductsPage() {
 
   return (
     <div className="w-full min-w-0 space-y-6 overflow-visible">
-      <PageHeader title={t("products.title")} description={t("products.description")}>
-        {isAdmin ? (
-          <Button type="button" onClick={openCreateForm}>
-            <Plus className="h-4 w-4" />
-            {t("common.addNew")}
-          </Button>
-        ) : null}
-      </PageHeader>
+      <PageHeader title={t("products.title")} description={t("products.description")}>{headerActions}</PageHeader>
 
       {!isAdmin ? (
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 shadow-sm">
@@ -813,31 +882,35 @@ export default function ProductsPage() {
       {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
       {toastMessage ? <div className="fixed right-5 top-5 z-[60] rounded-lg border bg-card px-4 py-3 text-sm font-medium shadow-xl">{toastMessage}</div> : null}
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm font-medium text-muted-foreground">Tổng sản phẩm (trang này)</div>
-            <div className="mt-1 text-2xl font-bold">{items.length} {pagination && pagination.totalItems > items.length ? <span className="text-sm text-muted-foreground font-normal">/ {pagination.totalItems} tổng</span> : null}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm font-medium text-muted-foreground">Đang hoạt động</div>
-            <div className="mt-1 text-2xl font-bold text-emerald-600">{items.filter(i => i.status === 'ACTIVE').length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm font-medium text-muted-foreground">Ngừng hoạt động</div>
-            <div className="mt-1 text-2xl font-bold text-amber-600">{items.filter(i => i.status === 'INACTIVE').length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-sm font-medium text-muted-foreground">Tồn thấp</div>
-            <div className="mt-1 text-2xl font-bold text-destructive">{items.filter(i => i.stockQuantity <= i.minStock).length}</div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-bold text-slate-500 uppercase">Tổng số sản phẩm</p>
+            <p className="text-2xl font-black text-slate-900">{formatNumber(pagination?.totalItems || items.length)}</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">Tổng sản phẩm trong danh mục bán hàng</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-bold text-slate-500 uppercase">Sản phẩm đang bán</p>
+            <p className="text-2xl font-black text-emerald-600">{formatNumber(items.filter(i => i.status === 'ACTIVE').length)}</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">Sản phẩm đang hoạt động</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-bold text-slate-500 uppercase">Ngừng kinh doanh</p>
+            <p className="text-2xl font-black text-slate-500">{formatNumber(items.filter(i => i.status === 'INACTIVE').length)}</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">Sản phẩm đã tạm ngừng bán</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
+          <div className="space-y-1">
+            <p className="text-xs font-bold text-slate-500 uppercase">Sắp hết hàng</p>
+            <p className="text-2xl font-black text-amber-600">{formatNumber(items.filter(i => i.stockQuantity <= i.minStock).length)}</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">Sản phẩm dưới ngưỡng tồn tối thiểu</p>
+          </div>
+        </div>
       </div>
 
       {/* Filter toolbar and grouped product actions */}
@@ -865,36 +938,14 @@ export default function ProductsPage() {
             <Button type="submit" className="h-10 w-full lg:w-auto">{t("common.search")}</Button>
           </form>
 
-          {isAdmin ? (
-            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex w-full flex-wrap items-center gap-2">
-                <input ref={importFileRef} type="file" accept=".json,.csv,application/json,text/csv" className="hidden" onChange={handleFileImport} />
-                <Button variant="outline" size="sm" className="h-10" onClick={() => setIsImportGuideOpen(true)} disabled={isBulkLoading}>
-                  <FileUp className="h-4 w-4" />
-                  {t("products.importFile")}
-                </Button>
-                <Button variant="outline" size="sm" className="h-10" onClick={handleBulkDemoImport} disabled={isBulkLoading}>
-                  <Database className="h-4 w-4" />
-                  {isBulkLoading ? t("products.bulkRunning") : t("products.bulkAdd")}
-                </Button>
-                <Button variant="outline" size="sm" className="h-10" onClick={handleRestoreLastDeletedBatch} disabled={isBulkLoading}>
-                  <RotateCcw className="h-4 w-4" />
-                  {lastDeletedProductIds.length > 0 ? `Khôi phục sản phẩm (${lastDeletedProductIds.length})` : "Khôi phục sản phẩm"}
-                </Button>
-                <Button variant="destructive" size="sm" className="h-10" onClick={() => setIsDeleteAllDialogOpen(true)} disabled={isBulkLoading}>
-                  <Trash2 className="h-4 w-4" />
-                  {t("products.deleteAll")}
-                </Button>
-              </div>
+          {isAdmin ? <input ref={importFileRef} type="file" accept=".json,.csv,application/json,text/csv" className="hidden" onChange={handleFileImport} /> : null}
 
-              {selectedCount > 0 ? (
-                <div className="flex flex-wrap items-center justify-start gap-2 xl:justify-end">
-                  <Button type="button" variant="destructive" size="sm" onClick={handleBulkDelete} disabled={isBulkLoading}>
-                    <CheckSquare className="h-4 w-4" />
-                    {t("products.deleteSelected", { count: selectedCount })}
-                  </Button>
-                </div>
-              ) : null}
+          {isAdmin && selectedCount > 0 ? (
+            <div className="flex flex-wrap items-center justify-start gap-2">
+              <Button type="button" variant="destructive" size="sm" onClick={handleBulkDelete} disabled={isBulkLoading}>
+                <CheckSquare className="h-4 w-4" />
+                {t("products.deleteSelected", { count: selectedCount })}
+              </Button>
             </div>
           ) : null}
         </CardContent>
@@ -936,17 +987,17 @@ export default function ProductsPage() {
               </div>
               <div className="space-y-2">
                 <Label>{t("products.costPrice")}</Label>
-                <Input type="number" placeholder="500000" {...form.register("costPrice")} />
+                <Input inputMode="numeric" placeholder="500" value={formatMoneyInputValue(costPriceInput)} onChange={(event) => setMoneyFormField("costPrice", event.target.value)} />
                 {form.formState.errors.costPrice ? <p className="text-sm text-destructive">{form.formState.errors.costPrice.message}</p> : null}
               </div>
               <div className="space-y-2">
                 <Label>{t("products.salePrice")}</Label>
-                <Input type="number" placeholder="750000" {...form.register("salePrice")} />
+                <Input inputMode="numeric" placeholder="750" value={formatMoneyInputValue(salePriceInput)} onChange={(event) => setMoneyFormField("salePrice", event.target.value)} />
                 {form.formState.errors.salePrice ? <p className="text-sm text-destructive">{form.formState.errors.salePrice.message}</p> : null}
               </div>
               <div className="space-y-2">
                 <Label>{t("products.originalPrice")}</Label>
-                <Input type="number" placeholder="950000" {...form.register("originalPrice")} />
+                <Input inputMode="numeric" placeholder="950" value={formatMoneyInputValue(originalPriceInput)} onChange={(event) => setMoneyFormField("originalPrice", event.target.value)} />
               </div>
               <div className="space-y-2"><Label>{t("products.stockQuantity")}</Label><Input type="number" placeholder="30" {...form.register("stockQuantity")} /></div>
               <div className="space-y-2"><Label>{t("products.minStock")}</Label><Input type="number" placeholder="5" {...form.register("minStock")} /></div>
@@ -1063,7 +1114,20 @@ export default function ProductsPage() {
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4" />
-                <p>Hành động này sẽ xóa mềm toàn bộ sản phẩm đang hoạt động trong cơ sở dữ liệu, không bị giới hạn bởi phân trang.</p>
+                <p>{deleteAllMode === "soft" ? "Xóa mềm sẽ chuyển toàn bộ sản phẩm đang hoạt động sang trạng thái ngừng kinh doanh và có thể khôi phục." : "Xóa cứng sẽ xóa vĩnh viễn sản phẩm khỏi cơ sở dữ liệu. Sản phẩm đã có đơn hàng hoặc giao dịch kho có thể bị chặn bởi ràng buộc dữ liệu."}</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Kiểu xóa</Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm">
+                  <input type="radio" name="deleteAllMode" value="soft" checked={deleteAllMode === "soft"} onChange={() => setDeleteAllMode("soft")} />
+                  <span><span className="block font-semibold">Xóa mềm</span><span className="text-xs text-muted-foreground">Có thể khôi phục sản phẩm sau khi xóa.</span></span>
+                </label>
+                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                  <input type="radio" name="deleteAllMode" value="hard" checked={deleteAllMode === "hard"} onChange={() => setDeleteAllMode("hard")} />
+                  <span><span className="block font-semibold">Xóa cứng vĩnh viễn</span><span className="text-xs opacity-80">Không thể khôi phục sau khi xóa.</span></span>
+                </label>
               </div>
             </div>
             <div className="space-y-2">
@@ -1081,10 +1145,10 @@ export default function ProductsPage() {
               <p className="text-xs text-muted-foreground">Mật khẩu demo: Admin@123</p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => { setIsDeleteAllDialogOpen(false); setDeleteAllPassword(""); }}>{t("products.cancelDanger")}</Button>
+              <Button type="button" variant="outline" onClick={() => { setIsDeleteAllDialogOpen(false); setDeleteAllPassword(""); setDeleteAllMode("soft"); }}>{t("products.cancelDanger")}</Button>
               <Button type="button" variant="destructive" disabled={isBulkLoading} onClick={handleDeleteAllProducts}>
                 <Trash2 className="h-4 w-4" />
-                {isBulkLoading ? "Đang xóa..." : t("products.deleteAll")}
+                {isBulkLoading ? "Đang xóa..." : deleteAllMode === "soft" ? "Xóa mềm tất cả" : "Xóa cứng vĩnh viễn"}
               </Button>
             </div>
           </div>

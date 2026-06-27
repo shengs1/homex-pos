@@ -6,6 +6,8 @@ import { Banknote, Download, Minus, Plus, Printer, QrCode, ReceiptText, Search, 
 import { QRCodeSVG } from "qrcode.react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { useLanguage } from "@/contexts/language-context";
+import { useSettings } from "@/contexts/settings-context";
+import { useToast } from "@/contexts/toast-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -56,6 +58,15 @@ function formatMoneyInput(value: string) {
   return new Intl.NumberFormat("vi-VN").format(Number(digits));
 }
 
+function getTierLabel(tier: string, t: (key: string) => string) {
+  if (tier === "ALL") return t("promotions.tierAll");
+  if (tier === "NONE") return t("promotions.tierNone");
+  if (tier === "SILVER") return t("promotions.tierSilver");
+  if (tier === "GOLD") return t("promotions.tierGold");
+  if (tier === "DIAMOND") return t("promotions.tierDiamond");
+  return tier;
+}
+
 function getMoneyInputAmount(value: string) {
   const digits = getDigits(value);
   return digits ? Number(digits) : 0;
@@ -72,7 +83,7 @@ function formatDiscountInput(value: string, type: "AMOUNT" | "PERCENT") {
   return formatMoneyInput(value);
 }
 
-function buildVietQrDemoValue(setting: Setting | null, amount: number, content: string) {
+function buildVietQrDemoValue(setting: any, amount: number, content: string) {
   return [
     `bank=${setting?.bankName || "BANK"}`,
     `account=${setting?.bankAccountNumber || "0000000000"}`,
@@ -80,6 +91,22 @@ function buildVietQrDemoValue(setting: Setting | null, amount: number, content: 
     `amount=${Math.round(amount)}`,
     `content=${content}`,
   ].join("|");
+}
+
+function getOrderCodeLast6(orderCode?: string | null) {
+  if (!orderCode) return "";
+  return String(orderCode).slice(-6);
+}
+
+function sanitizeVietQrContent(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9 ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase()
+    .slice(0, 50);
 }
 
 export default function PosPage() {
@@ -92,7 +119,7 @@ export default function PosPage() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [draftOrder, setDraftOrder] = useState<Order | null>(null);
   const [lastCompletedOrder, setLastCompletedOrder] = useState<Order | null>(null);
-  const [setting, setSetting] = useState<Setting | null>(null);
+  const { settings: setting } = useSettings();
   const [productSearch, setProductSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
@@ -114,9 +141,9 @@ export default function PosPage() {
   const [quickCustomerPhone, setQuickCustomerPhone] = useState("");
   const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
   const [quickCustomerAddress, setQuickCustomerAddress] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const { toast } = useToast();
   const [isOnline, setIsOnline] = useState(true);
+  const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const { t } = useLanguage();
   const cartScrollRef = useRef<HTMLDivElement | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
@@ -125,15 +152,7 @@ export default function PosPage() {
   const barcodeBufferRef = useRef("");
   const barcodeTimerRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (!errorMessage && !successMessage) return;
-    const timer = window.setTimeout(() => {
-      setErrorMessage("");
-      setSuccessMessage("");
-    }, 3000);
-    return () => window.clearTimeout(timer);
-  }, [errorMessage, successMessage]);
-
+  
   const subtotal = useMemo(() => {
     return cart.reduce((total, item) => total + item.product.salePrice * item.quantity, 0);
   }, [cart]);
@@ -143,15 +162,53 @@ export default function PosPage() {
   const cashReceivedAmount = getMoneyInputAmount(cashReceivedInput);
   const changeAmount = paymentMethod === "CASH" ? Math.max(cashReceivedAmount - totalPayable, 0) : 0;
   const selectedCustomer = useMemo(() => customers.find((customer) => String(customer.id) === customerId) || null, [customerId, customers]);
+  
+  const eligiblePromotions = useMemo(() => {
+    return promotions.filter(p => {
+      // Bỏ qua kiểm tra thời hạn chi tiết quá khắt khe ở frontend vì backend đã check ACTIVE
+      // Chỉ kiểm tra cơ bản
+      if (p.expiredAt && new Date(p.expiredAt).getTime() < Date.now() - 86400000) return false;
+      if (p.usageLimit && p.usedCount !== undefined && p.usedCount >= p.usageLimit) return false;
+      
+      // Khách lẻ hoặc khách chưa chọn sẽ có cTier = "NONE" (coi như khách mới)
+      const cTier = selectedCustomer?.tier || "NONE";
+      
+      // Voucher công khai (áp dụng cho tất cả)
+      const isPublic = !p.eligibleTiers || p.eligibleTiers.trim() === "" || p.eligibleTiers === "ALL" || p.eligibleTiers === "ALL_TIERS";
+      
+      if (!isPublic) {
+        const tiers = p.eligibleTiers.split(",").map(t => t.trim().toUpperCase());
+        if (!tiers.includes(cTier.toUpperCase())) return false;
+      }
+      return true;
+    });
+  }, [promotions, selectedCustomer]);
+
   const isCashPaymentInvalid = paymentMethod === "CASH" && cashReceivedAmount < totalPayable;
-  const isCheckoutDisabled = isSubmitting || cart.length === 0 || !isOnline;
-  const transferContent = draftOrder?.orderCode || "HOMEX POS";
+  const isCheckoutDisabled = isSubmitting || cart.length === 0 || !isOnline || (user?.role === "CASHIER" && !currentShift);
+  const transferContent = (() => {
+    let tpl = setting?.transferContentTemplate || "HOMEX {orderCodeLast6}";
+    const code = draftOrder?.orderCode || "HOMEX POS";
+    const raw = tpl
+      .replaceAll("{orderCode}", code)
+      .replaceAll("{orderCodeLast6}", getOrderCodeLast6(code))
+      .replaceAll("{amount}", String(totalPayable))
+      .replaceAll("{customerPhone}", selectedCustomer?.phone || "");
+    return sanitizeVietQrContent(raw);
+  })();
   const isBankConfigured = Boolean(setting?.bankName && setting?.bankAccountNumber && setting?.bankAccountName);
   const transferQrValue = buildVietQrDemoValue(setting, totalPayable, transferContent);
   const lastInvoicePublicUrl =
     lastCompletedOrder && typeof window !== "undefined"
       ? `${window.location.origin}/invoice/${lastCompletedOrder.orderCode}`
       : "";
+
+  const isShiftEndingSoon = useMemo(() => {
+    if (!currentShift) return false;
+    const now = new Date();
+    const endHour = currentShift.shiftType === "MORNING" ? 15 : 22;
+    return now.getHours() >= endHour;
+  }, [currentShift]);
 
   function focusBarcodeInput() {
     if (typeof window === "undefined") return;
@@ -163,15 +220,14 @@ export default function PosPage() {
       const data = await categoryService.list({ page: 1, limit: 200, status: "ACTIVE" });
       setCategories(sortByIdAsc(data.items));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
     }
   }
 
   async function loadProducts() {
     try {
       setIsLoadingProducts(true);
-      setErrorMessage("");
-      const data = await productService.list({
+            const data = await productService.list({
         page: 1,
         limit: 80,
         search: productSearch,
@@ -180,7 +236,7 @@ export default function PosPage() {
       });
       setProducts(sortByIdAsc(data.items));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
     } finally {
       setIsLoadingProducts(false);
     }
@@ -190,20 +246,10 @@ export default function PosPage() {
     event?.preventDefault();
 
     try {
-      setErrorMessage("");
-      const data = await customerService.list({ page: 1, limit: 30, search: customerSearch, status: "ACTIVE" });
+            const data = await customerService.list({ page: 1, limit: 30, search: customerSearch, status: "ACTIVE" });
       setCustomers(sortByIdAsc(data.items));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
-    }
-  }
-
-  async function loadSetting() {
-    try {
-      const data = await settingService.get();
-      setSetting(data);
-    } catch {
-      setSetting(null);
+      toast.error(getApiErrorMessage(error));
     }
   }
 
@@ -211,6 +257,15 @@ export default function PosPage() {
     try {
       const data = await promotionService.list({ page: 1, limit: 100, status: "ACTIVE" });
       setPromotions(data.items);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function loadCurrentShift() {
+    try {
+      const shift = await shiftService.current();
+      setCurrentShift(shift);
     } catch {
       // ignore
     }
@@ -240,13 +295,11 @@ export default function PosPage() {
 
     try {
       setIsSubmitting(true);
-      setErrorMessage("");
-      setSuccessMessage("");
-
+            
       const order = await orderService.detail(Number(storedOrderId));
 
       if (order.status !== "DRAFT") {
-        setErrorMessage(t("toast.pos.resumeDraftInvalid"));
+        toast.error(t("toast.pos.resumeDraftInvalid"));
         return;
       }
 
@@ -284,9 +337,9 @@ export default function PosPage() {
       setDraftOrder(order);
       setCustomerId(order.customerId ? String(order.customerId) : "");
       setCart(restoredCart);
-      setSuccessMessage(t("toast.pos.resumeDraftSuccess", { code: order.orderCode }));
+      toast.success(t("toast.pos.resumeDraftSuccess", { code: order.orderCode }));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -296,8 +349,8 @@ export default function PosPage() {
     loadCategories();
     loadProducts();
     searchCustomers();
-    loadSetting();
     loadPromotions();
+    loadCurrentShift();
     restoreDraftOrderFromStorage();
     focusBarcodeInput();
   }, []);
@@ -346,6 +399,16 @@ export default function PosPage() {
       setAppliedDiscountAmount(subtotal);
     }
   }, [subtotal, appliedDiscountAmount]);
+
+  useEffect(() => {
+    if (appliedPromotionCode) {
+      setAppliedPromotionCode("");
+      setAppliedDiscountAmount(0);
+      setDiscountMessage("");
+      toast.error("Voucher đã bị gỡ do thay đổi khách hàng");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerId]);
 
   useEffect(() => {
     const scrollContainer = cartScrollRef.current;
@@ -405,7 +468,10 @@ export default function PosPage() {
   }, [paymentMethod]);
 
   function addToCart(product: Product) {
-    if (product.stockQuantity <= 0) return;
+    if (!setting?.allowOversell && product.stockQuantity <= 0) {
+      toast.error(t("settings.stockNotEnough") || "Không đủ tồn kho");
+      return;
+    }
 
     setCart((currentCart) => {
       const found = currentCart.find((item) => item.product.id === product.id);
@@ -413,7 +479,12 @@ export default function PosPage() {
       if (found) {
         return currentCart.map((item) => {
           if (item.product.id !== product.id) return item;
-          return { ...item, quantity: Math.min(item.quantity + 1, product.stockQuantity) };
+          const newQty = item.quantity + 1;
+          if (!setting?.allowOversell && newQty > product.stockQuantity) {
+            toast.warning(t("settings.stockNotEnough") || "Không đủ tồn kho");
+            return item;
+          }
+          return { ...item, quantity: newQty };
         });
       }
 
@@ -427,16 +498,15 @@ export default function PosPage() {
     if (!barcode) return;
 
     try {
-      setErrorMessage("");
-      const product = await productService.findByBarcode(barcode);
-      if (product.stockQuantity <= 0) {
-        setErrorMessage(t("pos.barcodeOutOfStock"));
+            const product = await productService.findByBarcode(barcode);
+      if (!setting?.allowOversell && product.stockQuantity <= 0) {
+        toast.error(t("settings.stockNotEnough") || "Không đủ tồn kho");
         return;
       }
       addToCart(product);
-      setSuccessMessage(t("pos.barcodeAdded", { sku: product.sku }));
+      toast.success(t("pos.barcodeAdded", { sku: product.sku }));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error) || t("pos.barcodeNotFound"));
+      toast.error(getApiErrorMessage(error) || t("pos.barcodeNotFound"));
     } finally {
       focusBarcodeInput();
     }
@@ -449,7 +519,9 @@ export default function PosPage() {
           if (item.product.id !== productId) return item;
           return {
             ...item,
-            quantity: Math.min(Math.max(item.quantity + delta, 1), item.product.stockQuantity),
+            quantity: setting?.allowOversell 
+              ? Math.max(item.quantity + delta, 1)
+              : Math.min(Math.max(item.quantity + delta, 1), item.product.stockQuantity),
           };
         })
         .filter((item) => item.quantity > 0);
@@ -471,20 +543,18 @@ export default function PosPage() {
 
   async function createDraft() {
     if (cart.length === 0) {
-      setErrorMessage(t("toast.pos.emptyCart"));
+      toast.error(t("toast.pos.emptyCart"));
       return null;
     }
 
     try {
       setIsSubmitting(true);
-      setErrorMessage("");
-      setSuccessMessage("");
-      const data = await orderService.createDraft(buildOrderBody());
+                  const data = await orderService.createDraft(buildOrderBody());
       setDraftOrder(data);
-      setSuccessMessage(t("toast.pos.draftCreated"));
+      toast.success(t("toast.pos.draftCreated"));
       return data;
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
       return null;
     } finally {
       setIsSubmitting(false);
@@ -492,8 +562,23 @@ export default function PosPage() {
   }
 
   function startCheckout() {
-    setErrorMessage("");
-    setSuccessMessage("");
+    if (setting?.requireCustomerPhone) {
+      if (!customerId) {
+        toast.error(t("settings.customerPhoneRequired") || "Vui lòng nhập SĐT khách hàng");
+        return;
+      }
+      const c = customers.find(x => String(x.id) === customerId);
+      if (!c?.phone) {
+        toast.error(t("settings.customerPhoneRequired") || "Khách hàng phải có SĐT");
+        return;
+      }
+    }
+
+    if (Number(setting?.maxDiscount) > 0 && discountAmount > Number(setting?.maxDiscount)) {
+      toast.error(t("settings.discountLimitExceeded") || "Giảm giá vượt giới hạn");
+      return;
+    }
+
     if (setting?.confirmBeforeCheckout === false) {
       if (paymentMethod === "CASH") {
         setCheckoutStep("cash");
@@ -509,26 +594,25 @@ export default function PosPage() {
 
   async function prepareTransferCheckout() {
     if (cart.length === 0) {
-      setErrorMessage(t("toast.pos.emptyCart"));
+      toast.error(t("toast.pos.emptyCart"));
       return;
     }
 
     if (!isOnline) {
-      setErrorMessage(t("network.checkoutDisabled"));
+      toast.error(t("network.checkoutDisabled"));
       return;
     }
 
     try {
       setIsSubmitting(true);
-      setErrorMessage("");
-      const orderToPay = draftOrder
+            const orderToPay = draftOrder
         ? await orderService.updateDraft(draftOrder.id, buildOrderBody())
         : await orderService.createDraft(buildOrderBody());
       setDraftOrder(orderToPay);
       setCheckoutStep("qr");
       setIsCheckoutDialogOpen(true);
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -536,25 +620,23 @@ export default function PosPage() {
 
   async function checkout() {
     if (cart.length === 0) {
-      setErrorMessage(t("toast.pos.emptyCart"));
+      toast.error(t("toast.pos.emptyCart"));
       return;
     }
 
     if (!isOnline) {
-      setErrorMessage(t("network.checkoutDisabled"));
+      toast.error(t("network.checkoutDisabled"));
       return;
     }
 
     if (paymentMethod === "CASH" && cashReceivedAmount < totalPayable) {
-      setErrorMessage(t("pos.cashNotEnough"));
+      toast.error(t("pos.cashNotEnough"));
       return;
     }
 
     try {
       setIsSubmitting(true);
-      setErrorMessage("");
-      setSuccessMessage("");
-
+            
       const orderToCheckout = draftOrder
         ? await orderService.updateDraft(draftOrder.id, buildOrderBody())
         : await orderService.createDraft(buildOrderBody());
@@ -568,11 +650,17 @@ export default function PosPage() {
       setLastCompletedOrder(completedOrder);
       setIsCheckoutDialogOpen(false);
       resetPosState();
-      setSuccessMessage(t("toast.pos.checkoutSuccess"));
+      toast.success(t("toast.pos.checkoutSuccess"));
       router.refresh();
       await loadProducts();
+      
+      if (setting?.autoOpenPrint) {
+        setTimeout(() => {
+          window.print();
+        }, 500);
+      }
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -581,9 +669,7 @@ export default function PosPage() {
   function startNewOrder() {
     setLastCompletedOrder(null);
     resetPosState();
-    setSuccessMessage("");
-    setErrorMessage("");
-    focusBarcodeInput();
+            focusBarcodeInput();
   }
 
   function downloadReceipt(order: Order) {
@@ -616,15 +702,13 @@ export default function PosPage() {
 
     try {
       setIsSubmitting(true);
-      setErrorMessage("");
-      setSuccessMessage("");
-      await orderService.cancel(draftOrder.id);
+                  await orderService.cancel(draftOrder.id);
       resetPosState();
       setIsCancelDraftDialogOpen(false);
-      setSuccessMessage(t("toast.pos.cancelDraftSuccess"));
+      toast.success(t("toast.pos.cancelDraftSuccess"));
       await loadProducts();
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -643,7 +727,12 @@ export default function PosPage() {
     try {
       setIsSubmitting(true);
       setDiscountMessage("");
-      const result = await promotionService.validate({ code: code.toUpperCase(), subtotal });
+      const result = await promotionService.validate({
+        code: code.toUpperCase(),
+        subtotal,
+        customerTier: selectedCustomer?.tier || "NONE",
+        customerId: selectedCustomer?.id || null,
+      });
       const amount = Math.min(Number(result.discountAmount || 0), subtotal);
 
       if (amount <= 0) {
@@ -737,9 +826,7 @@ export default function PosPage() {
     event.preventDefault();
 
     try {
-      setErrorMessage("");
-      setSuccessMessage("");
-      const data = await customerService.create({
+                  const data = await customerService.create({
         fullName: quickCustomerName,
         phone: quickCustomerPhone,
         email: quickCustomerEmail,
@@ -752,9 +839,9 @@ export default function PosPage() {
       setQuickCustomerPhone("");
       setQuickCustomerEmail("");
       setQuickCustomerAddress("");
-      setSuccessMessage(t("toast.pos.customerCreated"));
+      toast.success(t("toast.pos.customerCreated"));
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
     }
   }
 
@@ -765,92 +852,91 @@ export default function PosPage() {
 
   function renderReceiptView(order: Order) {
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-        <div className="mx-auto flex max-w-4xl flex-col gap-4">
-          <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-2">
+        <Dialog open={true} onOpenChange={(open) => { if (!open) startNewOrder(); }}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+            <DialogHeader className="px-6 py-4 border-b shrink-0 bg-emerald-50">
+              <DialogTitle className="flex items-center gap-2 text-emerald-900">
                 <ReceiptText className="h-5 w-5 shrink-0 text-emerald-700" />
-                <h2 className="truncate text-lg font-black text-emerald-900">{t("pos.receiptTitle")}</h2>
+                {t("pos.receiptTitle")} - {order.orderCode}
+              </DialogTitle>
+              <DialogDescription className="text-emerald-700">
+                {t("pos.receiptDescription")}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+              <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("orders.orderCode")}</p>
+                      <p className="truncate font-black text-slate-800">{order.orderCode}</p>
+                    </div>
+                    <div className="min-w-0 sm:text-right">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("common.createdAt")}</p>
+                      <p className="font-bold text-slate-700">{new Date(order.createdAt).toLocaleString("vi-VN")}</p>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("customers.title")}</p>
+                      <p className="truncate font-bold text-slate-700">{order.customer?.fullName || t("customers.retail")}</p>
+                    </div>
+                    <div className="min-w-0 sm:text-right">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.cashier")}</p>
+                      <p className="truncate font-bold text-slate-700">{order.user?.fullName || user?.fullName || "-"}</p>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
+                    {order.orderDetails.map((detail) => (
+                      <div key={detail.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-black text-slate-800">{detail.product?.name || `#${detail.productId}`}</p>
+                          <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            {detail.product?.sku || "-"} x {detail.quantity}
+                          </p>
+                        </div>
+                        <div className="shrink-0 text-right text-xs font-black text-slate-800">{formatCurrency(detail.lineTotal)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm h-fit">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <span className="font-semibold text-slate-500">{t("pos.subtotal")}</span>
+                      <span className="font-black text-slate-800">{formatCurrency(order.totalAmount)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="font-semibold text-slate-500">{t("pos.discount")}</span>
+                      <span className="font-black text-slate-800">{formatCurrency(order.discountAmount || 0)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4 border-t border-slate-200 pt-3 text-base">
+                      <span className="font-black text-slate-900">{t("orders.total")}</span>
+                      <span className="font-black text-primary">{formatCurrency(order.totalAmount)}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="font-semibold text-slate-500">{t("pos.cashReceived")}</span>
+                      <span className="font-black text-slate-800">{order.payment?.cashReceived ? formatCurrency(order.payment.cashReceived) : "-"}</span>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <span className="font-semibold text-slate-500">{t("pos.changeAmount")}</span>
+                      <span className="font-black text-emerald-700">{formatCurrency(order.payment?.changeAmount || 0)}</span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <p className="mt-1 text-xs font-semibold text-emerald-700">{t("pos.receiptDescription")}</p>
             </div>
-            <div className="flex shrink-0 flex-wrap gap-2">
+            <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-3 bg-white">
               <Button type="button" variant="outline" onClick={() => downloadReceipt(order)}>
-                <Download className="h-4 w-4" />
+                <Download className="h-4 w-4 mr-2" />
                 {t("pos.downloadInvoice")}
               </Button>
               <Button type="button" variant="outline" onClick={() => window.print()}>
-                <Printer className="h-4 w-4" />
+                <Printer className="h-4 w-4 mr-2" />
                 {t("orders.printInvoice")}
               </Button>
               <Button type="button" onClick={startNewOrder}>{t("pos.newOrder")}</Button>
             </div>
-          </div>
-
-          <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="min-w-0 rounded-2xl border border-slate-100 p-4">
-              <div className="mb-4 grid gap-2 text-sm sm:grid-cols-2">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("orders.orderCode")}</p>
-                  <p className="truncate font-black text-slate-800">{order.orderCode}</p>
-                </div>
-                <div className="min-w-0 sm:text-right">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("common.createdAt")}</p>
-                  <p className="font-bold text-slate-700">{new Date(order.createdAt).toLocaleString("vi-VN")}</p>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("customers.title")}</p>
-                  <p className="truncate font-bold text-slate-700">{order.customer?.fullName || t("customers.retail")}</p>
-                </div>
-                <div className="min-w-0 sm:text-right">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.cashier")}</p>
-                  <p className="truncate font-bold text-slate-700">{order.user?.fullName || user?.fullName || "-"}</p>
-                </div>
-              </div>
-
-              <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-100">
-                {order.orderDetails.map((detail) => (
-                  <div key={detail.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-xs font-black text-slate-800">{detail.product?.name || `#${detail.productId}`}</p>
-                      <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        {detail.product?.sku || "-"} x {detail.quantity}
-                      </p>
-                    </div>
-                    <div className="shrink-0 text-right text-xs font-black text-slate-800">{formatCurrency(detail.lineTotal)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between gap-4">
-                  <span className="font-semibold text-slate-500">{t("pos.subtotal")}</span>
-                  <span className="font-black text-slate-800">{formatCurrency(order.totalAmount)}</span>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <span className="font-semibold text-slate-500">{t("pos.discount")}</span>
-                  <span className="font-black text-slate-800">{formatCurrency(0)}</span>
-                </div>
-                <div className="flex justify-between gap-4 border-t border-slate-200 pt-3 text-base">
-                  <span className="font-black text-slate-900">{t("orders.total")}</span>
-                  <span className="font-black text-primary">{formatCurrency(order.totalAmount)}</span>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <span className="font-semibold text-slate-500">{t("pos.cashReceived")}</span>
-                  <span className="font-black text-slate-800">{order.payment?.cashReceived ? formatCurrency(order.payment.cashReceived) : "-"}</span>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <span className="font-semibold text-slate-500">{t("pos.changeAmount")}</span>
-                  <span className="font-black text-emerald-700">{formatCurrency(order.payment?.changeAmount || 0)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+          </DialogContent>
+        </Dialog>
     );
   }
 
@@ -871,19 +957,23 @@ export default function PosPage() {
           }}
         />
         {/* Header cố định trong vùng POS */}
-        <div className="shrink-0">
+        <div className="shrink-0 flex items-center justify-between">
           <PageHeader title={t("pos.title")} description={t("pos.description")} />
+          {user?.role === "CASHIER" && !currentShift ? (
+            <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800 shadow-sm animate-in fade-in">
+              <span className="font-semibold">{t("pos.shiftRequired")}</span>
+            </div>
+          ) : null}
         </div>
 
         {/* Floating Notifications */}
         <div className="fixed top-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full">
-          {errorMessage ? <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm font-bold text-destructive shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-top-2">{errorMessage}</div> : null}
-          {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-700 shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-top-2">{successMessage}</div> : null}
           {!isOnline ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900 shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-top-2">{t("network.checkoutDisabled")}</div> : null}
+          {isShiftEndingSoon ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-bold text-amber-900 shadow-lg backdrop-blur-md animate-in fade-in slide-in-from-top-2">{t("shifts.shiftEndReached")}</div> : null}
         </div>
 
         {/* Main POS workspace: chỉ phần này */}
-        {lastCompletedOrder ? renderReceiptView(lastCompletedOrder) : (
+        {lastCompletedOrder ? renderReceiptView(lastCompletedOrder) : null}
         <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,400px)] xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)]">
           {/* Cột trái: tìm kiếm và danh sách sản phẩm */}
           <div className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/50 bg-white shadow-sm overflow-hidden">
@@ -1042,7 +1132,7 @@ export default function PosPage() {
                   <option value="">{t("customers.retail")}</option>
                   {customers.map((customer) => (
                     <option key={customer.id} value={customer.id}>
-                      {customer.fullName} - {customer.phone} - {t(`customerTier.${customer.tier || "SILVER"}`)}
+                      {customer.fullName} - {customer.phone} - {t(`customerTier.${customer.tier || "NONE"}`)} ({formatNumber(customer.points)} pts)
                     </option>
                   ))}
                 </Select>
@@ -1139,11 +1229,14 @@ export default function PosPage() {
                     className="h-10 text-[11px] flex-[1.4] min-w-0"
                   >
                     <option value="">{t("pos.noVoucher")}</option>
-                    {promotions.map((p) => (
-                      <option key={p.id} value={p.code}>
-                        {p.code} - {p.discountType === "PERCENT" ? `${p.discountValue}%` : formatCurrency(p.discountValue)}
-                      </option>
-                    ))}
+                    {eligiblePromotions.map((p) => {
+                      const tiersText = p.eligibleTiers === "ALL" || !p.eligibleTiers ? t("promotions.tierAll") : p.eligibleTiers.split(",").map(tier => getTierLabel(tier.trim(), t)).join(", ");
+                      return (
+                        <option key={p.id} value={p.code}>
+                          {p.code} - {p.discountType === "PERCENT" ? `${p.discountValue}%` : formatCurrency(p.discountValue)} (Tối thiểu: {formatCurrency(p.minOrderAmount)} | Hạng: {tiersText})
+                        </option>
+                      );
+                    })}
                   </Select>
 
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -1270,7 +1363,6 @@ export default function PosPage() {
               </div>
           </div>
         </div>
-        )}
 
         <Dialog open={isCheckoutDialogOpen} onOpenChange={setIsCheckoutDialogOpen}>
           <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
@@ -1511,7 +1603,7 @@ export default function PosPage() {
       {lastCompletedOrder ? (
         <PrintableInvoice
           order={lastCompletedOrder}
-          setting={setting}
+          setting={setting as any}
           publicUrl={lastInvoicePublicUrl}
           className="hidden print:block"
         />

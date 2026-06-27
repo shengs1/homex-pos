@@ -60,8 +60,8 @@ async function patchData<T>(url: string, body?: unknown) {
   return response.data.data;
 }
 
-async function deleteData<T>(url: string) {
-  const response = await api.delete<ApiSuccess<T>>(url);
+async function deleteData<T>(url: string, config?: { data?: any }) {
+  const response = await api.delete<ApiSuccess<T>>(url, config);
   return response.data.data;
 }
 
@@ -102,6 +102,7 @@ async function getPaginatedDataByIdAsc<T extends { id: number }>(url: string, pa
       totalItems,
       totalPages,
     },
+    summary: firstPage.summary,
   };
 }
 
@@ -150,6 +151,7 @@ export const productService = {
   create: (body: ProductPayload) => postData<Product>("/products", body),
   update: (id: number, body: ProductPayload) => putData<Product>(`/products/${id}`, body),
   remove: (id: number) => deleteData<Product>(`/products/${id}`),
+  hardRemove: (id: number, body: { adminPassword: string }) => deleteData<{ id: number }>(`/products/${id}/hard`, { data: body }),
   restore: (id: number) => patchData<Product>(`/products/${id}/restore`),
 };
 
@@ -190,6 +192,7 @@ export type CheckoutOrderPayload = {
 export const orderService = {
   list: (params?: ListParams) => getPaginatedDataByIdAsc<Order>("/orders", params),
   detail: (id: number) => getData<Order>(`/orders/${id}`),
+  getByCode: (orderCode: string) => getData<Order>(`/orders/code/${encodeURIComponent(orderCode)}`),
   createDraft: (body: DraftOrderPayload) => postData<Order>("/orders/draft", body),
   updateDraft: (id: number, body: DraftOrderPayload) => putData<Order>(`/orders/${id}/draft`, body),
   checkout: (id: number, body: CheckoutOrderPayload) => patchData<Order>(`/orders/${id}/checkout`, body),
@@ -221,12 +224,26 @@ export const vatInvoiceService = {
   list: (params?: ListParams) => getPaginatedDataByIdAsc<VatInvoiceRequest>("/vat-invoices", params),
   approve: (id: number, body: { redInvoiceCode: string; adminNote?: string }) => patchData<VatInvoiceRequest>(`/vat-invoices/${id}/approve`, body),
   reject: (id: number, body: { adminNote?: string }) => patchData<VatInvoiceRequest>(`/vat-invoices/${id}/reject`, body),
+  taxLookup: (taxCode: string) => getData<{ taxCode: string; companyName: string; companyAddress: string; source: string }>(`/vat-invoices/tax-lookup?taxCode=${encodeURIComponent(taxCode)}`),
+  create: (body: { orderCode: string; companyName: string; taxCode: string; companyAddress?: string; buyerEmail?: string; note?: string }) => postData<VatInvoiceRequest>("/vat-invoices", body),
+  resendEmail: (id: number) => postData<{ success: boolean; message: string }>(`/vat-invoices/${id}/resend-email`, {}),
+  adjust: (id: number, body: {
+    companyName?: string;
+    taxCode?: string;
+    companyAddress?: string;
+    buyerEmail?: string | null;
+    note?: string | null;
+    redInvoiceCode?: string | null;
+    adminNote?: string | null;
+    status?: "PENDING" | "APPROVED" | "REJECTED";
+  }) => putData<VatInvoiceRequest>(`/vat-invoices/${id}/adjust`, body),
+  delete: (id: number) => deleteData<{ success: boolean; message: string }>(`/vat-invoices/${id}`),
 };
 
 export const shiftService = {
   current: () => getData<Shift | null>("/shifts/current"),
   list: (params?: ListParams) => getPaginatedDataByIdAsc<Shift>("/shifts", params),
-  open: (body: { openingCash: number; note?: string }) => postData<Shift>("/shifts/open", body),
+  open: (body: { openingCash: number; shiftType: "MORNING" | "EVENING"; userId?: number; note?: string }) => postData<Shift>("/shifts/open", body),
   close: (id: number, body: { closingCash: number; note?: string }) => patchData<Shift>(`/shifts/${id}/close`, body),
 };
 
@@ -245,9 +262,13 @@ export const notificationService = {
   list: (params?: ListParams) => getData<{ items: NotificationItem[]; unreadCount: number; pagination: PaginatedData<NotificationItem>["pagination"] }>("/notifications", params),
   markRead: (id: number) => patchData<NotificationItem>(`/notifications/${id}/read`),
   markAllRead: () => patchData<{ count: number }>("/notifications/read-all"),
+  delete: (id: number) => deleteData<{ success: boolean }>(`/notifications/${id}`),
+  deleteRead: () => deleteData<{ count: number }>("/notifications?read=true"),
 };
 
 export const warrantyService = {
+  stats: () => getData<{ total: number; active: number; expiringSoon: number; expired: number }>("/warranties/stats"),
+  lookupOrder: (code: string) => getData<any>(`/warranties/lookup-order?code=${encodeURIComponent(code)}`),
   list: (params?: ListParams) => getPaginatedDataByIdAsc<Warranty>("/warranties", params),
   detail: (id: number) => getData<Warranty>(`/warranties/${id}`),
   lookup: (code: string) => getData<Warranty>(`/warranties/code/${encodeURIComponent(code)}`),
@@ -255,6 +276,10 @@ export const warrantyService = {
   cancel: (id: number) => patchData<Warranty>(`/warranties/${id}/cancel`),
   restore: (id: number) => patchData<Warranty>(`/warranties/${id}/restore`),
   expire: (id: number) => patchData<Warranty>(`/warranties/${id}/expire`),
+  claim: (id: number, note?: string) => patchData<Warranty>(`/warranties/${id}/claim`, { note }),
+  complete: (id: number, note?: string) => patchData<Warranty>(`/warranties/${id}/complete`, { note }),
+  reject: (id: number, note?: string) => patchData<Warranty>(`/warranties/${id}/reject`, { note }),
+  updateNote: (id: number, note: string) => patchData<Warranty>(`/warranties/${id}/note`, { note }),
 };
 
 export const paymentService = {
@@ -288,10 +313,12 @@ export const userService = {
   list: (params?: ListParams) => getPaginatedDataByIdAsc<UserAccount>("/users", params),
   detail: (id: number) => getData<UserAccount>(`/users/${id}`),
   create: (body: Pick<UserPayload, "employeeCode" | "fullName" | "email" | "phone" | "role"> & { password: string }) => postData<UserAccount>("/users", body),
-  update: (id: number, body: Pick<UserPayload, "employeeCode" | "fullName" | "email" | "phone" | "role"> & { status: "ACTIVE" | "INACTIVE" }) => putData<UserAccount>(`/users/${id}`, body),
-  changePassword: (id: number, body: { newPassword: string }) => patchData<UserAccount>(`/users/${id}/change-password`, body),
-  lock: (id: number) => deleteData<UserAccount>(`/users/${id}`),
+  update: (id: number, body: Pick<UserPayload, "employeeCode" | "fullName" | "email" | "phone" | "role"> & { status: "ACTIVE" | "INACTIVE", adminPassword?: string }) => putData<UserAccount>(`/users/${id}`, body),
+  changePassword: (id: number, body: { newPassword: string; adminPassword?: string }) => patchData<UserAccount>(`/users/${id}/change-password`, body),
+  lock: (id: number, body: { adminPassword?: string }) => patchData<UserAccount>(`/users/${id}/lock`, body),
+  remove: (id: number, body: { adminPassword?: string }) => deleteData<UserAccount>(`/users/${id}`, { data: body }),
   restore: (id: number) => patchData<UserAccount>(`/users/${id}/restore`),
+  verifyPassword: (body: { adminPassword?: string }) => postData<{ success: boolean }>("/users/verify-password", body),
 };
 
 export const auditLogService = {

@@ -3,6 +3,7 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useLanguage } from "@/contexts/language-context";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { Order, PublicInvoice, Setting } from "@/types/domain";
 
 type PrintableInvoiceProps = {
@@ -36,14 +37,14 @@ export function PrintableInvoice({ order, setting, publicUrl, className }: Print
     : "mx-auto max-w-[210mm] bg-white p-6 text-sm text-black print:max-w-[210mm] print:p-0";
 
   return (
-    <div className={className}>
+    <div className={cn("print-area", className)}>
       <div className={paperClassName}>
         <div className="text-center">
           <h2 className="text-lg font-bold">{invoiceSetting?.storeName || "Homex POS"}</h2>
           {invoiceSetting?.storeAddress ? <p>{invoiceSetting.storeAddress}</p> : null}
           {invoiceSetting?.storeHotline ? <p>{t("invoice.hotline")}: {invoiceSetting.storeHotline}</p> : null}
           <div className="mt-3 border-t border-dashed border-black pt-3">
-            <h1 className="text-xl font-bold">{t("invoice.title")}</h1>
+            <h1 className="text-xl font-bold">{t("invoices.invoiceTitle")}</h1>
           </div>
         </div>
 
@@ -86,10 +87,10 @@ export function PrintableInvoice({ order, setting, publicUrl, className }: Print
           <p>{t("orders.total")}: <span className="font-bold">{formatCurrency(order.payment?.amount || order.totalAmount)}</span></p>
           {order.payment ? <p>{t("payments.method")}: {t(`paymentMethod.${order.payment.method}`)}</p> : null}
           {order.payment?.cashReceived !== null && order.payment?.cashReceived !== undefined ? (
-            <p>{t("pos.cashReceived")}: {formatCurrency(order.payment.cashReceived)}</p>
+            <p>{t("invoices.customerPaid")}: {formatCurrency(order.payment.cashReceived)}</p>
           ) : null}
           {order.payment?.changeAmount !== null && order.payment?.changeAmount !== undefined ? (
-            <p>{t("pos.changeAmount")}: {formatCurrency(order.payment.changeAmount)}</p>
+            <p>{t("invoices.changeAmount")}: {formatCurrency(order.payment.changeAmount)}</p>
           ) : null}
         </div>
 
@@ -100,7 +101,7 @@ export function PrintableInvoice({ order, setting, publicUrl, className }: Print
           </div>
         ) : null}
 
-        <p className="mt-5 text-center text-xs">{t("invoice.thankYou")}</p>
+        <p className="mt-5 text-center text-xs">{t("invoices.thankYou")}</p>
       </div>
     </div>
   );

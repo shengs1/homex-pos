@@ -108,6 +108,13 @@ function formatMoney(value: Prisma.Decimal | number | null | undefined) {
   return Number(value || 0);
 }
 
+function normalizeProductPrice(value: Prisma.Decimal | number | string | null | undefined) {
+  const numberValue = Number(value || 0);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return 0;
+
+  return numberValue >= 10000 ? Math.round(numberValue / 1000) : numberValue;
+}
+
 function getDateKey(date: Date, groupBy: "day" | "month") {
   const vietnamDate = new Date(date.getTime() + VIETNAM_TIMEZONE_OFFSET_MS);
   const year = vietnamDate.getUTCFullYear();
@@ -142,6 +149,7 @@ router.get(
       activeProducts,
       lowStockProducts,
       activeWarranties,
+      productsSoldAgg,
     ] = await prisma.$transaction([
       prisma.payment.aggregate({
         where: {
@@ -213,6 +221,18 @@ router.get(
           status: WARRANTY_STATUS.ACTIVE,
         },
       }),
+      prisma.orderDetail.aggregate({
+        where: {
+          status: RECORD_STATUS.ACTIVE,
+          order: {
+            status: ORDER_STATUS.COMPLETED,
+            createdAt: dateRange,
+          },
+        },
+        _sum: {
+          quantity: true,
+        },
+      }),
     ]);
 
     const grossRevenue = formatMoney(paidPaymentAgg._sum.amount);
@@ -236,6 +256,7 @@ router.get(
         activeProducts,
         lowStockProducts,
         activeWarranties,
+        productsSold: productsSoldAgg._sum.quantity || 0,
       },
     });
   })
@@ -362,7 +383,7 @@ router.get(
       };
 
       const orderCogs = order.orderDetails.reduce((sum, detail) => {
-        const cost = detail.unitCost !== null ? Number(detail.unitCost) : Number(detail.product.costPrice);
+        const cost = detail.unitCost !== null ? formatMoney(detail.unitCost) : normalizeProductPrice(detail.product.costPrice);
         return sum + cost * detail.quantity;
       }, 0);
 
@@ -440,6 +461,7 @@ router.get(
         stockQuantity: true,
         minStock: true,
         status: true,
+        imageUrl: true,
         category: {
           select: {
             id: true,
@@ -459,7 +481,7 @@ router.get(
         product: product
           ? {
               ...product,
-              salePrice: formatMoney(product.salePrice),
+              salePrice: normalizeProductPrice(product.salePrice),
             }
           : null,
         totalQuantity: groupedItem._sum.quantity || 0,
@@ -602,11 +624,12 @@ router.get(
       name: product.name,
       category: product.category,
       supplier: product.supplier,
-      salePrice: formatMoney(product.salePrice),
-      costPrice: formatMoney(product.costPrice),
+      salePrice: normalizeProductPrice(product.salePrice),
+      costPrice: normalizeProductPrice(product.costPrice),
       stockQuantity: product.stockQuantity,
       minStock: product.minStock,
       status: product.status,
+      imageUrl: product.imageUrl,
     }));
 
     return res.json({

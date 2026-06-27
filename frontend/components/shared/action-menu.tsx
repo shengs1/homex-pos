@@ -34,13 +34,13 @@ export function ActionMenu({ label, items }: ActionMenuProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuPortal>
-        <DropdownMenuContent align="end" side="bottom" sideOffset={8} collisionPadding={16} className="w-52">
+        <DropdownMenuContent align="end" side="bottom" sideOffset={8} collisionPadding={16} className="w-48">
           {items.map((item) => (
             <DropdownMenuItem
               key={item.label}
               onClick={item.onClick}
               disabled={item.disabled}
-              className={cn(item.variant === "destructive" && "text-destructive hover:text-destructive")}
+              className={cn(item.variant === "destructive" && "text-rose-600 hover:text-rose-700 hover:bg-rose-50 focus:text-rose-700 focus:bg-rose-50")}
             >
               {item.icon}
               <span className="whitespace-normal leading-snug">{item.label}</span>

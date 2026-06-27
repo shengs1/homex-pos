@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams } from "next/navigation";
 import { Printer } from "lucide-react";
+import { useToast } from "@/contexts/toast-context";
 import { ErrorState, LoadingState } from "@/components/shared/message-state";
 import { PrintableInvoice } from "@/components/shared/printable-invoice";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export default function PublicInvoicePage() {
   const params = useParams<{ orderCode: string }>();
   const orderCode = String(params.orderCode || "");
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [invoice, setInvoice] = useState<PublicInvoice | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [taxCode, setTaxCode] = useState("");
@@ -29,7 +31,6 @@ export default function PublicInvoicePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
 
   async function loadInvoice() {
     try {
@@ -55,8 +56,6 @@ export default function PublicInvoicePage() {
 
     try {
       setIsSubmitting(true);
-      setErrorMessage("");
-      setSuccessMessage("");
       await publicInvoiceService.requestVat(orderCode, {
         companyName,
         taxCode,
@@ -64,10 +63,10 @@ export default function PublicInvoicePage() {
         buyerEmail,
         note,
       });
-      setSuccessMessage(t("vat.requestSent"));
+      toast.success(t("vat.requestSent"));
       await loadInvoice();
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error) || t("toast.error"));
     } finally {
       setIsSubmitting(false);
     }
@@ -75,7 +74,7 @@ export default function PublicInvoicePage() {
 
   return (
     <main className="min-h-screen bg-background p-4 md:p-8">
-      <div className="mx-auto max-w-5xl space-y-6 print:hidden">
+      <div className="mx-auto max-w-5xl space-y-6 print:hidden no-print">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold">{t("invoice.publicTitle")}</h1>
@@ -83,19 +82,18 @@ export default function PublicInvoicePage() {
           </div>
           <Button type="button" variant="outline" onClick={() => window.print()} disabled={!invoice}>
             <Printer className="h-4 w-4" />
-            {t("orders.printInvoice")}
+            {t("invoices.printInvoice")}
           </Button>
         </div>
 
         <ErrorState message={errorMessage} />
-        {successMessage ? <div className="rounded-lg border bg-card p-3 text-sm text-green-700">{successMessage}</div> : null}
         {isLoading ? <LoadingState /> : null}
 
         {invoice ? (
           <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
             <Card>
               <CardHeader>
-                <CardTitle>{t("invoice.title")}</CardTitle>
+                <CardTitle>{t("invoices.invoiceTitle")}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-sm">
                 <div className="grid gap-2 md:grid-cols-2">

@@ -3,6 +3,7 @@ import { z } from "zod";
 import prisma from "../lib/prisma";
 import { authenticateToken, authorizeRoles } from "../middlewares/auth.middleware";
 import { USER_ROLES } from "../constants/app.constants";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
 
@@ -34,8 +35,13 @@ const settingSchema = z.object({
   compactPosMode: z.coerce.boolean().optional(),
   minStock: z.coerce.number().int().min(0).optional(),
   warnLowStockSale: z.coerce.boolean().optional(),
-  allowOversell: z.coerce.boolean().optional(),
   maxDiscount: z.coerce.number().min(0).optional(),
+  maxEmployeesPerShift: z.coerce.number().int().min(1).max(20).optional(),
+  vatEmailEnabled: z.coerce.boolean().optional(),
+  smtpHost: optionalText(150),
+  smtpPort: z.coerce.number().int().min(1).max(65535).optional(),
+  smtpUser: optionalText(150),
+  smtpPassword: optionalText(150),
 });
 
 function normalizeOptionalText(value?: string | null) {
@@ -131,8 +137,13 @@ router.put(
         compactPosMode: data.compactPosMode ?? false,
         minStock: data.minStock ?? 0,
         warnLowStockSale: data.warnLowStockSale ?? true,
-        allowOversell: data.allowOversell ?? false,
         maxDiscount: data.maxDiscount ?? 0,
+        maxEmployeesPerShift: data.maxEmployeesPerShift ?? 1,
+        vatEmailEnabled: data.vatEmailEnabled ?? false,
+        smtpHost: normalizeOptionalText(data.smtpHost),
+        smtpPort: data.smtpPort ?? 587,
+        smtpUser: normalizeOptionalText(data.smtpUser),
+        smtpPassword: normalizeOptionalText(data.smtpPassword),
       };
 
       const setting = await prisma.setting.upsert({
@@ -142,6 +153,15 @@ router.put(
           id: 1,
           ...payload,
         },
+      });
+
+      await createAuditLog({
+        req: req as any,
+        action: "SETTINGS_UPDATE",
+        entityType: "SETTINGS",
+        entityId: 1,
+        description: "Cập nhật cài đặt hệ thống",
+        metadata: payload,
       });
 
       return res.json({

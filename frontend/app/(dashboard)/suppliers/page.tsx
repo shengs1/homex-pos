@@ -18,6 +18,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -26,7 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useLanguage } from "@/contexts/language-context";
 import { getApiErrorMessage } from "@/lib/api";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatMoneyInputValue, parseMoneyInput } from "@/lib/format";
 import { productService, purchaseOrderService, supplierService, inventoryService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
 import type { Product, PurchaseOrder, Supplier, StockTransaction } from "@/types/domain";
@@ -207,30 +208,26 @@ export default function SuppliersPage() {
 
           <TabsContent value="list" className="space-y-6">
             <div className="grid gap-4 md:grid-cols-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground">{t("suppliers.totalSuppliers")}</div>
-                  <div className="mt-1 text-2xl font-bold">{pagination?.totalItems || items.length}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground">{t("status.ACTIVE")}</div>
-                  <div className="mt-1 text-2xl font-bold text-emerald-600">{allSuppliers.length}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground">{t("suppliers.totalPurchases")}</div>
-                  <div className="mt-1 text-2xl font-bold text-amber-600">{formatCurrency(allPurchaseOrders.reduce((sum, po) => sum + Number(po.totalAmount), 0))}</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="text-sm font-medium text-muted-foreground">{t("suppliers.purchaseOrderCount")}</div>
-                  <div className="mt-1 text-2xl font-bold text-blue-600">{allPurchaseOrders.length}</div>
-                </CardContent>
-              </Card>
+              <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                <div className="text-sm font-medium text-slate-500">Tổng nhà cung cấp</div>
+                <div className="mt-1 text-2xl font-bold text-slate-900">{pagination?.totalItems || items.length}</div>
+                <p className="mt-1 text-xs font-medium text-slate-500">Tổng đối tác cung ứng hàng hóa</p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                <div className="text-sm font-medium text-slate-500">Hoạt động</div>
+                <div className="mt-1 text-2xl font-bold text-emerald-600">{allSuppliers.length}</div>
+                <p className="mt-1 text-xs font-medium text-slate-500">Nhà cung cấp đang hoạt động</p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                <div className="text-sm font-medium text-slate-500">Tổng giá trị nhập</div>
+                <div className="mt-1 text-2xl font-bold text-amber-600">{formatCurrency(allPurchaseOrders.reduce((sum, po) => sum + Number(po.totalAmount), 0))}</div>
+                <p className="mt-1 text-xs font-medium text-slate-500">Tổng tiền hàng đã nhập</p>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
+                <div className="text-sm font-medium text-slate-500">Tổng phiếu nhập</div>
+                <div className="mt-1 text-2xl font-bold text-blue-600">{allPurchaseOrders.length}</div>
+                <p className="mt-1 text-xs font-medium text-slate-500">Tổng số phiếu nhập kho</p>
+              </div>
             </div>
 
             <Card>
@@ -247,23 +244,23 @@ export default function SuppliersPage() {
               </CardContent>
             </Card>
 
-            {isFormOpen ? (
-              <Card>
-                <CardHeader><CardTitle>{editingItem ? t("suppliers.updateTitle") : t("suppliers.createTitle")}</CardTitle></CardHeader>
-                <CardContent>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2"><Label>{t("suppliers.name")}</Label><Input {...form.register("name")} />{form.formState.errors.name ? <p className="text-sm text-destructive">{form.formState.errors.name.message}</p> : null}</div>
-                    <div className="space-y-2"><Label>{t("suppliers.phone")}</Label><Input {...form.register("phone")} />{form.formState.errors.phone ? <p className="text-sm text-destructive">{form.formState.errors.phone.message}</p> : null}</div>
-                    <div className="space-y-2"><Label>{t("common.email")}</Label><Input {...form.register("email")} />{form.formState.errors.email ? <p className="text-sm text-destructive">{form.formState.errors.email.message}</p> : null}</div>
-                    <div className="space-y-2 md:col-span-2"><Label>{t("suppliers.address")}</Label><Textarea {...form.register("address")} /></div>
-                    <div className="flex gap-2 md:col-span-2">
-                      <Button type="submit" disabled={form.formState.isSubmitting}>{editingItem ? t("common.saveChanges") : t("common.createNew")}</Button>
-                      <Button variant="outline" onClick={() => setIsFormOpen(false)}>{t("common.cancel")}</Button>
-                    </div>
-                  </form>
-                </CardContent>
-              </Card>
-            ) : null}
+            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+              <DialogContent className="max-w-2xl bg-white rounded-2xl p-6 shadow-xl border border-slate-100">
+                <DialogHeader>
+                  <DialogTitle>{editingItem ? t("suppliers.updateTitle") : t("suppliers.createTitle")}</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2 mt-2">
+                  <div className="space-y-2"><Label>{t("suppliers.name")}</Label><Input {...form.register("name")} />{form.formState.errors.name ? <p className="text-sm text-destructive">{form.formState.errors.name.message}</p> : null}</div>
+                  <div className="space-y-2"><Label>{t("suppliers.phone")}</Label><Input {...form.register("phone")} />{form.formState.errors.phone ? <p className="text-sm text-destructive">{form.formState.errors.phone.message}</p> : null}</div>
+                  <div className="space-y-2"><Label>{t("common.email")}</Label><Input {...form.register("email")} />{form.formState.errors.email ? <p className="text-sm text-destructive">{form.formState.errors.email.message}</p> : null}</div>
+                  <div className="space-y-2 md:col-span-2"><Label>{t("suppliers.address")}</Label><Textarea {...form.register("address")} /></div>
+                  <div className="flex gap-2 md:col-span-2 justify-end">
+                    <Button variant="outline" type="button" onClick={() => setIsFormOpen(false)}>{t("common.cancel")}</Button>
+                    <Button type="submit" disabled={form.formState.isSubmitting}>{editingItem ? t("common.saveChanges") : t("common.createNew")}</Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
 
             {isLoading ? <LoadingState /> : null}
             {!isLoading && items.length === 0 ? <EmptyState /> : null}
@@ -292,9 +289,9 @@ export default function SuppliersPage() {
                             <Td className="font-medium whitespace-nowrap"><div className="truncate max-w-[200px]" title={item.name}>{item.name}</div></Td>
                             <Td className="whitespace-nowrap">{item.phone || "-"}</Td>
                             <Td className="whitespace-nowrap">{item.email || "-"}</Td>
-                            <Td className="whitespace-nowrap"><div className="truncate max-w-[200px]" title={item.address || undefined}>{item.address || "-"}</div></Td>
+                            <Td className="max-w-[200px] break-words whitespace-normal font-medium">{item.address || "-"}</Td>
                             <Td className="whitespace-nowrap font-medium text-blue-600">{item.poCount || 0}</Td>
-                            <Td className="whitespace-nowrap font-semibold text-amber-600">{item.totalAmount ? formatCurrency(item.totalAmount) : "0 ₫"}</Td>
+                            <Td className="whitespace-nowrap font-semibold text-amber-600">{item.totalAmount ? formatCurrency(item.totalAmount) : "0 VND"}</Td>
                             <Td className="whitespace-nowrap"><StatusBadge status={item.status} /></Td>
                             <Td className="whitespace-nowrap text-right">
                               <ActionMenu label={t("common.actions")} items={[{ label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(item) }, item.status === "ACTIVE" ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(item), variant: "destructive" } : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(item) }]} />
@@ -342,7 +339,7 @@ export default function SuppliersPage() {
                         </div>
                         <div className="space-y-2">
                           <Label>{t("products.costPrice")}</Label>
-                          <Input type="number" min={0} value={item.unitCost} onChange={(event) => updateDraftItem(index, { unitCost: Number(event.target.value || 0) })} />
+                          <Input inputMode="numeric" value={formatMoneyInputValue(item.unitCost)} onChange={(event) => updateDraftItem(index, { unitCost: parseMoneyInput(event.target.value) })} />
                         </div>
                         <Button type="button" variant="outline" size="icon" onClick={() => removeDraftItem(index)} disabled={draftItems.length === 1}>
                           <Trash2 className="h-4 w-4" />

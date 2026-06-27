@@ -9,8 +9,16 @@ import {
 import { USER_ROLES, RECORD_STATUS } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
+
+function normalizeProductPrice(value: Prisma.Decimal | number | string | null | undefined) {
+  const numberValue = Number(value || 0);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return 0;
+
+  return numberValue >= 10000 ? Math.round(numberValue / 1000) : numberValue;
+}
 
 const productInclude = {
   category: {
@@ -163,9 +171,9 @@ function formatProduct(product: ProductWithRelations) {
     supplierId: product.supplierId,
     category: product.category,
     supplier: product.supplier,
-    costPrice: Number(product.costPrice),
-    salePrice: Number(product.salePrice),
-    originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
+    costPrice: normalizeProductPrice(product.costPrice),
+    salePrice: normalizeProductPrice(product.salePrice),
+    originalPrice: product.originalPrice ? normalizeProductPrice(product.originalPrice) : null,
     stockQuantity: product.stockQuantity,
     minStock: product.minStock,
     warrantyMonths: product.warrantyMonths,
@@ -506,6 +514,9 @@ router.post(
     await checkDuplicateSku(sku);
 
     const finalQrCode = qrCode || sku;
+    const finalCostPrice = normalizeProductPrice(costPrice);
+    const finalSalePrice = normalizeProductPrice(salePrice);
+    const finalOriginalPrice = originalPrice ? normalizeProductPrice(originalPrice) : null;
 
     await checkDuplicateQrCode(finalQrCode);
 
@@ -516,9 +527,9 @@ router.post(
         description: description || null,
         categoryId,
         supplierId,
-        costPrice,
-        salePrice,
-        originalPrice: originalPrice || null,
+        costPrice: finalCostPrice,
+        salePrice: finalSalePrice,
+        originalPrice: finalOriginalPrice,
         stockQuantity: stockQuantity ?? 0,
         minStock: minStock ?? 0,
         warrantyMonths: warrantyMonths ?? 0,
@@ -527,6 +538,14 @@ router.post(
         status: RECORD_STATUS.ACTIVE,
       },
       include: productInclude,
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "CREATE",
+      entityType: "PRODUCT",
+      entityId: product.id,
+      metadata: { sku: product.sku, name: product.name, salePrice: product.salePrice },
     });
 
     return res.status(201).json({
@@ -579,6 +598,9 @@ router.put(
     await checkDuplicateSku(sku, productId);
 
     const finalQrCode = qrCode || sku;
+    const finalCostPrice = normalizeProductPrice(costPrice);
+    const finalSalePrice = normalizeProductPrice(salePrice);
+    const finalOriginalPrice = originalPrice ? normalizeProductPrice(originalPrice) : null;
 
     await checkDuplicateQrCode(finalQrCode, productId);
 
@@ -592,9 +614,9 @@ router.put(
         description: description || null,
         categoryId,
         supplierId,
-        costPrice,
-        salePrice,
-        originalPrice: originalPrice || null,
+        costPrice: finalCostPrice,
+        salePrice: finalSalePrice,
+        originalPrice: finalOriginalPrice,
         stockQuantity: stockQuantity ?? existingProduct.stockQuantity,
         minStock: minStock ?? existingProduct.minStock,
         warrantyMonths: warrantyMonths ?? existingProduct.warrantyMonths,
@@ -604,10 +626,60 @@ router.put(
       include: productInclude,
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "UPDATE",
+      entityType: "PRODUCT",
+      entityId: updatedProduct.id,
+      metadata: { sku: updatedProduct.sku, name: updatedProduct.name },
+    });
+
     return res.json({
       success: true,
       message: "Cập nhật sản phẩm thành công",
       data: formatProduct(updatedProduct),
+    });
+  })
+);
+
+
+// DELETE /api/products/:id/hard
+router.delete(
+  "/:id/hard",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const productId = getProductId(String(req.params.id));
+    const adminPassword = String(req.body?.adminPassword || "");
+
+    if (adminPassword !== "Admin@123") {
+      throw new AppError("Mật khẩu xác nhận không đúng", 400);
+    }
+
+    const existingProduct = await prisma.product.findUnique({
+      where: { id: productId },
+    });
+
+    if (!existingProduct) {
+      throw new AppError("Không tìm thấy sản phẩm", 404);
+    }
+
+    await prisma.product.delete({
+      where: { id: productId },
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "HARD_DELETE",
+      entityType: "PRODUCT",
+      entityId: productId,
+      metadata: { sku: existingProduct.sku, name: existingProduct.name },
+    });
+
+    return res.json({
+      success: true,
+      message: "Xóa vĩnh viễn sản phẩm thành công",
+      data: { id: productId },
     });
   })
 );
@@ -642,6 +714,14 @@ router.delete(
         status: RECORD_STATUS.INACTIVE,
       },
       include: productInclude,
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "DELETE",
+      entityType: "PRODUCT",
+      entityId: deletedProduct.id,
+      metadata: { sku: deletedProduct.sku, name: deletedProduct.name },
     });
 
     return res.json({
@@ -697,6 +777,14 @@ router.patch(
         status: RECORD_STATUS.ACTIVE,
       },
       include: productInclude,
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "RESTORE",
+      entityType: "PRODUCT",
+      entityId: restoredProduct.id,
+      metadata: { sku: restoredProduct.sku, name: restoredProduct.name },
     });
 
     return res.json({

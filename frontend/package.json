@@ -22,6 +22,7 @@
     "react-dom": "19.2.4",
     "react-hook-form": "latest",
     "recharts": "latest",
+    "sonner": "^2.0.7",
     "tailwind-merge": "latest",
     "zod": "latest"
   },

@@ -1,21 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ShieldAlert } from "lucide-react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { NetworkStatusBar } from "@/components/shared/network-status-bar";
 import { clearAuthStorage, getAuthToken, getAuthUser, isRoleAllowed } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/language-context";
+import { useToast } from "@/contexts/toast-context";
+import { useSettings } from "@/contexts/settings-context";
 import type { AuthUser, UserRole } from "@/types/auth";
 
 const DEFAULT_ALLOWED_ROLES: UserRole[] = ["ADMIN", "CASHIER"];
 
 // CASHIER chỉ được truy cập 5 route này. Các route quản trị còn lại sẽ bị chặn dù gõ URL trực tiếp.
-const CASHIER_ALLOWED_ROUTE_PREFIXES = ["/dashboard", "/pos", "/orders", "/customers", "/warranties", "/shifts", "/products"];
+const CASHIER_ALLOWED_ROUTE_PREFIXES = ["/dashboard", "/pos", "/orders", "/customers", "/warranties", "/shifts"];
 
 function isCashierRouteAllowed(pathname: string) {
   return CASHIER_ALLOWED_ROUTE_PREFIXES.some((allowedPath) => pathname === allowedPath || pathname.startsWith(`${allowedPath}/`));
@@ -33,9 +33,11 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isChecking, setIsChecking] = useState(true);
   const [isRouteBlocked, setIsRouteBlocked] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
+  const { toast } = useToast();
+  const { settings } = useSettings();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const redirectRef = useRef<string | null>(null);
 
   const noPermissionMessage = useMemo(() => {
     return t("rbac.noAccess") === "rbac.noAccess" ? "Bạn không có quyền truy cập trang này" : t("rbac.noAccess");
@@ -52,44 +54,51 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
 
     if (!token || !currentUser) {
       clearAuthStorage();
-      router.replace("/login");
+      if (redirectRef.current !== "/login") {
+        redirectRef.current = "/login";
+        router.replace("/login");
+      }
+      setUser(null);
+      setIsRouteBlocked(false);
+      setIsChecking(false);
       return;
     }
 
     if (!isRoleAllowed(currentUser.role, allowedRoles)) {
-      router.replace("/unauthorized");
+      setUser(currentUser);
+      setIsRouteBlocked(true);
+      setIsChecking(false);
       return;
     }
 
     // RBAC client-side: CASHIER không được truy cập trực tiếp URL quản trị.
     if (currentUser.role === "CASHIER" && !isCashierRouteAllowed(pathname)) {
+      if (redirectRef.current !== pathname) {
+        redirectRef.current = pathname;
+        toast.error(noPermissionMessage);
+      }
       setUser(currentUser);
       setIsRouteBlocked(true);
       setIsChecking(false);
-      setToastMessage(noPermissionMessage);
-      router.replace("/pos");
       return;
     }
 
+    redirectRef.current = null;
     setUser(currentUser);
     setIsRouteBlocked(false);
     setIsChecking(false);
-  }, [allowedRoles, noPermissionMessage, pathname, router]);
-
-  useEffect(() => {
-    if (!toastMessage) return;
-
-    const timer = window.setTimeout(() => {
-      setToastMessage("");
-    }, 2800);
-
-    return () => window.clearTimeout(timer);
-  }, [toastMessage]);
+  }, [allowedRoles, noPermissionMessage, pathname, router, toast]);
 
   useEffect(() => {
     function handleUnauthorized() {
       clearAuthStorage();
-      router.replace("/login?expired=1");
+      setUser(null);
+      setIsRouteBlocked(false);
+      setIsChecking(false);
+      if (redirectRef.current !== "/login?expired=1") {
+        redirectRef.current = "/login?expired=1";
+        router.replace("/login?expired=1");
+      }
     }
 
     window.addEventListener("homex-pos:unauthorized", handleUnauthorized);
@@ -98,6 +107,38 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
       window.removeEventListener("homex-pos:unauthorized", handleUnauthorized);
     };
   }, [router]);
+
+  useEffect(() => {
+    const minutes = settings?.autoLockMinutes;
+    if (!user || user.role !== "CASHIER" || !minutes) return;
+
+    let timeout: number;
+
+    function resetTimer() {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => {
+        clearAuthStorage();
+        setUser(null);
+        setIsRouteBlocked(false);
+        setIsChecking(false);
+        router.replace("/login?expired=1");
+      }, (minutes as number) * 60 * 1000);
+    }
+
+    resetTimer();
+
+    const events = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
+    for (const event of events) {
+      window.addEventListener(event, resetTimer);
+    }
+
+    return () => {
+      window.clearTimeout(timeout);
+      for (const event of events) {
+        window.removeEventListener(event, resetTimer);
+      }
+    };
+  }, [user, settings?.autoLockMinutes, router]);
 
   function handleToggleSidebar() {
     setIsSidebarCollapsed((current) => {
@@ -109,13 +150,16 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
 
   function handleLogout() {
     clearAuthStorage();
+    setUser(null);
+    setIsRouteBlocked(false);
+    setIsChecking(false);
     router.replace("/login");
   }
 
   if (isChecking || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground shadow-sm">{t("app.loadingAuth")}</div>
+        <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground shadow-sm">Checking authentication</div>
       </div>
     );
   }
@@ -137,13 +181,6 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
           <div className="relative h-full w-64 shadow-2xl">
             <Sidebar role={user.role} onNavigate={() => setIsMobileSidebarOpen(false)} onLogout={handleLogout} />
           </div>
-        </div>
-      ) : null}
-
-      {toastMessage ? (
-        <div className="fixed right-4 top-20 z-50 flex max-w-sm items-start gap-3 rounded-2xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive font-bold shadow-lg backdrop-blur-md">
-          <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{toastMessage}</span>
         </div>
       ) : null}
 

@@ -9,6 +9,7 @@ import {
 import { USER_ROLES, RECORD_STATUS } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
 
@@ -218,6 +219,14 @@ router.post(
       },
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "CREATE",
+      entityType: "CATEGORY",
+      entityId: category.id,
+      metadata: { name: category.name },
+    });
+
     return res.status(201).json({
       success: true,
       message: "Thêm danh mục thành công",
@@ -262,6 +271,14 @@ router.put(
       },
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "UPDATE",
+      entityType: "CATEGORY",
+      entityId: updatedCategory.id,
+      metadata: { name: updatedCategory.name },
+    });
+
     return res.json({
       success: true,
       message: "Cập nhật danh mục thành công",
@@ -301,6 +318,14 @@ router.delete(
       },
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "DELETE",
+      entityType: "CATEGORY",
+      entityId: deletedCategory.id,
+      metadata: { name: deletedCategory.name },
+    });
+
     return res.json({
       success: true,
       message: "Xóa danh mục thành công",
@@ -338,6 +363,14 @@ router.patch(
       data: {
         status: RECORD_STATUS.ACTIVE,
       },
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "RESTORE",
+      entityType: "CATEGORY",
+      entityId: restoredCategory.id,
+      metadata: { name: restoredCategory.name },
     });
 
     return res.json({

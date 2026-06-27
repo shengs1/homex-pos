@@ -30,7 +30,7 @@ export default function LoginPage() {
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "NV0001",
+      email: "ADMIN",
       password: "123456",
     },
   });
@@ -115,7 +115,7 @@ export default function LoginPage() {
               <input
                 id="email"
                 type="text"
-                placeholder="NV0001"
+                placeholder="ADMIN"
                 autoComplete="username"
                 disabled={isSubmitting}
                 {...form.register("email")}

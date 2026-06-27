@@ -11,6 +11,7 @@ import {
 import { USER_ROLES, RECORD_STATUS } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
 
@@ -50,6 +51,7 @@ const updateUserSchema = z.object({
   phone: optionalTextSchema(20, "Phone must not exceed 20 characters"),
   role: userRoleSchema,
   status: userStatusSchema,
+  adminPassword: z.string().optional(),
 });
 
 const changePasswordSchema = z.object({
@@ -57,6 +59,15 @@ const changePasswordSchema = z.object({
     .string()
     .min(6, "New password must be at least 6 characters")
     .max(100, "New password must not exceed 100 characters"),
+  adminPassword: z.string().optional(),
+});
+
+const lockUserSchema = z.object({
+  adminPassword: z.string().min(1, "Mật khẩu quản trị viên là bắt buộc"),
+});
+
+const deleteUserSchema = z.object({
+  adminPassword: z.string().min(1, "Mật khẩu quản trị viên là bắt buộc"),
 });
 
 const userInclude = {
@@ -188,20 +199,34 @@ async function checkDuplicateEmployeeCode(employeeCode: string, ignoredUserId?: 
   }
 }
 
-async function generateEmployeeCode() {
+async function generateEmployeeCode(roleName: string) {
+  const prefix = roleName === "ADMIN" ? "HX-AD-" : "TN";
+
   const latestUser = await prisma.user.findFirst({
+    where: {
+      employeeCode: {
+        startsWith: prefix,
+      },
+    },
     orderBy: {
-      id: "desc",
+      employeeCode: "desc",
     },
     select: {
-      id: true,
+      employeeCode: true,
     },
   });
 
-  const baseId = latestUser?.id || 0;
+  let nextNumber = 1;
+  if (latestUser?.employeeCode) {
+    const numStr = latestUser.employeeCode.replace(prefix, "");
+    const num = parseInt(numStr, 10);
+    if (!isNaN(num)) {
+      nextNumber = num + 1;
+    }
+  }
 
-  for (let offset = 1; offset <= 1000; offset += 1) {
-    const candidate = `NV${String(baseId + offset).padStart(4, "0")}`;
+  for (let offset = 0; offset <= 1000; offset += 1) {
+    const candidate = `${prefix}${String(nextNumber + offset).padStart(4, "0")}`;
     const existingUser = await prisma.user.findUnique({
       where: {
         employeeCode: candidate,
@@ -231,6 +256,20 @@ async function getRoleByName(roleName: string) {
   }
 
   return role;
+}
+
+function isRootAdmin(user: { email: string; fullName: string }) {
+  return user.email === "admin@homex.com" || user.fullName === "Admin Homex";
+}
+
+async function verifyAdminPassword(adminId: number, password?: string) {
+  if (!password) {
+    throw new AppError("Mật khẩu quản trị viên là bắt buộc", 400);
+  }
+  const admin = await prisma.user.findUnique({ where: { id: adminId } });
+  if (!admin || !(await bcrypt.compare(password, admin.passwordHash))) {
+    throw new AppError("Mật khẩu quản trị viên không đúng.", 400);
+  }
 }
 
 router.get(
@@ -362,7 +401,7 @@ router.post(
     const userData = validateParseResult(createUserSchema.safeParse(req.body));
 
     const employeeCode =
-      normalizeEmployeeCode(userData.employeeCode) || (await generateEmployeeCode());
+      normalizeEmployeeCode(userData.employeeCode) || (await generateEmployeeCode(userData.role));
     const email = normalizeOptionalText(userData.email) || getInternalEmail(employeeCode);
     const phone = normalizeOptionalText(userData.phone);
 
@@ -383,6 +422,14 @@ router.post(
         status: RECORD_STATUS.ACTIVE,
       },
       include: userInclude,
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "CREATE",
+      entityType: "USER",
+      entityId: createdUser.id,
+      metadata: { employeeCode: createdUser.employeeCode, role: createdUser.role.name },
     });
 
     return res.status(201).json({
@@ -413,6 +460,13 @@ router.put(
       throw new AppError("User not found", 404);
     }
 
+    if (isRootAdmin(existingUser) && userId !== currentUserId) {
+      await verifyAdminPassword(currentUserId, userData.adminPassword);
+      if (userData.status === RECORD_STATUS.INACTIVE) {
+        throw new AppError("Tài khoản Admin Homex là tài khoản gốc, không thể xóa hoặc khóa.", 400);
+      }
+    }
+
     if (
       userId === currentUserId &&
       existingUser.role.name === USER_ROLES.ADMIN &&
@@ -428,7 +482,7 @@ router.put(
     const employeeCode =
       normalizeEmployeeCode(userData.employeeCode) ||
       existingUser.employeeCode ||
-      (await generateEmployeeCode());
+      (await generateEmployeeCode(userData.role));
     const email =
       normalizeOptionalText(userData.email) ||
       (isInternalEmail(existingUser.email) ? getInternalEmail(employeeCode) : existingUser.email);
@@ -454,6 +508,14 @@ router.put(
       include: userInclude,
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "UPDATE",
+      entityType: "USER",
+      entityId: updatedUser.id,
+      metadata: { employeeCode: updatedUser.employeeCode, role: updatedUser.role.name, status: updatedUser.status },
+    });
+
     return res.json({
       success: true,
       message: "User updated successfully",
@@ -467,6 +529,8 @@ router.patch(
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
+    const authReq = req as AuthRequest;
+    const currentUserId = getAuthenticatedUserId(authReq);
     const userId = getUserId(String(req.params.id));
     const passwordData = validateParseResult(
       changePasswordSchema.safeParse(req.body)
@@ -482,6 +546,10 @@ router.patch(
       throw new AppError("User not found", 404);
     }
 
+    if (isRootAdmin(existingUser) && userId !== currentUserId) {
+      await verifyAdminPassword(currentUserId, passwordData.adminPassword);
+    }
+
     const passwordHash = await bcrypt.hash(passwordData.newPassword, 10);
 
     const updatedUser = await prisma.user.update({
@@ -494,6 +562,15 @@ router.patch(
       include: userInclude,
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "UPDATE",
+      entityType: "USER",
+      entityId: updatedUser.id,
+      description: "Thay đổi mật khẩu nhân viên",
+      metadata: { employeeCode: updatedUser.employeeCode },
+    });
+
     return res.json({
       success: true,
       message: "Password changed successfully",
@@ -502,16 +579,19 @@ router.patch(
   })
 );
 
-router.delete(
-  "/:id",
+router.patch(
+  "/:id/lock",
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN),
   catchAsync(async (req, res) => {
     const userId = getUserId(String(req.params.id));
     const currentUserId = getAuthenticatedUserId(req as AuthRequest);
+    const lockData = validateParseResult(lockUserSchema.safeParse(req.body));
+
+    await verifyAdminPassword(currentUserId, lockData.adminPassword);
 
     if (userId === currentUserId) {
-      throw new AppError("You cannot lock your own account", 400);
+      throw new AppError("Không thể tự khóa tài khoản hiện tại.", 400);
     }
 
     const existingUser = await prisma.user.findUnique({
@@ -524,8 +604,19 @@ router.delete(
       throw new AppError("User not found", 404);
     }
 
+    if (isRootAdmin(existingUser)) {
+      throw new AppError("Tài khoản Admin Homex là tài khoản gốc, không thể xóa hoặc khóa.", 400);
+    }
+
     if (existingUser.status === RECORD_STATUS.INACTIVE) {
       throw new AppError("User is already locked", 400);
+    }
+
+    const openShift = await prisma.shift.findFirst({
+      where: { userId, status: "OPEN" },
+    });
+    if (openShift) {
+      throw new AppError("Nhân viên đang có ca làm đang mở, vui lòng đóng ca trước khi xóa.", 400);
     }
 
     const updatedUser = await prisma.user.update({
@@ -538,10 +629,100 @@ router.delete(
       include: userInclude,
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "UPDATE",
+      entityType: "USER",
+      entityId: updatedUser.id,
+      description: "Khóa tài khoản nhân viên",
+      metadata: { employeeCode: updatedUser.employeeCode },
+    });
+
     return res.json({
       success: true,
       message: "User locked successfully",
       data: formatUser(updatedUser),
+    });
+  })
+);
+
+router.delete(
+  "/:id",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const userId = getUserId(String(req.params.id));
+    const currentUserId = getAuthenticatedUserId(req as AuthRequest);
+    const deleteData = validateParseResult(deleteUserSchema.safeParse(req.body));
+
+    await verifyAdminPassword(currentUserId, deleteData.adminPassword);
+
+    if (userId === currentUserId) {
+      throw new AppError("Không thể tự xóa tài khoản hiện tại.", 400);
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      include: {
+        _count: {
+          select: {
+            orders: true,
+            shifts: true,
+            auditLogs: true,
+            stockTransactions: true,
+            purchaseOrders: true,
+            returnOrders: true,
+          }
+        }
+      }
+    });
+
+    if (!existingUser) {
+      throw new AppError("User not found", 404);
+    }
+
+    if (isRootAdmin(existingUser)) {
+      throw new AppError("Tài khoản Admin Homex là tài khoản gốc, không thể xóa hoặc khóa.", 400);
+    }
+
+    const openShift = await prisma.shift.findFirst({
+      where: { userId, status: "OPEN" },
+    });
+    if (openShift) {
+      throw new AppError("Nhân viên đang có ca làm đang mở, vui lòng đóng ca trước khi xóa.", 400);
+    }
+
+    const hasHistory = 
+      existingUser._count.orders > 0 || 
+      existingUser._count.shifts > 0 || 
+      existingUser._count.auditLogs > 0 || 
+      existingUser._count.stockTransactions > 0 || 
+      existingUser._count.purchaseOrders > 0 || 
+      existingUser._count.returnOrders > 0;
+
+    if (hasHistory) {
+      throw new AppError("Không thể xóa tài khoản đã có hóa đơn, ca làm hoặc dữ liệu lịch sử. Vui lòng khóa tài khoản thay thế.", 400);
+    }
+
+    await prisma.user.delete({
+      where: {
+        id: userId,
+      },
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "DELETE",
+      entityType: "USER",
+      entityId: userId,
+      metadata: { email: existingUser.email, fullName: existingUser.fullName },
+    });
+
+    return res.json({
+      success: true,
+      message: "Đã xóa tài khoản thành công.",
     });
   })
 );
@@ -577,10 +758,37 @@ router.patch(
       include: userInclude,
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "RESTORE",
+      entityType: "USER",
+      entityId: updatedUser.id,
+      description: "Mở khóa tài khoản nhân viên",
+      metadata: { employeeCode: updatedUser.employeeCode },
+    });
+
     return res.json({
       success: true,
       message: "User restored successfully",
       data: formatUser(updatedUser),
+    });
+  })
+);
+
+router.post(
+  "/verify-password",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const currentUserId = getAuthenticatedUserId(req as AuthRequest);
+    const { adminPassword } = req.body;
+    
+    await verifyAdminPassword(currentUserId, adminPassword);
+    
+    return res.json({
+      success: true,
+      message: "Password verified successfully",
+      data: { success: true },
     });
   })
 );
