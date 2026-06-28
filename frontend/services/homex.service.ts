@@ -129,7 +129,7 @@ export const supplierService = {
 };
 
 export type ProductPayload = {
-  sku: string;
+  sku?: string;
   name: string;
   description?: string;
   categoryId: number;
@@ -142,12 +142,34 @@ export type ProductPayload = {
   warrantyMonths?: number;
   qrCode?: string;
   imageUrl?: string;
+  barcode?: string;
 };
 
 export const productService = {
   list: (params?: ListParams) => getPaginatedDataByIdAsc<Product>("/products", params),
   detail: (id: number) => getData<Product>(`/products/${id}`),
   findByBarcode: (code: string) => getData<Product>(`/products/barcode/${encodeURIComponent(code)}`),
+  getProductByBarcode: (code: string) => getData<Product>(`/products/barcode/${encodeURIComponent(code)}`),
+  enrichProductByBarcode: (code: string) => postData<{
+    barcode: string;
+    name?: string;
+    category?: string;
+    brand?: string;
+    supplierName?: string;
+    unit?: string;
+    estimatedImportPrice?: number;
+    estimatedSalePrice?: number;
+    originalPrice?: number;
+    stockQuantity?: number;
+    minStock?: number;
+    warrantyMonths?: number;
+    imageUrl?: string;
+    description?: string;
+    source: "DATABASE" | "UPCITEMDB" | "BARCODE_SPIDER" | "BARCODE_LOOKUP" | "OPEN_FOOD_FACTS" | "OPEN_PRODUCTS_FACTS" | "ICHECK" | "AI" | "HYBRID";
+    missingFields?: string[];
+    confidence?: number;
+    existingProductId?: number;
+  }>("/products/enrich", { barcode: code }),
   create: (body: ProductPayload) => postData<Product>("/products", body),
   update: (id: number, body: ProductPayload) => putData<Product>(`/products/${id}`, body),
   remove: (id: number) => deleteData<Product>(`/products/${id}`),
@@ -325,3 +347,15 @@ export const auditLogService = {
   list: (params?: ListParams) => getPaginatedDataByIdAsc<AuditLog>("/audit-logs", params),
   detail: (id: number) => getData<AuditLog>(`/audit-logs/${id}`),
 };
+
+export const posService = {
+  sendRemoteScan: (body: { sessionId: string; barcode: string }) => postData<{ success: boolean; message: string }>("/pos/remote-scan", body),
+  pollRemoteScan: (sessionId: string) => getData<{ success: boolean; barcode?: string }>(`/pos/remote-scan-poll/${encodeURIComponent(sessionId)}`),
+};
+
+
+
+
+
+
+

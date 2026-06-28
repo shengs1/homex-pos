@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode, type SyntheticEvent } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createColumnHelper, getCoreRowModel, useReactTable, type ColumnDef, type RowSelectionState } from "@tanstack/react-table";
-import { AlertTriangle, CheckSquare, Clipboard, Database, Edit, FileUp, ImageIcon, LockKeyhole, MoreHorizontal, Plus, Printer, QrCode, RotateCcw, SlidersHorizontal, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Check, CheckSquare, Clipboard, Copy, Database, Edit, FileUp, ImageIcon, Link, LockKeyhole, MoreHorizontal, Plus, Printer, QrCode, RotateCcw, Search, SlidersHorizontal, Smartphone, Trash2, Upload } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -22,17 +22,19 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/contexts/language-context";
+import { useToast } from "@/contexts/toast-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getApiErrorMessage } from "@/lib/api";
 import { buildDemoProductPayloads, parseProductImportFileContent, resolveRealProductImageFromProductName, REAL_PRODUCT_FALLBACK_IMAGE } from "@/lib/demo-products";
 import { compactProductPrice, formatCurrency, formatMoneyInputValue, formatNumber, formatDateTime, parseMoneyInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { categoryService, productService, supplierService, type ProductPayload } from "@/services/homex.service";
+import { buildMobileScanUrl, clearActiveRemoteBarcodeTarget, getOrCreateRemoteBarcodeSessionId, resetRemoteBarcodeSessionId, setActiveRemoteBarcodeTarget } from "@/lib/remote-barcode-session";
+import { categoryService, posService, productService, supplierService, type ProductPayload } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
 import type { Category, Product, Supplier } from "@/types/domain";
 
 const formSchema = z.object({
-  sku: z.string().trim().min(1, "SKU không được để trống").max(50),
+  sku: z.string().trim().max(50).optional(),
   name: z.string().trim().min(1, "Tên sản phẩm không được để trống").max(150),
   description: z.string().trim().max(500, "Mô tả tối đa 500 ký tự").optional(),
   categoryId: z.coerce.number().int().positive("Vui lòng chọn danh mục"),
@@ -45,6 +47,7 @@ const formSchema = z.object({
   warrantyMonths: z.coerce.number().int().min(0).optional(),
   qrCode: z.string().trim().optional(),
   imageUrl: z.string().trim().optional(),
+  barcode: z.string().trim().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
 });
 
@@ -74,6 +77,7 @@ const emptyForm: FormValues = {
   warrantyMonths: 0,
   qrCode: "",
   imageUrl: "",
+  barcode: "",
   status: "ACTIVE",
 };
 
@@ -158,6 +162,15 @@ export default function ProductsPage() {
   const [isBulkLoading, setIsBulkLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [isEnriching, setIsEnriching] = useState(false);
+  const [remoteBarcodeOpen, setRemoteBarcodeOpen] = useState(false);
+  const [remoteBarcodeSessionId, setRemoteBarcodeSessionId] = useState("");
+  const [isBarcodeLinkCopied, setIsBarcodeLinkCopied] = useState(false);
+  const [barcodeEnrichSource, setBarcodeEnrichSource] = useState("");
+  const [barcodeEnrichMissingFields, setBarcodeEnrichMissingFields] = useState<string[]>([]);
+  const { toast } = useToast();
+  const remoteBarcodePollNetworkErrorShownRef = useRef(false);
+  const lastRemoteBarcodeRef = useRef("");
 
   const form = useForm<FormInput, unknown, FormValues>({resolver: zodResolver(formSchema), defaultValues: emptyForm, });
 
@@ -171,6 +184,83 @@ export default function ProductsPage() {
   function setMoneyFormField(field: "costPrice" | "salePrice" | "originalPrice", value: string) {
     form.setValue(field, formatMoneyInputValue(value) as any, { shouldDirty: true, shouldValidate: true });
   }
+
+  function openRemoteBarcodeScanner() {
+    setActiveRemoteBarcodeTarget("products");
+    setRemoteBarcodeSessionId(getOrCreateRemoteBarcodeSessionId());
+    setRemoteBarcodeOpen(true);
+    setIsBarcodeLinkCopied(false);
+  }
+
+  function resetRemoteBarcodeScanner() {
+    const nextSessionId = resetRemoteBarcodeSessionId();
+    setRemoteBarcodeSessionId(nextSessionId);
+    setIsBarcodeLinkCopied(false);
+    toast.success("Đã tạo mã kết nối máy quét mới.");
+  }
+
+  const remoteBarcodeScanUrl = useMemo(() => buildMobileScanUrl(remoteBarcodeSessionId), [remoteBarcodeSessionId]);
+
+  async function copyRemoteBarcodeScanLink() {
+    if (!remoteBarcodeScanUrl) return;
+
+    try {
+      await navigator.clipboard.writeText(remoteBarcodeScanUrl);
+      setIsBarcodeLinkCopied(true);
+      toast.success(t("barcode.scanLinkCopied") || "Đã sao chép link quét.");
+      window.setTimeout(() => setIsBarcodeLinkCopied(false), 2000);
+    } catch {
+      toast.error("Không thể sao chép liên kết quét.");
+    }
+  }
+
+  useEffect(() => {
+    if (!isFormOpen || !remoteBarcodeSessionId) return;
+    setActiveRemoteBarcodeTarget("products");
+    remoteBarcodePollNetworkErrorShownRef.current = false;
+
+    const timer = window.setInterval(async () => {
+      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+
+      try {
+        const res = await posService.pollRemoteScan(remoteBarcodeSessionId);
+        remoteBarcodePollNetworkErrorShownRef.current = false;
+
+        if (res?.success && res.barcode) {
+          const scannedBarcode = res.barcode.trim();
+          if (!scannedBarcode || scannedBarcode === lastRemoteBarcodeRef.current) return;
+          lastRemoteBarcodeRef.current = scannedBarcode;
+          form.setValue("barcode", scannedBarcode, { shouldDirty: true, shouldValidate: true });
+          toast.success(`Đã nhận barcode: ${scannedBarcode}`);
+          setRemoteBarcodeOpen(false);
+          await enrichBarcode(scannedBarcode);
+        }
+      } catch (error) {
+        if (!remoteBarcodePollNetworkErrorShownRef.current) {
+          remoteBarcodePollNetworkErrorShownRef.current = true;
+          if (remoteBarcodeOpen) {
+            toast.error("Không kết nối được backend để nhận barcode. Hãy kiểm tra server API.");
+          }
+        }
+      }
+    }, 500);
+
+    return () => window.clearInterval(timer);
+  }, [isFormOpen, remoteBarcodeOpen, remoteBarcodeSessionId, form, toast]);
+
+  useEffect(() => {
+    setRemoteBarcodeSessionId(getOrCreateRemoteBarcodeSessionId());
+  }, []);
+
+  useEffect(() => {
+    if (!isFormOpen) {
+      clearActiveRemoteBarcodeTarget("products");
+      return;
+    }
+
+    setActiveRemoteBarcodeTarget("products");
+    return () => clearActiveRemoteBarcodeTarget("products");
+  }, [isFormOpen]);
 
   function handleProductImageError(event: SyntheticEvent<HTMLImageElement>, _productName?: string) {
     event.currentTarget.onerror = null;
@@ -229,6 +319,196 @@ export default function ProductsPage() {
     }
   }
 
+  function normalizeText(value: string) {
+    return value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "D")
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ");
+  }
+
+  function extractCategoryCode(value: string) {
+    return value.match(/\(([A-Z0-9]{2,8})\)/i)?.[1]?.toLowerCase() || "";
+  }
+
+  function getCategoryAliases(value: string) {
+    const normalized = normalizeText(value);
+    const code = extractCategoryCode(value);
+    const aliases = new Set([normalized, code]);
+
+    if (/kitchen|nha bep|thiet bi nha bep/.test(normalized) || code === "kit") aliases.add("kit");
+    if (/clean|lam sach|ve sinh|care/.test(normalized) || code === "care") aliases.add("care");
+    if (/util|do dung gia dinh|vat dung gia dinh|home goods/.test(normalized) || code === "util") aliases.add("util");
+    if (/other|khac|ngoai pham tru|do choi|toy|bang keo|y te|medical|beverage|drink|water|nuoc|food|thuc pham/.test(normalized) || code === "other") aliases.add("other");
+    if (/cook|dung cu nau an|nau an|pan|pot|chao|noi/.test(normalized) || code === "cook") aliases.add("cook");
+    if (/cool|lam mat|quat|fan|air conditioner/.test(normalized) || code === "cool") aliases.add("cool");
+    if (/elec|dien|electric|electrical/.test(normalized) || code === "elec") aliases.add("elec");
+    if (/bath|phong tam|bathroom/.test(normalized) || code === "bath") aliases.add("bath");
+
+    return Array.from(aliases).filter(Boolean);
+  }
+
+  function hasEmptyFormValue(value: unknown) {
+    return value === undefined || value === null || value === "" || Number(value) === 0;
+  }
+
+  function findMatchedCategory(categoryName?: string) {
+    const normalizedCategory = normalizeText(categoryName || "");
+    if (!normalizedCategory) return undefined;
+
+    const inputAliases = getCategoryAliases(categoryName || "");
+
+    return categories.find((category) => {
+      const categoryDisplayName = normalizeText(category.name || "");
+      const categoryCode = normalizeText((category as Category & { code?: string }).code || extractCategoryCode(category.name || ""));
+      const categoryAliases = getCategoryAliases(category.name || "");
+
+      return (
+        categoryDisplayName === normalizedCategory ||
+        categoryDisplayName.includes(normalizedCategory) ||
+        normalizedCategory.includes(categoryDisplayName) ||
+        (categoryCode && inputAliases.includes(categoryCode)) ||
+        inputAliases.some((alias) => categoryAliases.includes(alias))
+      );
+    });
+  }
+
+  function findMatchedSupplier(supplierName?: string) {
+    const normalizedSupplier = normalizeText(supplierName || "");
+    if (!normalizedSupplier) return undefined;
+
+    return suppliers.find((supplier) => {
+      const supplierDisplayName = normalizeText(supplier.name || "");
+      return (
+        supplierDisplayName === normalizedSupplier ||
+        supplierDisplayName.includes(normalizedSupplier) ||
+        normalizedSupplier.includes(supplierDisplayName)
+      );
+    });
+  }
+  function applyEnrichedProductData(data: Awaited<ReturnType<typeof productService.enrichProductByBarcode>>) {
+    setBarcodeEnrichSource(data.source || "");
+    setBarcodeEnrichMissingFields(data.missingFields || []);
+
+    if (data.existingProductId && (!editingItem || editingItem.id !== data.existingProductId)) {
+      toast.warning("Mã vạch này đã tồn tại trong hệ thống.");
+    }
+
+    if (data.barcode && !form.getValues("barcode")) {
+      form.setValue("barcode", data.barcode, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (data.name && !form.getValues("name")) {
+      form.setValue("name", data.name, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (typeof data.estimatedImportPrice === "number" && hasEmptyFormValue(form.getValues("costPrice"))) {
+      form.setValue("costPrice", data.estimatedImportPrice as any, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (typeof data.estimatedSalePrice === "number" && hasEmptyFormValue(form.getValues("salePrice"))) {
+      form.setValue("salePrice", data.estimatedSalePrice as any, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (typeof data.originalPrice === "number" && hasEmptyFormValue(form.getValues("originalPrice"))) {
+      form.setValue("originalPrice", data.originalPrice as any, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (typeof data.stockQuantity === "number" && hasEmptyFormValue(form.getValues("stockQuantity"))) {
+      form.setValue("stockQuantity", data.stockQuantity, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (typeof data.minStock === "number" && hasEmptyFormValue(form.getValues("minStock"))) {
+      form.setValue("minStock", data.minStock, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (typeof data.warrantyMonths === "number" && hasEmptyFormValue(form.getValues("warrantyMonths"))) {
+      form.setValue("warrantyMonths", data.warrantyMonths, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (data.imageUrl && !form.getValues("imageUrl")) {
+      form.setValue("imageUrl", data.imageUrl, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (data.description && !form.getValues("description")) {
+      form.setValue("description", data.description, { shouldDirty: true, shouldValidate: true });
+    }
+
+    if (data.category && hasEmptyFormValue(form.getValues("categoryId"))) {
+      const matchedCategory = findMatchedCategory(data.category);
+      if (matchedCategory) {
+        form.setValue("categoryId", matchedCategory.id, { shouldDirty: true, shouldValidate: true });
+      } else {
+        toast.warning("Đã tra cứu thông tin nhưng chưa khớp danh mục hiện có.");
+      }
+    }
+
+    if (data.supplierName && hasEmptyFormValue(form.getValues("supplierId"))) {
+      const matchedSupplier = findMatchedSupplier(data.supplierName);
+      if (matchedSupplier) {
+        form.setValue("supplierId", matchedSupplier.id, { shouldDirty: true, shouldValidate: true });
+      }
+    }
+
+    const hasUsefulEnrichedData = Boolean(data.name || data.category || data.supplierName || data.estimatedSalePrice || data.estimatedImportPrice || data.originalPrice || data.stockQuantity || data.minStock || data.warrantyMonths || data.imageUrl || data.description);
+    const hasIdentityEnrichedData = Boolean(data.name || data.category);
+
+    if (!hasUsefulEnrichedData) {
+      toast.warning("Không tìm thấy dữ liệu mã vạch đáng tin cậy. Vui lòng nhập thủ công.");
+      return;
+    }
+
+    if (!hasIdentityEnrichedData) {
+      toast.warning("Chỉ tìm thấy dữ liệu phụ từ mã vạch, chưa xác định được tên/danh mục sản phẩm. Vui lòng nhập thủ công.");
+      return;
+    }
+
+    if (data.source === "DATABASE") {
+      toast.warning("Mã vạch này đã tồn tại trong hệ thống.");
+      return;
+    }
+
+    if (data.source === "HYBRID") {
+      toast.success("Đã tra cứu barcode và AI đã bù thông tin còn thiếu.");
+      return;
+    }
+
+    if (data.source === "AI") {
+      toast.success("AI đã gợi ý thông tin sản phẩm.");
+      return;
+    }
+
+    toast.success("Đã tìm thấy thông tin từ dữ liệu mã vạch.");
+  }
+
+  async function enrichBarcode(barcodeValue?: string) {
+    const barcode = (barcodeValue || form.getValues("barcode") || "").trim();
+    if (!barcode) {
+      toast.error(t("barcode.enterBarcodeFirst") || "Vui lòng nhập mã vạch trước.");
+      return;
+    }
+
+    if (barcode.length < 8) return;
+
+    try {
+      setIsEnriching(true);
+      const res = await productService.enrichProductByBarcode(barcode);
+      applyEnrichedProductData(res);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || t("barcode.aiFailed") || "Không thể tra cứu mã vạch lúc này.");
+    } finally {
+      setIsEnriching(false);
+    }
+  }
+
+  async function handleAiEnrich() {
+    await enrichBarcode();
+  }
+
   useEffect(() => {
     loadOptions();
   }, []);
@@ -239,12 +519,18 @@ export default function ProductsPage() {
 
   function openCreateForm() {
     setEditingItem(null);
+    setBarcodeEnrichSource("");
+    setBarcodeEnrichMissingFields([]);
+    lastRemoteBarcodeRef.current = "";
     form.reset(emptyForm);
     setIsFormOpen(true);
   }
 
   function openEditForm(item: Product) {
     setEditingItem(item);
+    setBarcodeEnrichSource("");
+    setBarcodeEnrichMissingFields([]);
+    lastRemoteBarcodeRef.current = "";
     form.reset({
       sku: item.sku,
       name: item.name,
@@ -259,6 +545,7 @@ export default function ProductsPage() {
       warrantyMonths: item.warrantyMonths,
       qrCode: item.qrCode || item.sku,
       imageUrl: item.imageUrl || "",
+      barcode: item.barcode || "",
       status: item.status as "ACTIVE" | "INACTIVE",
     });
     setIsFormOpen(true);
@@ -274,8 +561,10 @@ export default function ProductsPage() {
         costPrice: compactProductPrice(values.costPrice),
         salePrice: compactProductPrice(values.salePrice),
         originalPrice: values.originalPrice ? compactProductPrice(values.originalPrice) : 0,
-        qrCode: values.qrCode || values.sku,
+        sku: editingItem ? values.sku : undefined,
+        qrCode: values.qrCode || undefined,
         imageUrl: values.imageUrl || resolveRealProductImageFromProductName(values.name),
+        barcode: values.barcode || undefined,
       };
       if (editingItem) {
         await productService.update(editingItem.id, payload);
@@ -375,7 +664,7 @@ export default function ProductsPage() {
           costPrice: compactProductPrice(payload.costPrice),
           salePrice: compactProductPrice(payload.salePrice),
           originalPrice: payload.originalPrice ? compactProductPrice(payload.originalPrice) : undefined,
-          qrCode: payload.qrCode || payload.sku,
+          qrCode: payload.qrCode || payload.sku || undefined,
         }))
       );
       created += results.filter((result) => result.status === "fulfilled").length;
@@ -436,7 +725,7 @@ export default function ProductsPage() {
       const content = await file.text();
       const payloads = parseProductImportFileContent(content).slice(0, 200).map((payload, index) => ({
         ...payload,
-        qrCode: payload.qrCode || payload.sku,
+        qrCode: payload.qrCode || payload.sku || undefined,
         imageUrl: payload.imageUrl || resolveRealProductImageFromProductName(payload.name),
       }));
 
@@ -663,7 +952,7 @@ export default function ProductsPage() {
   }
 
   const columns = useMemo<any[]>(() => {
-    const cols = [
+    const cols: any[] = [
       columnHelper.display({
         id: "select",
         size: 42,
@@ -952,17 +1241,16 @@ export default function ProductsPage() {
       </Card>
 
       {/* Create/update form */}
-      {isFormOpen ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{editingItem ? t("products.updateTitle") : t("products.createTitle")}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? t("products.updateTitle") : t("products.createTitle")}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <div className="space-y-2">
-                <Label>{t("products.sku")}</Label>
-                <Input placeholder="DGD-SH-NC18" {...form.register("sku")} />
-                {form.formState.errors.sku ? <p className="text-sm text-destructive">{form.formState.errors.sku.message}</p> : null}
+                <Label>SKU tự động</Label>
+                <Input value={editingItem ? form.watch("sku") || "" : ""} placeholder="Tự động tạo sau khi lưu" disabled readOnly />
+                <p className="text-xs text-muted-foreground">SKU được hệ thống tự sinh và không thể sửa trực tiếp.</p>
               </div>
               <div className="space-y-2">
                 <Label>{t("products.name")}</Label>
@@ -1003,6 +1291,47 @@ export default function ProductsPage() {
               <div className="space-y-2"><Label>{t("products.minStock")}</Label><Input type="number" placeholder="5" {...form.register("minStock")} /></div>
               <div className="space-y-2"><Label>{t("products.warrantyMonths")}</Label><Input type="number" placeholder="12" {...form.register("warrantyMonths")} /></div>
               <div className="space-y-2"><Label>{t("products.qrCode")}</Label><Input {...form.register("qrCode")} placeholder={t("products.qrPlaceholder")} /></div>
+              <div className="space-y-2 md:col-span-2 xl:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">{t("barcode.fieldLabel") || "MÃ VẠCH (BARCODE)"}</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={openRemoteBarcodeScanner}
+                      className="rounded-full border border-emerald-200 bg-emerald-50/70 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 flex items-center gap-1.5 transition-colors h-7 whitespace-nowrap"
+                    >
+                      <Smartphone className="h-3.5 w-3.5" />
+                      Quét bằng ĐT
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isEnriching}
+                      onClick={handleAiEnrich}
+                      className="rounded-full border border-blue-200 bg-blue-50/60 px-3 py-1 text-xs font-semibold text-blue-500 hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1.5 transition-colors h-7 whitespace-nowrap"
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                      {isEnriching ? "Đang tra cứu..." : "Tra cứu / AI nhận diện"}
+                    </button>
+                  </div>
+                </div>
+                <Input
+                  placeholder="Quét hoặc nhập mã vạch sản phẩm"
+                  {...form.register("barcode", {
+                    onBlur: (event) => void enrichBarcode(event.target.value),
+                  })}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void enrichBarcode(event.currentTarget.value);
+                    }
+                  }}
+                />
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  {isEnriching ? <span>Đang tra cứu mã vạch...</span> : null}
+                  {barcodeEnrichSource ? <Badge variant="outline">Nguồn: {barcodeEnrichSource === "HYBRID" ? "Hybrid" : barcodeEnrichSource}</Badge> : null}
+                  {barcodeEnrichMissingFields.length > 0 ? <span>Thiếu: {barcodeEnrichMissingFields.join(", ")}</span> : null}
+                </div>
+              </div>
               <div className="space-y-2">
                 <Label>{t("common.status")}</Label>
                 <Select {...form.register("status")}>
@@ -1052,9 +1381,8 @@ export default function ProductsPage() {
                 <Button type="button" variant="outline" onClick={() => setIsFormOpen(false)}>{t("common.cancel")}</Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
-      ) : null}
+        </DialogContent>
+      </Dialog>
 
       {/* Product TanStack Data Table */}
       <Card className="overflow-hidden rounded-2xl border-slate-200/80 shadow-sm">
@@ -1155,6 +1483,76 @@ export default function ProductsPage() {
         </DialogContent>
       </Dialog>
 
+
+      {/* Remote barcode scanner dialog */}
+      <Dialog open={remoteBarcodeOpen} onOpenChange={setRemoteBarcodeOpen}>
+        <DialogContent className="max-w-md bg-slate-900 border-slate-800 text-white rounded-3xl p-6">
+          <DialogHeader className="text-center flex flex-col items-center">
+            <div className="mx-auto rounded-full bg-emerald-500/10 p-3 text-emerald-400 mb-2 border border-emerald-500/20">
+              <Smartphone className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-lg font-extrabold uppercase tracking-wide text-white">
+              Quét barcode sản phẩm
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-400 max-w-xs text-center leading-relaxed">
+              Quét mã QR bên dưới bằng điện thoại, sau đó quét barcode sản phẩm để tự điền vào ô mã vạch.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="my-6 flex flex-col items-center justify-center gap-4">
+            <div className="text-center">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">MÃ GHÉP ĐÔI</span>
+              <span className="text-3xl font-black text-emerald-400 tracking-[0.2em] font-mono select-all">
+                {remoteBarcodeSessionId}
+              </span>
+              <Button type="button" size="sm" variant="outline" onClick={resetRemoteBarcodeScanner} className="mt-3 h-8 rounded-xl border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700">
+                Tạo mã mới
+              </Button>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl shadow-xl border border-slate-800/20">
+              {remoteBarcodeScanUrl ? <QRCodeSVG value={remoteBarcodeScanUrl} size={180} level="M" /> : null}
+            </div>
+
+            <div className="w-full flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-2xl p-2 pl-3 mt-2">
+              <Link className="h-4 w-4 text-slate-500 shrink-0" />
+              <span className="text-xs font-mono text-slate-400 truncate flex-1 select-all">
+                {remoteBarcodeScanUrl}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={copyRemoteBarcodeScanLink}
+                className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl h-8 px-3 shrink-0 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                {isBarcodeLinkCopied ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                    <span className="text-emerald-400">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>Sao chép</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-3 pt-4 border-t border-slate-800/80">
+            <div className="text-[11px] text-slate-400 leading-relaxed space-y-1">
+              <p>1. Mở link quét trên điện thoại bằng QR hoặc nút sao chép.</p>
+              <p>2. Bấm Bật camera trên điện thoại.</p>
+              <p>3. Khi quét thành công, mã sẽ tự điền vào ô Barcode của form sản phẩm.</p>
+            </div>
+            <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-300">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+              <span>Đang chờ điện thoại quét...</span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
       {/* QR preview dialog */}
       <Dialog open={Boolean(selectedQrProduct)} onOpenChange={(open) => !open && setSelectedQrProduct(null)}>
         <DialogContent className="max-w-md">
@@ -1184,5 +1582,30 @@ export default function ProductsPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

@@ -46,6 +46,7 @@ const FALLBACK_SETTINGS: SettingPayload = {
   smtpPort: 587,
   smtpUser: "",
   smtpPassword: "",
+  enableBarcodeScanner: true,
 };
 
 function normalizeSettings(data: Partial<SettingPayload>): SettingPayload {
@@ -83,6 +84,7 @@ function normalizeSettings(data: Partial<SettingPayload>): SettingPayload {
     smtpPort: data.smtpPort || 587,
     smtpUser: data.smtpUser || "",
     smtpPassword: data.smtpPassword || "",
+    enableBarcodeScanner: data.enableBarcodeScanner ?? true,
   };
 }
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Banknote, Download, Minus, Plus, Printer, QrCode, ReceiptText, Search, ShoppingCart, Trash2, UserPlus, XCircle } from "lucide-react";
+import { Banknote, Download, Minus, Plus, Printer, QrCode, ReceiptText, Search, ShoppingCart, Trash2, UserPlus, XCircle, Smartphone, Link, Copy, Check } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { useLanguage } from "@/contexts/language-context";
@@ -23,7 +23,8 @@ import { getApiErrorMessage } from "@/lib/api";
 import { REAL_PRODUCT_FALLBACK_IMAGE } from "@/lib/demo-products";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { categoryService, customerService, orderService, productService, settingService, shiftService } from "@/services/homex.service";
+import { buildMobileScanUrl, getActiveRemoteBarcodeTarget, getOrCreateRemoteBarcodeSessionId, resetRemoteBarcodeSessionId, setActiveRemoteBarcodeTarget } from "@/lib/remote-barcode-session";
+import { categoryService, customerService, orderService, posService, productService, settingService, shiftService } from "@/services/homex.service";
 import { promotionService } from "@/services/promotion.service";
 import type { Category, Customer, Order, PaymentMethod, Product, Setting, Shift } from "@/types/domain";
 import type { Promotion } from "@/services/promotion.service";
@@ -142,6 +143,9 @@ export default function PosPage() {
   const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
   const [quickCustomerAddress, setQuickCustomerAddress] = useState("");
   const { toast } = useToast();
+  const [remoteScanOpen, setRemoteScanOpen] = useState(false);
+  const [sessionId, setSessionId] = useState("");
+  const [isCopied, setIsCopied] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const { t } = useLanguage();
@@ -212,6 +216,7 @@ export default function PosPage() {
 
   function focusBarcodeInput() {
     if (typeof window === "undefined") return;
+    if (!setting?.enableBarcodeScanner) return;
     window.requestAnimationFrame(() => barcodeInputRef.current?.focus());
   }
 
@@ -323,6 +328,7 @@ export default function PosPage() {
               minStock: 0,
               warrantyMonths: detail.product?.warrantyMonths || 0,
               qrCode: detail.product?.sku || null,
+              barcode: null,
               imageUrl: detail.product?.imageUrl || REAL_PRODUCT_FALLBACK_IMAGE,
               status: "ACTIVE",
               createdAt: order.createdAt,
@@ -346,6 +352,7 @@ export default function PosPage() {
   }
 
   useEffect(() => {
+    setSessionId(getOrCreateRemoteBarcodeSessionId());
     loadCategories();
     loadProducts();
     searchCustomers();
@@ -425,10 +432,19 @@ export default function PosPage() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-      const tagName = target?.tagName?.toLowerCase();
+      if (!setting?.enableBarcodeScanner) {
+        return;
+      }
 
-      if (tagName === "input" || tagName === "textarea" || tagName === "select" || target?.isContentEditable) {
+      const activeElement = document.activeElement;
+
+      if (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement instanceof HTMLSelectElement ||
+        activeElement?.getAttribute("contenteditable") === "true" ||
+        (activeElement as HTMLElement | null)?.isContentEditable
+      ) {
         return;
       }
 
@@ -459,7 +475,7 @@ export default function PosPage() {
         window.clearTimeout(barcodeTimerRef.current);
       }
     };
-  }, []);
+  }, [setting?.enableBarcodeScanner]);
 
   useEffect(() => {
     if (paymentMethod !== "CASH") {
@@ -497,20 +513,138 @@ export default function PosPage() {
     const barcode = code.trim();
     if (!barcode) return;
 
+    const localProduct = products.find(
+      (p) => p.barcode === barcode || (p.sku && p.sku.toUpperCase() === barcode.toUpperCase())
+    );
+
+    if (localProduct) {
+      if (localProduct.status !== "ACTIVE") {
+        toast.error("Sản phẩm đang ngừng hoạt động.");
+        return;
+      }
+      if (!setting?.allowOversell && localProduct.stockQuantity <= 0) {
+        toast.error(t("settings.stockNotEnough") || "Không đủ tồn kho");
+        return;
+      }
+      addToCart(localProduct);
+      toast.success(`${t("barcode.addedProduct") || "Đã thêm"}: ${localProduct.name}`);
+      focusBarcodeInput();
+      return;
+    }
+
     try {
-            const product = await productService.findByBarcode(barcode);
+      const product = await productService.getProductByBarcode(barcode);
+      if (product.status !== "ACTIVE") {
+        toast.error("Sản phẩm đang ngừng hoạt động.");
+        return;
+      }
       if (!setting?.allowOversell && product.stockQuantity <= 0) {
         toast.error(t("settings.stockNotEnough") || "Không đủ tồn kho");
         return;
       }
       addToCart(product);
-      toast.success(t("pos.barcodeAdded", { sku: product.sku }));
+      toast.success(`${t("barcode.addedProduct") || "Đã thêm"}: ${product.name}`);
     } catch (error) {
-      toast.error(getApiErrorMessage(error) || t("pos.barcodeNotFound"));
+      toast.error(`${t("barcode.notFound") || "Không tìm thấy sản phẩm có mã"} ${barcode}`);
     } finally {
       focusBarcodeInput();
     }
   }
+
+  const handleBarcodeFromRemotePhone = useCallback(async (code: string) => {
+    const barcode = code.trim();
+    if (!barcode) return;
+
+    if (barcodeInputRef.current) {
+      barcodeInputRef.current.value = barcode;
+    }
+
+    const localProduct = products.find(
+      (p) => p.barcode === barcode || (p.sku && p.sku.toUpperCase() === barcode.toUpperCase())
+    );
+
+    if (localProduct) {
+      if (localProduct.status !== "ACTIVE") {
+        toast.error("Sản phẩm quét từ ĐT đang ngừng hoạt động.");
+        return;
+      }
+      if (!setting?.allowOversell && localProduct.stockQuantity <= 0) {
+        toast.error(`${t("settings.stockNotEnough") || "Không đủ tồn kho"} (${localProduct.name})`);
+        return;
+      }
+      addToCart(localProduct);
+      toast.success(`${t("barcode.phoneScanSuccess") || "ĐT đã quét thành công!"}: ${localProduct.name}`);
+      return;
+    }
+
+    try {
+      const product = await productService.getProductByBarcode(barcode);
+      if (product.status !== "ACTIVE") {
+        toast.error("Sản phẩm quét từ ĐT đang ngừng hoạt động.");
+        return;
+      }
+      if (!setting?.allowOversell && product.stockQuantity <= 0) {
+        toast.error(`${t("settings.stockNotEnough") || "Không đủ tồn kho"} (${product.name})`);
+        return;
+      }
+      addToCart(product);
+      toast.success(`${t("barcode.phoneScanSuccess") || "ĐT đã quét thành công!"}: ${product.name}`);
+    } catch (error) {
+      toast.error(`${t("barcode.notFound") || "Không tìm thấy sản phẩm có mã"} ${barcode}`);
+    } finally {
+      if (barcodeInputRef.current) {
+        barcodeInputRef.current.value = "";
+      }
+    }
+  }, [products, setting?.allowOversell, t, toast]);
+
+  const handleOpenRemoteScan = () => {
+    setActiveRemoteBarcodeTarget("pos");
+    const currentSessionId = getOrCreateRemoteBarcodeSessionId();
+    setSessionId(currentSessionId);
+    setRemoteScanOpen(true);
+    setIsCopied(false);
+  };
+
+  const handleResetRemoteScanSession = () => {
+    const nextSessionId = resetRemoteBarcodeSessionId();
+    setSessionId(nextSessionId);
+    setIsCopied(false);
+    toast.success("Đã tạo mã kết nối máy quét mới.");
+  };
+
+  const mobileScanUrl = useMemo(() => buildMobileScanUrl(sessionId), [sessionId]);
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(mobileScanUrl);
+      setIsCopied(true);
+      toast.success(t("barcode.scanLinkCopied") || "Đã sao chép link quét.");
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      toast.error("Không thể sao chép liên kết.");
+    }
+  };
+
+  useEffect(() => {
+    if (!sessionId || setting?.enableBarcodeScanner === false) return;
+
+    const timer = window.setInterval(async () => {
+      try {
+        if (document.visibilityState !== "visible") return;
+        const activeTarget = getActiveRemoteBarcodeTarget();
+        if (activeTarget && activeTarget !== "pos") return;
+        const res = await posService.pollRemoteScan(sessionId);
+        if (res && res.success && res.barcode) {
+          await handleBarcodeFromRemotePhone(res.barcode);
+        }
+      } catch (error) {
+        console.error("Remote scan polling failed:", error);
+      }
+    }, 500);
+
+    return () => window.clearInterval(timer);
+  }, [sessionId, setting?.enableBarcodeScanner, handleBarcodeFromRemotePhone]);
 
   function changeQuantity(productId: number, delta: number) {
     setCart((currentCart) => {
@@ -657,7 +791,7 @@ export default function PosPage() {
       if (setting?.autoOpenPrint) {
         setTimeout(() => {
           window.print();
-        }, 500);
+        }, 1000);
       }
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -978,21 +1112,47 @@ export default function PosPage() {
           {/* Cột trái: tìm kiếm và danh sách sản phẩm */}
           <div className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/50 bg-white shadow-sm overflow-hidden">
             <div className="shrink-0 p-4 space-y-3 border-b border-border/40">
-              <form onSubmit={handleProductSearch} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-                <div className="relative">
-                  <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    autoFocus
-                    className="h-12 bg-slate-50 pl-12 text-base border-border/60"
-                    placeholder={t("pos.searchProduct")}
-                    value={productSearch}
-                    onChange={(event) => setProductSearch(event.target.value)}
-                  />
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <form onSubmit={handleProductSearch} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      autoFocus
+                      className="h-12 bg-slate-50 pl-12 text-base border-border/60"
+                      placeholder={t("pos.searchProduct")}
+                      value={productSearch}
+                      onChange={(event) => setProductSearch(event.target.value)}
+                    />
+                  </div>
+                  <Button type="submit" className="h-12 px-6">
+                    {t("common.search")}
+                  </Button>
+                </form>
+
+                <div className="flex gap-2 shrink-0">
+                  {setting?.enableBarcodeScanner !== false ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleOpenRemoteScan}
+                      className="h-12 px-4 border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center gap-1.5 rounded-full font-bold shadow-sm cursor-pointer shrink-0"
+                    >
+                      <span>📱 {t("barcode.remoteScanner") || "Máy quét ĐT"}</span>
+                    </Button>
+                  ) : null}
+
+                  <div className={cn(
+                    "rounded-full px-4 py-2 text-xs font-bold shrink-0 border h-12 flex items-center justify-center transition-colors shadow-sm",
+                    setting?.enableBarcodeScanner 
+                      ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
+                      : "bg-slate-50 text-slate-500 border-slate-200"
+                  )}>
+                    {setting?.enableBarcodeScanner 
+                      ? (t("barcode.scannerEnabled") || "Quét mã vạch: Đang bật") 
+                      : (t("barcode.scannerDisabled") || "Quét mã vạch: Đang tắt")}
+                  </div>
                 </div>
-                <Button type="submit" className="h-12 px-6">
-                  {t("common.search")}
-                </Button>
-              </form>
+              </div>
 
               <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
                 <Button
@@ -1599,6 +1759,83 @@ export default function PosPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        <Dialog open={remoteScanOpen} onOpenChange={setRemoteScanOpen}>
+          <DialogContent className="max-w-md bg-slate-900 border-slate-800 text-white rounded-3xl p-6">
+            <DialogHeader className="text-center flex flex-col items-center">
+              <div className="mx-auto rounded-full bg-blue-500/10 p-3 text-blue-400 mb-2 border border-blue-500/20">
+                <Smartphone className="h-6 w-6" />
+              </div>
+              <DialogTitle className="text-lg font-extrabold uppercase tracking-wide text-white">
+                {t("barcode.connectPhoneScanner") || "KẾT NỐI MÁY QUÉT ĐIỆN THOẠI"}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-400 max-w-xs text-center leading-relaxed">
+                Biến điện thoại của bạn thành máy quét mã vạch từ xa bằng cách quét mã QR bên dưới.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="my-6 flex flex-col items-center justify-center gap-4">
+              {/* Pairing Code */}
+              <div className="text-center">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">
+                  {t("barcode.pairingCode") || "MÃ GHÉP ĐÔI"}
+                </span>
+                <span className="text-3xl font-black text-blue-400 tracking-[0.2em] font-mono select-all">
+                  {sessionId}
+                </span>
+                <Button type="button" size="sm" variant="outline" onClick={handleResetRemoteScanSession} className="mt-3 h-8 rounded-xl border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700">
+                  Tạo mã mới
+                </Button>
+              </div>
+
+              {/* QR Code Container */}
+              <div className="bg-white p-4 rounded-2xl shadow-xl border border-slate-800/20">
+                <QRCodeSVG value={mobileScanUrl} size={180} level="M" />
+              </div>
+
+              {/* Link copy container */}
+              <div className="w-full flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-2xl p-2 pl-3 mt-2">
+                <Link className="h-4 w-4 text-slate-500 shrink-0" />
+                <span className="text-xs font-mono text-slate-400 truncate flex-1 select-all">
+                  {mobileScanUrl}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleCopyLink}
+                  className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl h-8 px-3 shrink-0 flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  {isCopied ? (
+                    <>
+                      <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      <span className="text-emerald-400">Copied</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      <span>{t("barcode.copyScanLink") || "Sao chép"}</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Instruction Help & Polling Status */}
+            <div className="space-y-4 pt-4 border-t border-slate-800/80">
+              <div className="text-[11px] text-slate-400 leading-relaxed space-y-1">
+                <p>1. Dùng camera điện thoại hoặc Zalo để quét mã QR bên trên.</p>
+                <p>2. Cho phép trình duyệt truy cập Camera trên điện thoại.</p>
+                <p>3. Di chuyển camera đưa mã vạch của sản phẩm vào tiêu cự.</p>
+                <p>4. Sản phẩm sẽ tự động được thêm vào giỏ hàng tại đây.</p>
+              </div>
+
+              <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></span>
+                <span>{t("barcode.waitingForScan") || "Đang chờ điện thoại quét..."}</span>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
       {lastCompletedOrder ? (
         <PrintableInvoice
@@ -1611,4 +1848,14 @@ export default function PosPage() {
     </RoleGuard>
   );
 }
+
+
+
+
+
+
+
+
+
+
 

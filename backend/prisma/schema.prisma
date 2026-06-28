@@ -150,6 +150,7 @@ model Product {
   minStock       Int           @default(0)
   warrantyMonths Int           @default(0)
   qrCode         String?       @unique
+  barcode        String?       @unique
   imageUrl       String?
   status         ProductStatus @default(ACTIVE)
   createdAt      DateTime      @default(now())
@@ -336,6 +337,7 @@ model Setting {
   allowOrderDiscount Boolean @default(true)
   confirmBeforeCheckout Boolean @default(true)
   barcodeAutoAdd    Boolean  @default(true)
+  enableBarcodeScanner Boolean @default(true)
   compactPosMode    Boolean  @default(false)
   minStock          Int      @default(0)
   warnLowStockSale  Boolean  @default(true)
