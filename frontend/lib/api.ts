@@ -2,7 +2,7 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { clearAuthStorage, getAuthToken } from "@/lib/auth";
 import type { ApiError } from "@/types/api";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 let hasDispatchedUnauthorized = false;
 
 export const api = axios.create({
@@ -10,6 +10,7 @@ export const api = axios.create({
   timeout: 15000,
   headers: {
     "Content-Type": "application/json",
+    "ngrok-skip-browser-warning": "true",
   },
 });
 

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import prisma from "../lib/prisma";
+import { enrichProductByBarcode } from "../services/barcode-enrichment.service";
 import {
   authenticateToken,
   authorizeRoles,
@@ -87,13 +88,39 @@ const optionalImageUrlSchema = z.preprocess(
     .optional()
 );
 
-const baseProductSchema = z.object({
-  sku: z
+const optionalBarcodeSchema = z.preprocess(
+  (value) => {
+    if (typeof value === "string" && value.trim() === "") {
+      return undefined;
+    }
+
+    return value;
+  },
+  z
     .string()
     .trim()
-    .min(1, "SKU không được để trống")
+    .max(100, "Mã vạch không được vượt quá 100 ký tự")
+    .optional()
+);
+
+const optionalSkuSchema = z.preprocess(
+  (value) => {
+    if (typeof value === "string" && value.trim() === "") {
+      return undefined;
+    }
+
+    return value;
+  },
+  z
+    .string()
+    .trim()
     .max(50, "SKU không được vượt quá 50 ký tự")
-    .transform((value) => value.toUpperCase()),
+    .transform((value) => value.toUpperCase())
+    .optional()
+);
+
+const baseProductSchema = z.object({
+  sku: optionalSkuSchema,
 
   name: z
     .string()
@@ -143,6 +170,8 @@ const baseProductSchema = z.object({
   qrCode: optionalQrCodeSchema,
 
   imageUrl: optionalImageUrlSchema,
+
+  barcode: optionalBarcodeSchema,
 });
 
 const createProductSchema = baseProductSchema.refine(
@@ -179,6 +208,7 @@ function formatProduct(product: ProductWithRelations) {
     warrantyMonths: product.warrantyMonths,
     qrCode: product.qrCode,
     imageUrl: product.imageUrl,
+    barcode: product.barcode,
     status: product.status,
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
@@ -298,6 +328,79 @@ async function checkDuplicateQrCode(qrCode: string, ignoredProductId?: number) {
   }
 }
 
+async function checkDuplicateBarcode(barcode: string, ignoredProductId?: number) {
+  const duplicateBarcode = await prisma.product.findFirst({
+    where: {
+      barcode: {
+        equals: barcode,
+        mode: "insensitive",
+      },
+      id: ignoredProductId
+        ? {
+            not: ignoredProductId,
+          }
+        : undefined,
+    },
+  });
+
+  if (duplicateBarcode) {
+    throw new AppError("Mã vạch đã được sử dụng cho sản phẩm khác.", 409);
+  }
+}
+
+function removeVietnameseTones(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "D");
+}
+
+function buildCodeFromText(value: string, fallback: string, maxLength = 6) {
+  const normalized = removeVietnameseTones(value)
+    .replace(/\bHomex\b/gi, "")
+    .replace(/\b\d+([.,]\d+)?\s*(l|lit|kg|g|w|kw|cm|mm|m)\b/gi, "")
+    .replace(/[^a-zA-Z0-9\s]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+
+  if (!normalized) return fallback;
+
+  const words = normalized
+    .split(" ")
+    .filter((word) => word.length > 1 && !/^\d+$/.test(word));
+
+  const code = words.map((word) => word[0]).join("").toUpperCase();
+  return (code || fallback).slice(0, maxLength);
+}
+
+async function buildCategoryCode(categoryId?: number) {
+  if (!categoryId) return "PRD";
+
+  const category = await prisma.category.findUnique({
+    where: { id: categoryId },
+    select: { name: true },
+  });
+
+  const bracketCode = category?.name.match(/\(([A-Z0-9]{2,8})\)/i)?.[1];
+  if (bracketCode) return bracketCode.toUpperCase();
+
+  return buildCodeFromText(category?.name || "", "PRD", 4);
+}
+
+async function generateProductSku(productName: string, categoryId?: number) {
+  const categoryCode = await buildCategoryCode(categoryId);
+  const productCode = buildCodeFromText(productName, "ITEM", 6);
+
+  for (let sequence = 1; sequence <= 9999; sequence += 1) {
+    const sku = `${categoryCode}-${productCode}-${String(sequence).padStart(4, "0")}`;
+    const existed = await prisma.product.findUnique({ where: { sku } });
+    if (!existed) return sku;
+  }
+
+  throw new AppError("Không thể tự sinh SKU duy nhất cho sản phẩm", 500);
+}
+
 // GET /api/products?page=1&limit=10&search=&status=ACTIVE&categoryId=1&supplierId=1&lowStock=true
 router.get(
   "/",
@@ -338,6 +441,12 @@ router.get(
         },
         {
           qrCode: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          barcode: {
             contains: search,
             mode: "insensitive",
           },
@@ -508,21 +617,28 @@ router.post(
       warrantyMonths,
       qrCode,
       imageUrl,
+      barcode,
     } = productData;
 
     await checkCategoryAndSupplier(categoryId, supplierId);
-    await checkDuplicateSku(sku);
+    const finalSku = sku || await generateProductSku(name, categoryId);
+    await checkDuplicateSku(finalSku);
 
-    const finalQrCode = qrCode || sku;
+    const finalQrCode = qrCode || finalSku;
     const finalCostPrice = normalizeProductPrice(costPrice);
     const finalSalePrice = normalizeProductPrice(salePrice);
     const finalOriginalPrice = originalPrice ? normalizeProductPrice(originalPrice) : null;
 
     await checkDuplicateQrCode(finalQrCode);
 
+    const finalBarcode = barcode ? barcode.trim() : null;
+    if (finalBarcode) {
+      await checkDuplicateBarcode(finalBarcode);
+    }
+
     const product = await prisma.product.create({
       data: {
-        sku,
+        sku: finalSku,
         name,
         description: description || null,
         categoryId,
@@ -535,6 +651,7 @@ router.post(
         warrantyMonths: warrantyMonths ?? 0,
         qrCode: finalQrCode,
         imageUrl: imageUrl || null,
+        barcode: finalBarcode,
         status: RECORD_STATUS.ACTIVE,
       },
       include: productInclude,
@@ -592,24 +709,30 @@ router.put(
       warrantyMonths,
       qrCode,
       imageUrl,
+      barcode,
     } = productData;
 
     await checkCategoryAndSupplier(categoryId, supplierId);
-    await checkDuplicateSku(sku, productId);
+    const finalSku = existingProduct.sku;
 
-    const finalQrCode = qrCode || sku;
+    const finalQrCode = qrCode || finalSku;
     const finalCostPrice = normalizeProductPrice(costPrice);
     const finalSalePrice = normalizeProductPrice(salePrice);
     const finalOriginalPrice = originalPrice ? normalizeProductPrice(originalPrice) : null;
 
     await checkDuplicateQrCode(finalQrCode, productId);
 
+    const finalBarcode = barcode ? barcode.trim() : null;
+    if (finalBarcode) {
+      await checkDuplicateBarcode(finalBarcode, productId);
+    }
+
     const updatedProduct = await prisma.product.update({
       where: {
         id: productId,
       },
       data: {
-        sku,
+        sku: finalSku,
         name,
         description: description || null,
         categoryId,
@@ -622,6 +745,7 @@ router.put(
         warrantyMonths: warrantyMonths ?? existingProduct.warrantyMonths,
         qrCode: finalQrCode,
         imageUrl: imageUrl || null,
+        barcode: finalBarcode,
       },
       include: productInclude,
     });
@@ -795,4 +919,85 @@ router.patch(
   })
 );
 
+// GET /api/products/barcode/:barcode
+router.get(
+  "/barcode/:barcode",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const barcode = String(req.params.barcode || "").trim();
+    if (!barcode) {
+      throw new AppError("Mã vạch không hợp lệ", 400);
+    }
+
+    const product = await prisma.product.findFirst({
+      where: {
+        barcode: {
+          equals: barcode,
+          mode: "insensitive",
+        },
+        status: RECORD_STATUS.ACTIVE,
+      },
+      include: productInclude,
+    });
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: "Không tìm thấy sản phẩm với mã vạch này.",
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Tìm thấy sản phẩm.",
+      data: formatProduct(product),
+    });
+  })
+);
+
+// POST /api/products/enrich
+router.post(
+  "/enrich",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const { barcode } = req.body;
+    if (!barcode || typeof barcode !== "string" || !barcode.trim()) {
+      throw new AppError("Vui lòng cung cấp mã vạch hợp lệ", 400);
+    }
+
+    const cleanBarcode = barcode.trim();
+    const result = await enrichProductByBarcode(cleanBarcode);
+
+    if (!result.data) {
+      return res.json({
+        success: true,
+        message: "Không tìm thấy dữ liệu mã vạch. Vui lòng nhập thủ công.",
+        data: {
+          barcode: cleanBarcode,
+          source: "HYBRID",
+          missingFields: ["name", "category", "estimatedSalePrice", "imageUrlOrDescription"],
+        },
+      });
+    }
+
+    const message = result.foundInDatabase
+      ? "Tìm thấy sản phẩm trong hệ thống."
+      : result.data.source === "HYBRID"
+        ? "Đã tra cứu barcode và AI đã bù thông tin còn thiếu."
+        : result.data.source === "AI"
+          ? "AI đã gợi ý thông tin sản phẩm."
+          : "Đã tìm thấy thông tin từ dữ liệu mã vạch.";
+
+    return res.json({
+      success: true,
+      message,
+      data: result.data,
+    });
+  })
+);
 export default router;
+
+
+

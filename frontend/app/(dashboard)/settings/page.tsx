@@ -42,6 +42,7 @@ const emptyForm: SettingPayload = {
   allowOrderDiscount: true,
   confirmBeforeCheckout: true,
   barcodeAutoAdd: true,
+  enableBarcodeScanner: true,
   compactPosMode: false,
   minStock: 0,
   warnLowStockSale: true,
@@ -330,6 +331,7 @@ export default function SettingsPage() {
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <ToggleField label={t("settings.allowDiscount")} checked={form.allowOrderDiscount} onChange={(value) => updateField("allowOrderDiscount", value)} />
                 <ToggleField label={t("settings.autoAddBarcode")} checked={form.barcodeAutoAdd} onChange={(value) => updateField("barcodeAutoAdd", value)} />
+                <ToggleField label={t("settings.enableBarcodeScanner") || "Bật quét mã vạch tại POS"} checked={form.enableBarcodeScanner} onChange={(value) => updateField("enableBarcodeScanner", value)} />
                 <ToggleField label={t("settings.confirmBeforeCheckout")} checked={form.confirmBeforeCheckout} onChange={(value) => updateField("confirmBeforeCheckout", value)} />
                 <ToggleField label={t("settings.compactPOS")} checked={form.compactPosMode} onChange={(value) => updateField("compactPosMode", value)} />
               </div>

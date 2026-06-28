@@ -15,6 +15,7 @@
     "axios": "latest",
     "class-variance-authority": "latest",
     "clsx": "latest",
+    "html5-qrcode": "^2.3.8",
     "lucide-react": "latest",
     "next": "16.2.6",
     "qrcode.react": "^4.2.0",

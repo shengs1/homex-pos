@@ -45,6 +45,7 @@ export type Product = {
   minStock: number;
   warrantyMonths: number;
   qrCode: string | null;
+  barcode: string | null;
   imageUrl: string | null;
   status: RecordStatus;
   createdAt: string;
@@ -274,6 +275,7 @@ export type Setting = {
   smtpPort: number | null;
   smtpUser: string | null;
   smtpPassword: string | null;
+  enableBarcodeScanner: boolean;
   createdAt: string;
   updatedAt: string;
 };

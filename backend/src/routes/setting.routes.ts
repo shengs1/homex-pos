@@ -42,6 +42,7 @@ const settingSchema = z.object({
   smtpPort: z.coerce.number().int().min(1).max(65535).optional(),
   smtpUser: optionalText(150),
   smtpPassword: optionalText(150),
+  enableBarcodeScanner: z.coerce.boolean().optional(),
 });
 
 function normalizeOptionalText(value?: string | null) {
@@ -66,6 +67,7 @@ async function getOrCreateSetting() {
       printPaperSize: "K80",
       currency: "VND",
       defaultPaymentMethod: "CASH",
+      enableBarcodeScanner: true,
     },
   });
 
@@ -134,6 +136,7 @@ router.put(
         allowOrderDiscount: data.allowOrderDiscount ?? true,
         confirmBeforeCheckout: data.confirmBeforeCheckout ?? true,
         barcodeAutoAdd: data.barcodeAutoAdd ?? true,
+        enableBarcodeScanner: data.enableBarcodeScanner ?? true,
         compactPosMode: data.compactPosMode ?? false,
         minStock: data.minStock ?? 0,
         warnLowStockSale: data.warnLowStockSale ?? true,
