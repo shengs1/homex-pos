@@ -193,6 +193,7 @@ model Order {
   discountAmount    Decimal?    @db.Decimal(12, 2)
   shiftId           Int?
   status            OrderStatus @default(DRAFT)
+  earnedPoints      Int         @default(0)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 

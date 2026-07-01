@@ -5,8 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { posService } from "@/services/homex.service";
 import { toast } from "sonner";
 import { Camera, Send, CheckCircle2, AlertCircle, RefreshCw, Video, Zap, ZoomIn, SwitchCamera } from "lucide-react";
+import { useLanguage } from "@/contexts/language-context";
 
 export default function MobileScanClient() {
+  const { t } = useLanguage();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("sid")?.toUpperCase() || "";
 
@@ -109,7 +111,7 @@ export default function MobileScanClient() {
       setTorchOn(nextValue);
     } catch (err) {
       console.warn("Torch toggle failed:", err);
-      toast.error("Trình duyệt không cho bật đèn flash trên thiết bị này.");
+      toast.error(t("mobileScan.torchNotAllowed"));
       setTorchSupported(false);
     }
   }
@@ -149,12 +151,12 @@ export default function MobileScanClient() {
         }
       }
 
-      toast.success(`Đã quét thành công: ${barcode}`);
+      toast.success(t("mobileScan.scanSuccessWithCode", { barcode }));
       await stopScannerNow();
       if (isMountedRef.current) setStatus("scan_success");
     } catch (err: any) {
       console.error("Failed to send remote scan:", err);
-      toast.error("Không thể gửi mã vạch về POS.");
+      toast.error(t("mobileScan.sendFailed"));
       scanPausedRef.current = false;
       setScanPaused(false);
       if (isMountedRef.current) setStatus("ready");
@@ -163,7 +165,7 @@ export default function MobileScanClient() {
         cooldownRef.current = false;
       }, 900);
     }
-  }, [sessionId]);
+  }, [sessionId, t]);
 
   function stopNativeBarcodeDetectorLoop() {
     nativeDetectorRunningRef.current = false;
@@ -285,13 +287,13 @@ export default function MobileScanClient() {
 
       const isSecureContext = window.isSecureContext || window.location.hostname === "localhost";
       if (!isSecureContext) {
-        setError("Camera chỉ hoạt động trên HTTPS. Hãy mở link ngrok https hoặc localhost.");
+        setError(t("mobileScan.httpsRequired"));
         setStatus("camera_error");
         return;
       }
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        setError("Chrome trên thiết bị này không hỗ trợ camera cho website. Hãy thử Safari hoặc nhập mã thủ công.");
+        setError(t("mobileScan.cameraUnsupported"));
         setStatus("camera_error");
         return;
       }
@@ -407,16 +409,16 @@ export default function MobileScanClient() {
         const timeout = /camera_permission_timeout/i.test(message);
         setError(
           timeout
-            ? "Không nhận được quyền camera. Hãy bật Camera của Chrome trong Cài đặt iPhone, hoặc BẮT BUỘC dùng Safari."
+            ? t("mobileScan.cameraPermissionTimeout")
             : denied
-              ? "Chrome đang bị từ chối quyền camera. Hãy bấm biểu tượng ổ khóa cạnh thanh địa chỉ để bật camera, hoặc dùng Safari."
-              : `Không thể mở camera (${message || "không rõ lỗi"}). Vui lòng mở bằng Safari hoặc nhập mã thủ công.`
+              ? t("mobileScan.cameraDenied")
+              : t("mobileScan.cameraOpenFailed", { message: message || t("common.unknownError") })
         );
         setStatus("camera_error");
       }
     } finally {
       isStartingRef.current = false;
-    }  }, [handleScanSuccess, sessionId]);
+    }  }, [handleScanSuccess, sessionId, t]);
 
   async function scanAgain() {
     if (isStartingRef.current) return;
@@ -430,7 +432,7 @@ export default function MobileScanClient() {
 
   async function switchCamera() {
     if (cameraDevices.length <= 1) {
-      toast.error("Trình duyệt chỉ trả về một camera. Hãy kiểm tra quyền Camera hoặc thử Safari.");
+      toast.error(t("mobileScan.onlyOneCamera"));
       return;
     }
 
@@ -450,10 +452,10 @@ export default function MobileScanClient() {
       setActiveCameraId(nextCamera.id);
       window.localStorage.setItem("homex_mobile_scan_camera_id", nextCamera.id);
       await startScanner(nextCamera.id);
-      toast.success(`Đã đổi sang ${nextCamera.label || "camera khác"}.`);
+      toast.success(t("mobileScan.switchedCamera", { camera: nextCamera.label || t("mobileScan.otherCamera") }));
     } catch (err) {
       console.error("Switch camera failed:", err);
-      toast.error("Không thể đổi camera. Hãy tải lại trang scanner và thử lại.");
+      toast.error(t("mobileScan.switchCameraFailed"));
       setStatus("camera_error");
     } finally {
       setIsSwitchingCamera(false);
@@ -470,10 +472,10 @@ export default function MobileScanClient() {
       await posService.sendRemoteScan({ sessionId, barcode });
       setLastScanned(barcode);
       setManualBarcode("");
-      toast.success(`Đã gửi mã vạch thủ công: ${barcode}`);
+      toast.success(t("mobileScan.manualSent", { barcode }));
     } catch (err) {
       console.error("Failed to send manual barcode:", err);
-      toast.error("Không thể gửi mã vạch về POS.");
+      toast.error(t("mobileScan.sendFailed"));
     } finally {
       setIsSubmitting(false);
     }
@@ -483,7 +485,7 @@ export default function MobileScanClient() {
     isMountedRef.current = true;
 
     if (!sessionId) {
-      setError("Thiếu mã phiên kết nối POS.");
+      setError(t("mobileScan.missingSession"));
       setStatus("camera_error");
       return;
     }
@@ -494,12 +496,12 @@ export default function MobileScanClient() {
       isMountedRef.current = false;
       void stopScannerNow();
     };
-  }, [sessionId]);
+  }, [sessionId, t]);
 
   if (!hasMounted) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white font-medium">
-        Đang tải máy quét...
+        {t("mobileScan.loadingScanner")}
       </div>
     );
   }
@@ -510,9 +512,9 @@ export default function MobileScanClient() {
         <div className="rounded-full bg-red-950/50 p-4 border border-red-500/20 text-red-500 mb-4 animate-bounce">
           <AlertCircle className="h-10 w-10" />
         </div>
-        <h2 className="text-xl font-bold mb-2">Không Thể Kết Nối</h2>
+        <h2 className="text-xl font-bold mb-2">{t("mobileScan.cannotConnect")}</h2>
         <p className="text-sm text-slate-400 max-w-sm leading-relaxed mb-6">
-          Thiếu mã phiên kết nối POS (`sid` trong URL). Vui lòng dùng camera điện thoại quét lại mã QR trên màn hình POS của máy tính.
+          {t("mobileScan.missingSessionDescription")}
         </p>
       </div>
     );
@@ -526,7 +528,7 @@ export default function MobileScanClient() {
         </h1>
         <div className="mt-2 inline-flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-3 py-1 rounded-full text-xs">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-          <span className="text-slate-400">Phiên kết nối:</span>
+          <span className="text-slate-400">{t("mobileScan.session")}</span>
           <span className="font-mono font-bold text-blue-400">{sessionId}</span>
         </div>
       </div>
@@ -565,10 +567,10 @@ export default function MobileScanClient() {
           {status === "idle" && (
             <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center text-center p-5">
               <Camera className="h-10 w-10 text-blue-400 mb-4" />
-              <p className="text-sm font-semibold text-slate-200 mb-4">Bấm để cấp quyền và bật camera</p>
+              <p className="text-sm font-semibold text-slate-200 mb-4">{t("mobileScan.enableCameraPrompt")}</p>
               <button type="button" onClick={() => void startScanner()} className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-lg active:scale-95">
                 <Video className="h-4 w-4" />
-                Bật camera
+                {t("mobileScan.enableCamera")}
               </button>
             </div>
           )}
@@ -588,25 +590,25 @@ export default function MobileScanClient() {
           {status === "initializing" && (
             <div className="absolute inset-0 bg-slate-950/80 flex flex-col items-center justify-center text-center p-4">
               <RefreshCw className="h-8 w-8 text-blue-500 animate-spin mb-3" />
-              <p className="text-sm font-medium text-slate-300">Đang khởi động camera...</p>
+              <p className="text-sm font-medium text-slate-300">{t("mobileScan.initializingCamera")}</p>
             </div>
           )}
 
           {status === "sending" && (
             <div className="absolute inset-0 bg-blue-950/90 flex flex-col items-center justify-center text-center p-4 animate-pulse">
               <CheckCircle2 className="h-10 w-10 text-emerald-400 mb-3" />
-              <p className="text-sm font-bold text-emerald-400">Đang gửi mã vạch...</p>
+              <p className="text-sm font-bold text-emerald-400">{t("mobileScan.sendingBarcode")}</p>
             </div>
           )}
 
           {status === "scan_success" && (
             <div className="absolute inset-0 bg-emerald-950/90 flex flex-col items-center justify-center text-center p-4">
               <CheckCircle2 className="h-10 w-10 text-emerald-400 mb-3" />
-              <p className="text-sm font-bold text-emerald-300 mb-1">Đã quét thành công</p>
+              <p className="text-sm font-bold text-emerald-300 mb-1">{t("mobileScan.scanSuccess")}</p>
               <p className="font-mono text-sm text-emerald-100 mb-4">{lastScanned}</p>
               <button type="button" onClick={() => void scanAgain()} className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-5 py-3 text-sm font-bold text-slate-950 shadow-lg active:scale-95">
                 <Camera className="h-4 w-4" />
-                Quét tiếp
+                {t("mobileScan.scanAgain")}
               </button>
             </div>
           )}
@@ -617,7 +619,7 @@ export default function MobileScanClient() {
               <p className="text-xs text-red-400 font-medium px-4 mb-4">{error}</p>
               <button type="button" onClick={() => void startScanner()} className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white active:scale-95">
                 <Camera className="h-4 w-4" />
-                Bật camera lại
+                {t("mobileScan.enableCameraAgain")}
               </button>
             </div>
           )}
@@ -625,7 +627,7 @@ export default function MobileScanClient() {
 
         <div className="w-full text-center space-y-3">
           <p className="text-xs text-slate-400">
-            {status === "scan_success" ? "Mã đã được gửi về POS. Bấm Quét tiếp để đọc mã tiếp theo." : status === "ready" ? "Đặt mã vạch nằm ngang, đưa gần để mã chiếm phần lớn khung; app sẽ tự đọc bằng 2 chế độ quét" : "Nếu camera chưa bật, bấm nút Bật camera"}
+            {status === "scan_success" ? t("mobileScan.sentToPosHint") : status === "ready" ? t("mobileScan.readyHint") : t("mobileScan.idleHint")}
           </p>
 
 
@@ -640,7 +642,7 @@ export default function MobileScanClient() {
                     className="inline-flex items-center gap-1.5 rounded-xl bg-slate-800 px-3 py-2 font-bold text-slate-100 transition disabled:opacity-60"
                   >
                     {isSwitchingCamera ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <SwitchCamera className="h-3.5 w-3.5" />}
-                    Đổi camera
+                    {t("mobileScan.switchCamera")}
                   </button>
                 ) : null}
                 {torchSupported ? (
@@ -650,10 +652,10 @@ export default function MobileScanClient() {
                     className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-2 font-bold transition ${torchOn ? "bg-amber-400 text-slate-950" : "bg-slate-800 text-slate-100"}`}
                   >
                     <Zap className="h-3.5 w-3.5" />
-                    {torchOn ? "Đèn đang bật" : "Bật đèn"}
+                    {torchOn ? t("mobileScan.torchOn") : t("mobileScan.enableTorch")}
                   </button>
                 ) : null}
-                {activeCameraId ? (<span className="w-full text-center text-[10px] font-medium text-slate-500">{cameraDevices.find((camera) => camera.id === activeCameraId)?.label || "Camera đang dùng"}</span>) : null}
+                {activeCameraId ? (<span className="w-full text-center text-[10px] font-medium text-slate-500">{cameraDevices.find((camera) => camera.id === activeCameraId)?.label || t("mobileScan.activeCamera")}</span>) : null}
               {zoomSupported ? (
                   <div className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-3 py-2">
                     <ZoomIn className="h-3.5 w-3.5 text-blue-300" />
@@ -662,7 +664,7 @@ export default function MobileScanClient() {
                   </div>
                 ) : null}
               </div>
-              {activeCameraId ? (<span className="w-full text-center text-[10px] font-medium text-slate-500">{cameraDevices.find((camera) => camera.id === activeCameraId)?.label || "Camera đang dùng"}</span>) : null}
+              {activeCameraId ? (<span className="w-full text-center text-[10px] font-medium text-slate-500">{cameraDevices.find((camera) => camera.id === activeCameraId)?.label || t("mobileScan.activeCamera")}</span>) : null}
               {zoomSupported ? (
                 <input
                   type="range"
@@ -672,14 +674,14 @@ export default function MobileScanClient() {
                   value={zoomValue}
                   onChange={(event) => void applyZoom(Number(event.target.value))}
                   className="w-full accent-blue-500"
-                  aria-label="Điều chỉnh zoom camera"
+                  aria-label={t("mobileScan.adjustZoom")}
                 />
               ) : null}
             </div>
           ) : null}
           {lastScanned && (
             <div className="bg-slate-900/60 border border-slate-800 px-4 py-2.5 rounded-2xl inline-block max-w-xs text-left shadow-lg">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block">Mã vừa quét:</span>
+              <span className="text-[10px] uppercase font-bold text-slate-500 block">{t("mobileScan.lastScanned")}</span>
               <span className="font-mono text-sm font-semibold text-emerald-400">{lastScanned}</span>
             </div>
           )}
@@ -688,14 +690,14 @@ export default function MobileScanClient() {
         <div className="w-full border-t border-slate-900 pt-6 mt-2">
           <form onSubmit={handleManualSubmit} className="space-y-3">
             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-              Nhập mã thủ công dự phòng
+              {t("mobileScan.manualFallback")}
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={manualBarcode}
                 onChange={(e) => setManualBarcode(e.target.value)}
-                placeholder="Nhập mã vạch sản phẩm..."
+                placeholder={t("mobileScan.manualPlaceholder")}
                 className="flex-1 bg-slate-900 border border-slate-800 rounded-2xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
               />
               <button
@@ -703,7 +705,7 @@ export default function MobileScanClient() {
                 disabled={!manualBarcode.trim() || isSubmitting}
                 className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:hover:bg-blue-600 text-white rounded-2xl px-4 py-2.5 text-sm font-semibold flex items-center justify-center gap-1.5 transition-all shadow-lg active:scale-95"
               >
-                {isSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <><span>Gửi</span><Send className="h-3.5 w-3.5" /></>}
+                {isSubmitting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <><span>{t("common.send")}</span><Send className="h-3.5 w-3.5" /></>}
               </button>
             </div>
           </form>
@@ -711,12 +713,14 @@ export default function MobileScanClient() {
 
         <div className="bg-amber-950/20 border border-amber-500/10 rounded-2xl p-4 text-xs text-amber-300/80 leading-relaxed max-w-sm mt-4 text-center">
           <AlertCircle className="h-4 w-4 inline mr-1 -mt-0.5 text-amber-400" />
-          Link phải là HTTPS. Nếu Chrome hỏi quyền Camera, chọn Allow. Nếu lỡ chặn, bấm ổ khóa trên thanh địa chỉ và bật Camera.
+          {t("mobileScan.httpsHelp")}
         </div>
       </div>
     </div>
   );
 }
+
+
 
 
 

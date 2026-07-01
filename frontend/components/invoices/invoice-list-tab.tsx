@@ -20,6 +20,7 @@ import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getApiErrorMessage } from "@/lib/api";
+import { confirmAction } from "@/lib/confirm-action";
 import { formatCurrency } from "@/lib/format";
 import { formatDateVN } from "@/lib/date-format";
 import { orderService, settingService, userService, returnOrderService } from "@/services/homex.service";
@@ -240,7 +241,7 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
   }
 
   async function handleCancelOrder(order: Order) {
-    const confirmed = window.confirm(t("orders.cancelConfirm", { code: order.orderCode }));
+    const confirmed = await confirmAction({ description: t("orders.cancelConfirm", { code: order.orderCode }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel"), destructive: true });
     if (!confirmed) return;
 
     try {
@@ -677,7 +678,7 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
                   </div>
                   {selectedOrderPayment && selectedOrderPayment.amount < selectedOrder.totalAmount ? (
                     <div>
-                      <p className="text-sm font-semibold">{language === "en" ? "Discount" : "Giảm giá"}</p>
+                      <p className="text-sm font-semibold">{t("invoice.discount")}</p>
                       <p className="text-emerald-600 font-bold">-{formatCurrency(Number(selectedOrder.totalAmount) - Number(selectedOrderPayment.amount))}</p>
                     </div>
                   ) : null}
@@ -701,10 +702,16 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
                       ) : null}
                     </>
                   ) : null}
-                  {selectedOrder.customer && selectedOrderPayment ? (
+                  {selectedOrder.customer ? (
                     <div>
                       <p className="text-sm font-semibold">{t("customers.points")}</p>
-                      <p className="text-blue-600 font-bold">+{Math.floor(Number(selectedOrderPayment.amount) / 100000)}</p>
+                      {(() => {
+                        const earned = selectedOrder.earnedPoints || 0;
+                        if (earned > 0) {
+                          return <p className="text-emerald-600 font-bold">+{earned}</p>;
+                        }
+                        return <p className="text-slate-400 font-medium">+0</p>;
+                      })()}
                     </div>
                   ) : null}
                   <div>
@@ -782,7 +789,7 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
                                 <StatusBadge status={warranty.status} />
                               </div>
                               <p className="text-sm font-semibold text-slate-800">
-                                {detail.product?.name || (warranty as any).productName || "Sản phẩm gia dụng"}
+                                {detail.product?.name || (warranty as any).productName || t("invoice.defaultProductName")}
                               </p>
                               <div className="flex gap-4 text-xs text-muted-foreground mt-2">
                                 <div><span className="font-semibold">{t("promotions.startDate")}:</span> {formatDateVN(warranty.startDate)}</div>
@@ -813,3 +820,4 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
     </RoleGuard>
   );
 }
+

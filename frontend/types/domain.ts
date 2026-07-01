@@ -107,6 +107,7 @@ export type Order = {
   promotionCode?: string | null;
   discountAmount?: number | null;
   status: OrderStatus;
+  earnedPoints?: number;
   createdAt: string;
   updatedAt: string;
   user?: {

@@ -211,9 +211,9 @@ function calculatePromotionDiscount(
 }
 
 function isTierEligible(customerTier: string | null | undefined, eligibleTiers: string | null | undefined) {
-  if (!eligibleTiers || eligibleTiers === "ALL") return true;
+  if (!eligibleTiers || eligibleTiers === "ALL" || eligibleTiers === "ALL_TIERS") return true;
   const tiers = eligibleTiers.split(",").map((item) => item.trim()).filter(Boolean);
-  if (tiers.includes("ALL")) return true;
+  if (tiers.includes("ALL") || tiers.includes("ALL_TIERS")) return true;
   return tiers.includes(customerTier || "NONE");
 }
 
@@ -260,14 +260,21 @@ async function validateAndUsePromotion(
   }
 
   if (promotion.customerLimit && promotion.customerLimit > 0) {
+    const isPublicVoucher = !promotion.eligibleTiers || 
+                            promotion.eligibleTiers === "ALL" || 
+                            promotion.eligibleTiers === "ALL_TIERS";
+                            
     if (!customerId) {
-      throw new AppError("Voucher này yêu cầu chọn khách hàng để áp dụng", 400);
-    }
-    const userUsageCount = await tx.order.count({
-      where: { customerId, promotionCode: promotion.code, status: "COMPLETED" },
-    });
-    if (userUsageCount >= promotion.customerLimit) {
-      throw new AppError("Bạn đã hết lượt dùng mã giảm giá này", 400);
+      if (!isPublicVoucher) {
+        throw new AppError("Voucher này yêu cầu chọn khách hàng để áp dụng", 400);
+      }
+    } else {
+      const userUsageCount = await tx.order.count({
+        where: { customerId, promotionCode: promotion.code, status: "COMPLETED" },
+      });
+      if (userUsageCount >= promotion.customerLimit) {
+        throw new AppError("Bạn đã hết lượt dùng mã giảm giá này", 400);
+      }
     }
   }
 
@@ -305,6 +312,7 @@ function formatOrder(order: OrderWithRelations) {
     promotionCode: order.promotionCode,
     discountAmount: order.discountAmount ? formatMoney(order.discountAmount) : null,
     status: order.status,
+    earnedPoints: order.earnedPoints || 0,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     user: order.user,
@@ -1039,8 +1047,10 @@ router.patch(
         },
       });
 
+      let earnedPoints = 0;
       if (order.customerId) {
-        const earnedPoints = Math.floor(Number(finalAmount) / 10000);
+        const POINT_CONVERSION_RATE = 10;
+        earnedPoints = Math.floor(Number(finalAmount) / POINT_CONVERSION_RATE);
 
         if (earnedPoints > 0) {
           const customer = await tx.customer.findUnique({
@@ -1063,7 +1073,7 @@ router.patch(
             },
           });
         }
-        }
+      }
 
       for (const detail of order.orderDetails) {
         const product = products.find(
@@ -1106,6 +1116,7 @@ router.patch(
           discountAmount: finalDiscountAmount > 0 ? finalDiscountAmount : null,
           shiftId: activeShift?.id || null,
           status: ORDER_STATUS.COMPLETED,
+          earnedPoints,
         },
       });
 
@@ -1215,7 +1226,7 @@ router.patch(
       }
 
       if (order.customerId) {
-        const pointsToRemove = Math.floor(Number(order.totalAmount) / 10000);
+        const pointsToRemove = order.earnedPoints;
 
         if (pointsToRemove > 0) {
           const customer = await tx.customer.findUnique({

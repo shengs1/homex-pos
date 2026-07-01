@@ -302,6 +302,8 @@ export const warrantyService = {
   complete: (id: number, note?: string) => patchData<Warranty>(`/warranties/${id}/complete`, { note }),
   reject: (id: number, note?: string) => patchData<Warranty>(`/warranties/${id}/reject`, { note }),
   updateNote: (id: number, note: string) => patchData<Warranty>(`/warranties/${id}/note`, { note }),
+  sendEmail: (id: number) => postData<{ success: boolean; message: string }>(`/warranties/${id}/send-email`, {}),
+  publicLookup: (params: { code?: string; phone?: string }) => getData<Warranty[]>("/warranties/lookup", params),
 };
 
 export const paymentService = {

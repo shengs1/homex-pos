@@ -76,9 +76,9 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
     try {
       await notificationService.markAllRead();
       await loadNotifications();
-      toast.success(t("notifications.markedAllRead") || "Đã đánh dấu tất cả thông báo là đã đọc.");
+      toast.success(t("notifications.markedAllRead"));
     } catch {
-      toast.error(t("notifications.deleteFailed") || "Có lỗi xảy ra.");
+      toast.error(t("notifications.deleteFailed"));
     }
   }
 
@@ -89,24 +89,24 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
       await notificationService.delete(id);
       setNotifications(prev => prev.filter(n => n.id !== id));
       setUnreadCount(prev => Math.max(0, prev - (notifications.find(n => n.id === id && !n.isRead) ? 1 : 0)));
-      toast.success(t("notifications.deleted") || "Đã xóa thông báo.");
+      toast.success(t("notifications.deleted"));
     } catch {
-      toast.error(t("notifications.deleteFailed") || "Không thể xóa thông báo.");
+      toast.error(t("notifications.deleteFailed"));
     }
   }
 
   async function handleDeleteRead() {
     const readCount = notifications.filter(n => n.isRead).length;
     if (readCount === 0) {
-      toast.info(t("notifications.noReadToDelete") || "Không có thông báo đã đọc để xóa.");
+      toast.info(t("notifications.noReadToDelete"));
       return;
     }
     try {
       await notificationService.deleteRead();
       await loadNotifications();
-      toast.success(t("notifications.deleteReadSuccess") || "Đã xóa tất cả thông báo đã đọc.");
+      toast.success(t("notifications.deleteReadSuccess"));
     } catch {
-      toast.error(t("notifications.deleteFailed") || "Không thể xóa thông báo.");
+      toast.error(t("notifications.deleteFailed"));
     }
   }
 
@@ -220,7 +220,7 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
                 onClick={handleDeleteRead}
               >
                 <Trash2 className="h-3.5 w-3.5" />
-                {t("notifications.deleteRead") || "Xóa tất cả thông báo đã đọc"}
+                {t("notifications.deleteRead")}
               </Button>
             </div>
           </DropdownMenuContent>
@@ -240,3 +240,4 @@ export function Topbar({ user, onMenuClick, onLogout }: TopbarProps) {
     </header>
   );
 }
+

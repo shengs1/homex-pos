@@ -15,6 +15,7 @@ import { useLanguage } from "@/contexts/language-context";
 import { useToast } from "@/contexts/toast-context";
 import { useSettings } from "@/contexts/settings-context";
 import { getApiErrorMessage } from "@/lib/api";
+import { confirmAction } from "@/lib/confirm-action";
 import { settingService, type SettingPayload } from "@/services/homex.service";
 import { getAuthUser } from "@/lib/auth";
 import type { AuthUser } from "@/types/auth";
@@ -198,8 +199,8 @@ export default function SettingsPage() {
     }
   }
   
-  function handleReset() {
-    if (window.confirm(t("common.confirmReset") || "Bạn có chắc muốn đặt lại tất cả cài đặt về mặc định?")) {
+  async function handleReset() {
+    if (await confirmAction({ description: t("common.confirmReset"), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel"), destructive: true })) {
       setForm(emptyForm);
     }
   }
@@ -216,7 +217,7 @@ export default function SettingsPage() {
             {t("settings.saveSettings")}
           </Button>
           <Button type="button" onClick={handleReset} variant="outline" className="h-10 px-4 text-sm font-medium">
-            {language === "vi" ? "Mặc định" : t("settings.resetDefault")}
+            {t("settings.resetDefault")}
           </Button>
           <Button type="button" onClick={() => fileInputRef.current?.click()} variant="outline" className="h-10 px-4 text-sm font-medium">
             {t("settings.importJsonFile")}
@@ -241,10 +242,10 @@ export default function SettingsPage() {
                 <Field label={t("settings.taxCode")}>
                   <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.taxCode || ""} onChange={(event) => updateField("taxCode", event.target.value)} />
                 </Field>
-                <Field label={t("settings.operatingHours") || "Giờ hoạt động"}>
+                <Field label={t("settings.operatingHours")}>
                   <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.businessHours || ""} onChange={(event) => updateField("businessHours", event.target.value)} />
                 </Field>
-                <Field label={t("settings.hotline") || "Hotline"}>
+                <Field label={t("settings.hotline")}>
                   <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.storeHotline || ""} onChange={(event) => updateField("storeHotline", event.target.value)} />
                 </Field>
                 <Field label={t("settings.currencyFormat")}>
@@ -294,7 +295,7 @@ export default function SettingsPage() {
                 <div>
                   <p className="text-sm font-semibold text-slate-500">{t("settings.sessionTimeout")}</p>
                   <p className="mt-1 text-sm font-bold text-slate-950">
-                    {user?.role === "ADMIN" ? t("settings.adminAutoLockNotApplied") : `${form.autoLockMinutes || 30} phút`}
+                    {user?.role === "ADMIN" ? t("settings.adminAutoLockNotApplied") : t("settings.minutes", { count: form.autoLockMinutes || 30 })}
                   </p>
                 </div>
 
@@ -318,7 +319,7 @@ export default function SettingsPage() {
                     <option value="TRANSFER">{t("paymentMethod.TRANSFER")}</option>
                   </Select>
                 </Field>
-                <Field label={t("settings.productsPerPage") || "Số SP mỗi trang POS"}>
+                <Field label={t("settings.productsPerPage")}>
                   <Input className="h-10 border-slate-200 text-sm text-slate-800" type="number" min="1" value={form.productsPerPage} onChange={(event) => updateField("productsPerPage", Number(event.target.value || 24))} />
                 </Field>
                 <Field label={t("settings.maxDiscountPercent")}>
@@ -331,7 +332,7 @@ export default function SettingsPage() {
               <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
                 <ToggleField label={t("settings.allowDiscount")} checked={form.allowOrderDiscount} onChange={(value) => updateField("allowOrderDiscount", value)} />
                 <ToggleField label={t("settings.autoAddBarcode")} checked={form.barcodeAutoAdd} onChange={(value) => updateField("barcodeAutoAdd", value)} />
-                <ToggleField label={t("settings.enableBarcodeScanner") || "Bật quét mã vạch tại POS"} checked={form.enableBarcodeScanner} onChange={(value) => updateField("enableBarcodeScanner", value)} />
+                <ToggleField label={t("settings.enableBarcodeScanner")} checked={form.enableBarcodeScanner} onChange={(value) => updateField("enableBarcodeScanner", value)} />
                 <ToggleField label={t("settings.confirmBeforeCheckout")} checked={form.confirmBeforeCheckout} onChange={(value) => updateField("confirmBeforeCheckout", value)} />
                 <ToggleField label={t("settings.compactPOS")} checked={form.compactPosMode} onChange={(value) => updateField("compactPosMode", value)} />
               </div>
@@ -346,12 +347,12 @@ export default function SettingsPage() {
                       <option value="A4">A4</option>
                     </Select>
                   </Field>
-                  <Field label={t("settings.tableCount") || "Số bản in"}>
+                  <Field label={t("settings.tableCount")}>
                     <Input className="h-10 border-slate-200 text-sm text-slate-800" type="number" min="1" value={form.printCopies} onChange={(event) => updateField("printCopies", Number(event.target.value || 1))} />
                   </Field>
                 </div>
                 <Field label={t("settings.invoiceThanks")}>
-                  <Textarea className="min-h-[80px] w-full resize-y border-slate-200 text-sm text-slate-800" value="Cảm ơn quý khách!" readOnly />
+                  <Textarea className="min-h-[80px] w-full resize-y border-slate-200 text-sm text-slate-800" value={t("settings.invoiceThanksDefault")} readOnly />
                 </Field>
                 <div className="grid grid-cols-1 gap-3">
                   <ToggleField label={t("settings.autoPrintAfterCheckout")} checked={form.autoOpenPrint} onChange={(value) => updateField("autoOpenPrint", value)} />
@@ -387,7 +388,7 @@ export default function SettingsPage() {
                   <Field label={t("settings.beneficiaryName")}>
                     <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.bankAccountName || ""} onChange={(event) => updateField("bankAccountName", event.target.value)} />
                   </Field>
-                  <Field label={t("settings.vietQrTemplate") || "Template VietQR"}>
+                  <Field label={t("settings.vietQrTemplate")}>
                     <Select value={["compact2", "compact", "qr_only", "print"].includes(form.vietQrTemplate || "") ? (form.vietQrTemplate as string) : "compact2"} onChange={(event) => updateField("vietQrTemplate", event.target.value)}>
                       <option value="compact2">compact2</option>
                       <option value="compact">compact</option>
@@ -396,27 +397,27 @@ export default function SettingsPage() {
                     </Select>
                     <p className="text-[10px] text-slate-500 mt-1">{t("settings.vietQrTemplateHelpCompact") || t("settings.vietQrTemplateHelp")}</p>
                   </Field>
-                  <Field label={t("settings.transferContentDefault") || "Template nội dung CK"}>
-                    <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.transferContentTemplate || "HOMEX {orderCodeLast6}"} onChange={(event) => updateField("transferContentTemplate", event.target.value)} placeholder={t("settings.transferContentPlaceholder") || "HOMEX {orderCodeLast6}"} />
+                  <Field label={t("settings.transferContentDefault")}>
+                    <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.transferContentTemplate || "HOMEX {orderCodeLast6}"} onChange={(event) => updateField("transferContentTemplate", event.target.value)} placeholder={t("settings.transferContentPlaceholder")} />
                     <p className="text-[10px] text-slate-500 mt-1">{t("settings.transferContentHelp")}</p>
                   </Field>
                 </div>
               </SectionCard>
 
               {/* SHIFT CONFIG */}
-              <SectionCard title="Cài đặt ca làm việc" icon={Clock}>
+              <SectionCard title={t("settings.shiftConfig")} icon={Clock}>
                 <div className="space-y-4">
-                  <Field label="Số nhân viên tối đa trong 1 ca" hint="Hệ thống sẽ chặn mở thêm ca khi khung giờ Sáng/Chiều đã đạt giới hạn này.">
+                  <Field label={t("settings.maxEmployeesPerShift")} hint={t("settings.maxEmployeesPerShiftHint")}>
                     <Input className="h-10 border-slate-200 text-sm text-slate-800" type="number" min="1" max="20" value={form.maxEmployeesPerShift} onChange={(event) => updateField("maxEmployeesPerShift", Number(event.target.value || 1))} />
                   </Field>
                 </div>
               </SectionCard>
 
               {/* EMAIL CONFIG */}
-              <SectionCard title="Cấu hình gửi email VAT" icon={Receipt}>
+              <SectionCard title={t("settings.vatEmailConfig")} icon={Receipt}>
                 <div className="space-y-4">
                   <ToggleField
-                    label="Kích hoạt tự động gửi email VAT"
+                    label={t("settings.vatEmailEnabled")}
                     checked={form.vatEmailEnabled}
                     onChange={(value) => updateField("vatEmailEnabled", value)}
                   />
@@ -445,7 +446,7 @@ export default function SettingsPage() {
                           </Field>
                         </div>
                       </div>
-                      <Field label="Tài khoản SMTP">
+                      <Field label={t("settings.smtpUser")}>
                         <Input
                           className="h-10 border-slate-200 text-sm text-slate-800"
                           value={form.smtpUser || ""}
@@ -453,7 +454,7 @@ export default function SettingsPage() {
                           placeholder="user@example.com"
                         />
                       </Field>
-                      <Field label="Mật khẩu SMTP">
+                      <Field label={t("settings.smtpPassword")}>
                         <Input
                           type="password"
                           className="h-10 border-slate-200 text-sm text-slate-800"
@@ -499,27 +500,27 @@ export default function SettingsPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {[
-                      t("nav.dashboard") || "Tổng quan",
-                      t("nav.pos") || "Bán hàng POS",
-                      t("nav.vatInvoices") || "Hóa đơn",
-                      t("nav.customers") || "Khách hàng",
-                      t("nav.warranties") || "Bảo hành",
-                      t("nav.promotions") || "Khuyến mãi",
-                      t("nav.inventory") || "Kho hàng",
-                      t("nav.products") || "Sản phẩm",
-                      t("nav.categories") || "Danh mục",
-                      t("nav.suppliers") || "Nhà cung cấp",
-                      t("nav.shifts") || "Ca làm",
-                      t("nav.users") || "Nhân viên",
-                      t("nav.reports") || "Báo cáo",
-                      t("nav.settings") || "Cài đặt",
-                      t("nav.auditLogs") || "Lịch sử hệ thống",
+                      { key: "nav.dashboard", cashier: true },
+                      { key: "nav.pos", cashier: true },
+                      { key: "nav.vatInvoices", cashier: true },
+                      { key: "nav.customers", cashier: true },
+                      { key: "nav.warranties", cashier: true },
+                      { key: "nav.promotions", cashier: false },
+                      { key: "nav.inventory", cashier: false },
+                      { key: "nav.products", cashier: true },
+                      { key: "nav.categories", cashier: false },
+                      { key: "nav.suppliers", cashier: false },
+                      { key: "nav.shifts", cashier: true },
+                      { key: "nav.users", cashier: false },
+                      { key: "nav.reports", cashier: false },
+                      { key: "nav.settings", cashier: false },
+                      { key: "nav.auditLogs", cashier: false },
                     ].map((feature, idx) => (
                       <tr key={idx} className="hover:bg-slate-50/50">
-                        <td className="p-3 font-medium text-slate-800">{feature}</td>
+                        <td className="p-3 font-medium text-slate-800">{t(feature.key)}</td>
                         <td className="p-3 font-medium text-emerald-600">{t("settings.yes")}</td>
                         <td className="p-3">
-                          {["Bán hàng POS", "Hóa đơn", "Khách hàng", "Bảo hành", "Ca làm", "Sản phẩm", "Tổng quan"].includes(feature) ? (
+                          {feature.cashier ? (
                             <span className="font-medium text-emerald-600">{t("settings.yes")}</span>
                           ) : (
                             <span className="font-medium text-slate-300">{t("settings.no")}</span>

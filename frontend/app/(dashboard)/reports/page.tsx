@@ -225,7 +225,7 @@ export default function ReportsPage() {
     rangeLabel = t("reports.last30DaysFull");
     topSubtitle = t("reports.topSellingSubtitle30Days");
   } else {
-    topSubtitle = `Từ ${formatXAxisShort(fromDate)} đến ${formatXAxisShort(toDate)}`;
+    topSubtitle = t("reports.customRangeSubtitle", { from: formatXAxisShort(fromDate), to: formatXAxisShort(toDate) });
   }
 
   const maxQuantity = topProductChartData.length > 0 ? Math.max(...topProductChartData.map(d => d.quantity)) : 1;
@@ -260,9 +260,9 @@ export default function ReportsPage() {
               </Button>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-slate-400 ml-2">Từ ngày</span>
+              <span className="text-xs font-semibold text-slate-400 ml-2">{t("reports.fromDateShort")}</span>
               <DateFilterInput label="" value={fromDate} onChange={setFromDate} className="w-35 shadow-none h-9 text-sm" />
-              <span className="text-xs font-semibold text-slate-400">Đến ngày</span>
+              <span className="text-xs font-semibold text-slate-400">{t("reports.toDateShort")}</span>
               <DateFilterInput label="" value={toDate} onChange={setToDate} className="w-35 shadow-none h-9 text-sm" />
             </div>
           </div>
@@ -273,10 +273,10 @@ export default function ReportsPage() {
 
         {summary ? (
           <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-8">
-            <MetricCard title={t("reports.revenue")} value={<CurrencyDisplay value={profitTotals.revenue || summary.netRevenue} />} description={language === "vi" ? "Tổng doanh thu trong khoảng thời gian" : t("stats.revenueDesc")} colorClass="text-[#4F46E5]" />
-            <MetricCard title={t("reports.cogs")} value={<CurrencyDisplay value={profitTotals.cogs} />} description={language === "vi" ? "Tổng chi phí hàng bán" : "Total cost of goods sold"} colorClass="text-[#475569]" />
-            <MetricCard title={t("reports.netProfit")} value={<CurrencyDisplay value={profitTotals.netProfit} />} description={language === "vi" ? "Doanh thu sau khi trừ giá vốn" : t("stats.netProfitDesc")} colorClass="text-[#059669]" />
-            <MetricCard title={t("reports.totalOrders")} value={formatNumber(summary.completedOrders)} description={language === "vi" ? "Tổng đơn hoàn tất trong kỳ" : "Total completed orders"} colorClass="text-[#1E293B]" />
+            <MetricCard title={t("reports.revenue")} value={<CurrencyDisplay value={profitTotals.revenue || summary.netRevenue} />} description={t("reports.revenueRangeDesc")} colorClass="text-[#4F46E5]" />
+            <MetricCard title={t("reports.cogs")} value={<CurrencyDisplay value={profitTotals.cogs} />} description={t("reports.cogsDesc")} colorClass="text-[#475569]" />
+            <MetricCard title={t("reports.netProfit")} value={<CurrencyDisplay value={profitTotals.netProfit} />} description={t("reports.netProfitRangeDesc")} colorClass="text-[#059669]" />
+            <MetricCard title={t("reports.totalOrders")} value={formatNumber(summary.completedOrders)} description={t("reports.completedOrdersDesc")} colorClass="text-[#1E293B]" />
           </div>
         ) : null}
 
@@ -426,3 +426,4 @@ export default function ReportsPage() {
     </RoleGuard>
   );
 }
+

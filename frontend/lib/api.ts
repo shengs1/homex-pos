@@ -55,13 +55,13 @@ export function getApiErrorMessage(error: unknown) {
     }
 
     if (error.code === "ECONNABORTED") {
-      return "Kết nối quá thời gian. Vui lòng thử lại.";
+      return "The request timed out. Please try again.";
     }
 
     if (!error.response) {
-      return "Không thể kết nối đến backend. Hãy kiểm tra server API.";
+      return "Could not connect to the backend. Please check the API server.";
     }
   }
 
-  return "Có lỗi xảy ra. Vui lòng thử lại.";
+  return "Something went wrong. Please try again.";
 }

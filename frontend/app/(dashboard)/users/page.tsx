@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useLanguage } from "@/contexts/language-context";
 import { useToast } from "@/contexts/toast-context";
 import { getApiErrorMessage } from "@/lib/api";
+import { confirmAction } from "@/lib/confirm-action";
 import { formatDateTime } from "@/lib/format";
 import { userService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
@@ -266,7 +267,7 @@ export default function UsersPage() {
   }
 
   async function handleRestore(item: UserAccount) {
-    if (!window.confirm(t("users.restoreConfirm", { email: item.employeeCode || item.email }))) return;
+    if (!(await confirmAction({ description: t("users.restoreConfirm", { email: item.employeeCode || item.email }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel") }))) return;
     try {
       await userService.restore(item.id);
       toast.success(t("users.restoreSuccess"));

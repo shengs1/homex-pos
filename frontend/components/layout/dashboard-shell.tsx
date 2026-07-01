@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import { AccessDenied } from "@/components/auth/access-denied";
 import { ErrorBoundary } from "@/components/shared/error-boundary";
 import { NetworkStatusBar } from "@/components/shared/network-status-bar";
 import { clearAuthStorage, getAuthToken, getAuthUser, isRoleAllowed } from "@/lib/auth";
@@ -40,7 +41,7 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
   const redirectRef = useRef<string | null>(null);
 
   const noPermissionMessage = useMemo(() => {
-    return t("rbac.noAccess") === "rbac.noAccess" ? "Bạn không có quyền truy cập trang này" : t("rbac.noAccess");
+    return t("rbac.noAccess");
   }, [t]);
 
   useEffect(() => {
@@ -190,7 +191,7 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-3 sm:p-4 lg:p-5 xl:p-6">
           <ErrorBoundary>
             {isRouteBlocked ? (
-              <div className="rounded-2xl border bg-card p-6 text-sm text-muted-foreground shadow-sm">{noPermissionMessage}</div>
+              <AccessDenied />
             ) : (
               children
             )}
@@ -200,3 +201,4 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
     </div>
   );
 }
+

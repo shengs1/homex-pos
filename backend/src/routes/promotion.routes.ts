@@ -46,9 +46,9 @@ const validatePromotionSchema = z.object({
 });
 
 function isTierEligible(customerTier: string | null | undefined, eligibleTiers: string | null | undefined) {
-  if (!eligibleTiers || eligibleTiers === "ALL") return true;
+  if (!eligibleTiers || eligibleTiers === "ALL" || eligibleTiers === "ALL_TIERS") return true;
   const tiers = eligibleTiers.split(",").map((item) => item.trim()).filter(Boolean);
-  if (tiers.includes("ALL")) return true;
+  if (tiers.includes("ALL") || tiers.includes("ALL_TIERS")) return true;
   return tiers.includes(customerTier || "NONE");
 }
 
@@ -185,14 +185,21 @@ router.post("/validate", authorizeRoles("ADMIN", "CASHIER"), async (req, res, ne
     }
 
     if (promotion.customerLimit && promotion.customerLimit > 0) {
+      const isPublicVoucher = !promotion.eligibleTiers || 
+                              promotion.eligibleTiers === "ALL" || 
+                              promotion.eligibleTiers === "ALL_TIERS";
+                              
       if (!customerId) {
-        return res.status(400).json({ success: false, message: "Voucher này yêu cầu chọn khách hàng để áp dụng" });
-      }
-      const userUsageCount = await prisma.order.count({
-        where: { customerId, promotionCode: promotion.code, status: "COMPLETED" },
-      });
-      if (userUsageCount >= promotion.customerLimit) {
-        return res.status(400).json({ success: false, message: "Bạn đã hết lượt dùng mã giảm giá này" });
+        if (!isPublicVoucher) {
+          return res.status(400).json({ success: false, message: "Voucher này yêu cầu chọn khách hàng để áp dụng" });
+        }
+      } else {
+        const userUsageCount = await prisma.order.count({
+          where: { customerId, promotionCode: promotion.code, status: "COMPLETED" },
+        });
+        if (userUsageCount >= promotion.customerLimit) {
+          return res.status(400).json({ success: false, message: "Bạn đã hết lượt dùng mã giảm giá này" });
+        }
       }
     }
 

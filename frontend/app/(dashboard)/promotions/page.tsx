@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useLanguage } from "@/contexts/language-context";
 import { getApiErrorMessage } from "@/lib/api";
+import { confirmAction } from "@/lib/confirm-action";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import {
   promotionService,
@@ -152,7 +153,7 @@ function getPromotionApiErrorMessage(error: unknown, translate: (key: string) =>
     return translate("promotions.apiNotMounted");
   }
 
-  if (backendMessage && backendMessage !== "Có lỗi xảy ra" && backendMessage !== "Something went wrong") {
+  if (backendMessage && backendMessage !== "C\u00f3 l\u1ed7i x\u1ea3y ra" && backendMessage !== "Something went wrong") {
     return backendMessage;
   }
 
@@ -326,7 +327,7 @@ export default function PromotionsPage() {
   }
 
   async function handleDelete(promotion: Promotion) {
-    const ok = window.confirm(t("promotions.deleteConfirm", { code: promotion.code }));
+    const ok = await confirmAction({ description: t("promotions.deleteConfirm", { code: promotion.code }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel"), destructive: true });
     if (!ok) return;
 
     try {
@@ -360,7 +361,7 @@ export default function PromotionsPage() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-bold text-slate-500 uppercase">{language === "vi" ? "Tổng mã" : "Total Codes"}</p>
+              <p className="text-xs font-bold text-slate-500 uppercase">{t("promotions.totalCodes")}</p>
               <p className="text-2xl font-black text-slate-900">{formatNumber(metrics.total)}</p>
               <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.totalPromotionsDesc")}</p>
             </div>
@@ -368,7 +369,7 @@ export default function PromotionsPage() {
           </div>
           <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-bold text-slate-500 uppercase">{language === "vi" ? "Đang hoạt động" : "Active"}</p>
+              <p className="text-xs font-bold text-slate-500 uppercase">{t("promotions.activeCodes")}</p>
               <p className="text-2xl font-black text-emerald-600">{formatNumber(metrics.active)}</p>
               <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.activePromotionsDesc")}</p>
             </div>
@@ -376,7 +377,7 @@ export default function PromotionsPage() {
           </div>
           <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-bold text-slate-500 uppercase">{language === "vi" ? "Đã hết hạn" : "Expired"}</p>
+              <p className="text-xs font-bold text-slate-500 uppercase">{t("promotions.expiredCodes")}</p>
               <p className="text-2xl font-black text-amber-600">{formatNumber(metrics.expired)}</p>
               <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.expiredPromotionsDesc")}</p>
             </div>
@@ -384,7 +385,7 @@ export default function PromotionsPage() {
           </div>
           <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-bold text-slate-500 uppercase">{language === "vi" ? "Hết lượt" : "Limit Reached"}</p>
+              <p className="text-xs font-bold text-slate-500 uppercase">{t("promotions.limitReached")}</p>
               <p className="text-2xl font-black text-rose-600">{formatNumber(metrics.usedUp)}</p>
               <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.usedOutPromotionsDesc")}</p>
             </div>
@@ -427,7 +428,7 @@ export default function PromotionsPage() {
                 <option value="DIAMOND">{t("promotions.tierDiamond")}</option>
               </Select>
               <Button type="submit" className="h-10 text-sm">{t("common.search")}</Button>
-              <Button type="button" variant="outline" className="h-10 text-sm ml-auto">{t("common.export", { defaultValue: "Xuất CSV" })}</Button>
+              <Button type="button" variant="outline" className="h-10 text-sm ml-auto">{t("common.export")}</Button>
             </form>
           </CardContent>
         </Card>
@@ -657,4 +658,5 @@ export default function PromotionsPage() {
     </RoleGuard>
   );
 }
+
 

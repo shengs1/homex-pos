@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { useLanguage } from "@/contexts/language-context";
 import { useToast } from "@/contexts/toast-context";
 import { getApiErrorMessage } from "@/lib/api";
+import { confirmAction } from "@/lib/confirm-action";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { vatInvoiceService } from "@/services/homex.service";
 import { CreateVatModal } from "@/components/invoices/create-vat-modal";
@@ -118,10 +119,10 @@ export default function VatInvoicesPage() {
   }
 
   async function handleDelete(id: number) {
-    if (window.confirm("Bạn có chắc chắn muốn xóa yêu cầu VAT này? Hành động này không thể hoàn tác.")) {
+    if (await confirmAction({ description: t("vat.deleteConfirm"), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel"), destructive: true })) {
       try {
         await vatInvoiceService.delete(id);
-        toast.success("Xóa yêu cầu VAT thành công");
+        toast.success(t("vat.deleteSuccess"));
         await loadData(page, status);
       } catch (error) {
         toast.error(getApiErrorMessage(error));
@@ -317,21 +318,21 @@ export default function VatInvoicesPage() {
                                 {item.status === "APPROVED" && (
                                   <DropdownMenuItem onClick={() => resendEmail(item)}>
                                     <Mail className="h-4 w-4 text-slate-500 mr-2" />
-                                    {t("vat.resendEmail") || "Gửi lại email"}
+                                    {t("vat.resendEmail")}
                                   </DropdownMenuItem>
                                 )}
                                 {user?.role === "ADMIN" && (
                                   <>
                                     <DropdownMenuItem onClick={() => handleOpenAdjust(item)}>
                                       <Edit className="h-4 w-4 text-slate-500 mr-2" />
-                                      Cập nhật
+                                      {t("common.update")}
                                     </DropdownMenuItem>
                                     <DropdownMenuItem 
                                       onClick={() => handleDelete(item.id)}
                                       className="text-red-600 hover:text-red-700 hover:bg-red-50/50"
                                     >
                                       <Trash2 className="h-4 w-4 text-red-500 mr-2" />
-                                      Xóa
+                                      {t("common.delete")}
                                     </DropdownMenuItem>
                                   </>
                                 )}
@@ -366,3 +367,4 @@ export default function VatInvoicesPage() {
     </RoleGuard>
   );
 }
+

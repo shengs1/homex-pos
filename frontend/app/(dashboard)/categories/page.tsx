@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useLanguage } from "@/contexts/language-context";
 import { useToast } from "@/contexts/toast-context";
 import { getApiErrorMessage } from "@/lib/api";
+import { confirmAction } from "@/lib/confirm-action";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { categoryService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
@@ -28,11 +29,10 @@ import type { Category } from "@/types/domain";
 
 const PAGE_SIZE = 10;
 
-const formSchema = z.object({ name: z.string().trim().min(1, "Tên không được để trống"), description: z.string().trim().optional() });
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = { name: string; description?: string };
 
 export default function CategoriesPage() {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const { toast } = useToast();
   const [items, setItems] = useState<Category[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
@@ -44,6 +44,7 @@ export default function CategoriesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const formSchema = z.object({ name: z.string().trim().min(1, t("categories.nameRequired")), description: z.string().trim().optional() });
   const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: { name: "", description: "" } });
 
   async function loadData(currentPage = page) {
@@ -71,21 +72,21 @@ export default function CategoriesPage() {
 
   async function onSubmit(values: FormValues) {
     try {
-      if (editingItem) { await categoryService.update(editingItem.id, values); toast.success(t("common.success") || "Cập nhật thành công"); }
-      else { await categoryService.create(values); toast.success(t("common.success") || "Tạo mới thành công"); }
+      if (editingItem) { await categoryService.update(editingItem.id, values); toast.success(t("common.success")); }
+      else { await categoryService.create(values); toast.success(t("common.success")); }
       setIsFormOpen(false);
       await loadData(page);
     } catch (error) { toast.error(getApiErrorMessage(error)); }
   }
 
   async function handleDelete(item: Category) {
-    if (!window.confirm(t("categories.deleteConfirm", { name: item.name }))) return;
-    try { await categoryService.remove(item.id); toast.success(t("common.success") || "Xóa thành công"); await loadData(page); } catch (error) { toast.error(getApiErrorMessage(error)); }
+    if (!(await confirmAction({ description: t("categories.deleteConfirm", { name: item.name }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel"), destructive: true }))) return;
+    try { await categoryService.remove(item.id); toast.success(t("common.success")); await loadData(page); } catch (error) { toast.error(getApiErrorMessage(error)); }
   }
 
   async function handleRestore(item: Category) {
-    if (!window.confirm(t("categories.restoreConfirm", { name: item.name }))) return;
-    try { await categoryService.restore(item.id); toast.success(t("common.success") || "Khôi phục thành công"); await loadData(page); } catch (error) { toast.error(getApiErrorMessage(error)); }
+    if (!(await confirmAction({ description: t("categories.restoreConfirm", { name: item.name }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel") }))) return;
+    try { await categoryService.restore(item.id); toast.success(t("common.success")); await loadData(page); } catch (error) { toast.error(getApiErrorMessage(error)); }
   }
 
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setPage(1); loadData(1); }
@@ -97,20 +98,20 @@ export default function CategoriesPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full mb-4">
           <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-bold text-slate-500 uppercase">{language === "vi" ? "Tổng danh mục" : "Total Categories"}</p>
+              <p className="text-xs font-bold text-slate-500 uppercase">{t("categories.totalCategories")}</p>
               <p className="text-2xl font-black text-slate-900">{formatNumber(allCategories.length)}</p>
               <p className="mt-1 text-xs font-medium text-slate-500">
-                {language === "vi" ? "Tổng nhóm sản phẩm đã tạo" : "Total category groups created"}
+                {t("categories.totalCategoriesDesc")}
               </p>
             </div>
             <FolderTree className="h-8 w-8 text-slate-300" />
           </div>
           <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
             <div className="space-y-1">
-              <p className="text-xs font-bold text-slate-500 uppercase">{language === "vi" ? "Danh mục hoạt động" : "Active Categories"}</p>
+              <p className="text-xs font-bold text-slate-500 uppercase">{t("categories.activeCategories")}</p>
               <p className="text-2xl font-black text-emerald-600">{formatNumber(allCategories.filter((c) => c.status === "ACTIVE").length)}</p>
               <p className="mt-1 text-xs font-medium text-slate-500">
-                {language === "vi" ? "Danh mục đang được sử dụng" : "Active categories currently in use"}
+                {t("categories.activeCategoriesDesc")}
               </p>
             </div>
             <CheckCircle2 className="h-8 w-8 text-emerald-500/50" />
@@ -166,4 +167,6 @@ export default function CategoriesPage() {
     </div>
   );
 }
+
+
 

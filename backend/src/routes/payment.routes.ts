@@ -19,6 +19,7 @@ import {
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
 import { createAuditLog } from "../utils/audit";
+import { getCustomerTier } from "../utils/tier";
 
 const router = Router();
 
@@ -417,7 +418,7 @@ router.patch(
         }
 
         if (payment.order.customerId) {
-          const pointsToRemove = Math.floor(Number(payment.order.totalAmount) / 100000);
+          const pointsToRemove = payment.order.earnedPoints;
 
           if (pointsToRemove > 0 && payment.order.customer) {
             const newPoints = Math.max(payment.order.customer.points - pointsToRemove, 0);
@@ -428,6 +429,7 @@ router.patch(
               },
               data: {
                 points: newPoints,
+                tier: getCustomerTier(newPoints),
               },
             });
           }

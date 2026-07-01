@@ -110,7 +110,7 @@ export default function AuditLogsPage() {
       setSelectedLog(data);
       setIsDetailOpen(true);
     } catch (error) {
-      toast.error(getApiErrorMessage(error) || "Đã có lỗi xảy ra");
+      toast.error(getApiErrorMessage(error) || t("message.error"));
     }
   }
 
@@ -254,7 +254,7 @@ export default function AuditLogsPage() {
                   {t("audit.detailTitle", { id: selectedLog.id })}
                 </DialogTitle>
                 <DialogDescription className="sr-only">
-                  Chi tiết nhật ký hệ thống
+                  {t("audit.detailDescription")}
                 </DialogDescription>
               </DialogHeader>
 
@@ -291,7 +291,7 @@ export default function AuditLogsPage() {
 
                     {ipAddress && (
                       <div>
-                        <p className="text-sm font-semibold text-slate-500 mb-1">Địa chỉ IP</p>
+                        <p className="text-sm font-semibold text-slate-500 mb-1">{t("audit.ipAddress")}</p>
                         <p className="font-medium">{ipAddress}</p>
                       </div>
                     )}
@@ -305,7 +305,7 @@ export default function AuditLogsPage() {
 
                     {metadataObj && (
                       <div className="md:col-span-2">
-                        <p className="text-sm font-semibold text-slate-500 mb-1">Dữ liệu thay đổi (Metadata)</p>
+                        <p className="text-sm font-semibold text-slate-500 mb-1">{t("audit.metadata")}</p>
                         <pre className="bg-slate-100 dark:bg-slate-900 p-4 rounded-md overflow-auto max-h-[300px] text-xs font-mono border">
                           {JSON.stringify(metadataObj, null, 2)}
                         </pre>
@@ -321,4 +321,5 @@ export default function AuditLogsPage() {
     </RoleGuard>
   );
 }
+
 

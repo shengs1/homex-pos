@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { useLanguage } from "@/contexts/language-context";
+import { useToast } from "@/contexts/toast-context";
 import { getApiErrorMessage } from "@/lib/api";
 import { getAuthUser } from "@/lib/auth";
 import { formatCurrency, formatDateTime, formatNumber } from "@/lib/format";
@@ -50,6 +51,7 @@ function displayShiftDate(value: string | null) {
 
 export default function ShiftsPage() {
   const { t } = useLanguage();
+  const { toast } = useToast();
   const [items, setItems] = useState<Shift[]>([]);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -63,7 +65,6 @@ export default function ShiftsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
   const [usersList, setUsersList] = useState<UserAccount[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
 
@@ -106,7 +107,6 @@ export default function ShiftsPage() {
     try {
       setIsSubmitting(true);
       setErrorMessage("");
-      setSuccessMessage("");
       const shift = await shiftService.open({
         openingCash: numberFromInput(openingCash),
         note: note.trim() || undefined,
@@ -117,7 +117,7 @@ export default function ShiftsPage() {
       setNote("");
       setSelectedUserId("");
       setShiftType("MORNING");
-      setSuccessMessage(t("shifts.opened"));
+      toast.success(t("shifts.opened"));
       await loadData(1);
       setPage(1);
     } catch (error) {
@@ -134,7 +134,6 @@ export default function ShiftsPage() {
     try {
       setIsSubmitting(true);
       setErrorMessage("");
-      setSuccessMessage("");
       const shift = await shiftService.close(currentShift.id, {
         closingCash: numberFromInput(closingCash),
         note: note.trim() || undefined,
@@ -142,7 +141,7 @@ export default function ShiftsPage() {
       setCurrentShift(null);
       setClosingCash("");
       setNote("");
-      setSuccessMessage(t("shifts.closed", { amount: formatCurrency(shift.discrepancyAmount || 0) }));
+      toast.success(t("shifts.closed", { amount: formatCurrency(shift.discrepancyAmount || 0) }));
       await loadData(1);
       setPage(1);
     } catch (error) {
@@ -155,7 +154,7 @@ export default function ShiftsPage() {
   return (
     <RoleGuard allowedRoles={["ADMIN", "CASHIER"]}>
       <div className="min-w-0 space-y-5">
-        <PageHeader title={isAdmin ? "Quản lý ca làm" : "Ca làm thu ngân"} description={t("shifts.description")}>
+        <PageHeader title={isAdmin ? t("shifts.adminTitle") : t("shifts.cashierTitle")} description={t("shifts.description")}>
           <Button type="button" variant="outline" onClick={() => loadData(page)} disabled={isLoading}>
             <RefreshCw className="h-4 w-4" />
             {t("shifts.refresh")}
@@ -163,39 +162,38 @@ export default function ShiftsPage() {
         </PageHeader>
 
         <ErrorState message={errorMessage} />
-        {successMessage ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-bold text-emerald-700">{successMessage}</div> : null}
 
         {isAdmin ? (
           <div className="grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-500 uppercase">Tổng số ca</p>
+                <p className="text-xs font-bold text-slate-500 uppercase">{t("shifts.totalShifts")}</p>
                 <p className="text-2xl font-black text-slate-900">{formatNumber(shiftSummary.totalShifts)}</p>
-                <p className="mt-1 text-xs font-medium text-slate-500">Tất cả ca của toàn bộ nhân viên</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("shifts.allEmployeeShifts")}</p>
               </div>
               <Clock className="h-8 w-8 text-slate-300" />
             </div>
             <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-500 uppercase">Thu ngân đang trực</p>
+                <p className="text-xs font-bold text-slate-500 uppercase">{t("shifts.openShifts")}</p>
                 <p className="text-2xl font-black text-emerald-600">{formatNumber(shiftSummary.openShifts)}</p>
-                <p className="mt-1 text-xs font-medium text-slate-500">Nhân viên hiện đang mở ca</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("shifts.activeCashiersDesc")}</p>
               </div>
               <Unlock className="h-8 w-8 text-emerald-500/50" />
             </div>
             <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-500 uppercase">Tổng tiền mặt két</p>
+                <p className="text-xs font-bold text-slate-500 uppercase">{t("shifts.totalCashInDrawer")}</p>
                 <p className="text-2xl font-black text-amber-600">{formatCurrency(shiftSummary.totalCashInDrawer)}</p>
-                <p className="mt-1 text-xs font-medium text-slate-500">Tiền mặt hiện có ở các két đang mở</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("shifts.cashInOpenDrawersDesc")}</p>
               </div>
               <Wallet className="h-8 w-8 text-amber-500/50" />
             </div>
             <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-500 uppercase">Tổng lệch quỹ</p>
+                <p className="text-xs font-bold text-slate-500 uppercase">{t("shifts.totalDifference")}</p>
                 <p className="text-2xl font-black text-rose-600">{formatCurrency(shiftSummary.totalDifference)}</p>
-                <p className="mt-1 text-xs font-medium text-slate-500">Chênh lệch sau đối soát toàn hệ thống</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("shifts.systemDifferenceDesc")}</p>
               </div>
               <Scale className="h-8 w-8 text-rose-500/50" />
             </div>
@@ -204,33 +202,33 @@ export default function ShiftsPage() {
           <div className="grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-500 uppercase">Trạng thái ca</p>
-                <p className={`text-2xl font-black ${currentShift ? "text-emerald-600" : "text-rose-600"}`}>{currentShift ? "Đang trong ca" : "Chưa mở ca"}</p>
-                <p className="mt-1 text-xs font-medium text-slate-500">Trạng thái ca làm hiện tại</p>
+                <p className="text-xs font-bold text-slate-500 uppercase">{t("shifts.shiftStatus")}</p>
+                <p className={`text-2xl font-black ${currentShift ? "text-emerald-600" : "text-rose-600"}`}>{currentShift ? t("shifts.currentOpen") : t("shifts.noOpen")}</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("shifts.currentStatusDesc")}</p>
               </div>
               {currentShift ? <Unlock className="h-8 w-8 text-emerald-500/50" /> : <Lock className="h-8 w-8 text-rose-500/50" />}
             </div>
             <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-500 uppercase">Vốn đầu ca</p>
+                <p className="text-xs font-bold text-slate-500 uppercase">{t("shifts.openingCash")}</p>
                 <p className="text-2xl font-black text-slate-900">{formatCurrency(currentShift?.openingCash || 0)}</p>
-                <p className="mt-1 text-xs font-medium text-slate-500">Tiền mặt nhận bàn giao</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("shifts.openingCashDesc")}</p>
               </div>
               <CircleDollarSign className="h-8 w-8 text-slate-300" />
             </div>
             <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-500 uppercase">Doanh thu đã thu</p>
+                <p className="text-xs font-bold text-slate-500 uppercase">{t("shifts.collectedRevenue")}</p>
                 <p className="text-2xl font-black text-emerald-600">{formatCurrency(currentShift?.totalRevenue || 0)}</p>
-                <p className="mt-1 text-xs font-medium text-slate-500">Doanh thu trong ca hiện tại</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("shifts.currentRevenueDesc")}</p>
               </div>
               <Wallet className="h-8 w-8 text-emerald-500/50" />
             </div>
             <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
               <div className="space-y-1">
-                <p className="text-xs font-bold text-slate-500 uppercase">Lệch tiền cá nhân</p>
+                <p className="text-xs font-bold text-slate-500 uppercase">{t("shifts.personalDifference")}</p>
                 <p className="text-2xl font-black text-rose-600">{formatCurrency(personalDiscrepancy)}</p>
-                <p className="mt-1 text-xs font-medium text-slate-500">Chênh lệch ca gần nhất của bạn</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("shifts.latestPersonalDifferenceDesc")}</p>
               </div>
               <Scale className="h-8 w-8 text-rose-500/50" />
             </div>
@@ -242,7 +240,7 @@ export default function ShiftsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base font-black text-slate-800">
                 <CircleDollarSign className="h-5 w-5 text-primary" />
-                {isAdmin ? "Mở Ca Cho Nhân Viên" : "Trạng thái ca làm"}
+                {isAdmin ? t("shifts.openForEmployee") : t("shifts.shiftStatus")}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -259,7 +257,7 @@ export default function ShiftsPage() {
                   </dl>
                 </div>
               ) : !isAdmin ? (
-                <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-700">Thu ngân cần mở ca trước khi thanh toán.</div>
+                <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50 p-4 text-xs font-semibold text-amber-700">{t("shifts.cashierNeedOpenShiftBeforeCheckout")}</div>
               ) : null}
 
               {currentShift ? (
@@ -289,10 +287,10 @@ export default function ShiftsPage() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    <Label>Khung giờ</Label>
+                    <Label>{t("shifts.shiftType")}</Label>
                     <Select value={shiftType} onChange={(event) => setShiftType(event.target.value as "MORNING" | "EVENING")} required>
-                      <option value="MORNING">Sáng</option>
-                      <option value="EVENING">Chiều</option>
+                      <option value="MORNING">{t("shifts.MORNING")}</option>
+                      <option value="EVENING">{t("shifts.EVENING")}</option>
                     </Select>
                   </div>
                   <div className="space-y-2">
@@ -310,8 +308,8 @@ export default function ShiftsPage() {
                 </form>
               ) : (
                 <div className="rounded-xl border border-dashed bg-slate-50 p-6 text-center space-y-2">
-                  <p className="text-sm font-semibold text-slate-500">Chưa mở ca</p>
-                  <p className="text-xs text-slate-400">Vui lòng liên hệ Quản trị viên để mở ca làm việc của bạn.</p>
+                  <p className="text-sm font-semibold text-slate-500">{t("shifts.noOpen")}</p>
+                  <p className="text-xs text-slate-400">{t("shifts.contactAdminToOpen")}</p>
                 </div>
               )}
             </CardContent>
@@ -369,5 +367,9 @@ export default function ShiftsPage() {
     </RoleGuard>
   );
 }
+
+
+
+
 
 
