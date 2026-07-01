@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Banknote, Download, Minus, Plus, Printer, QrCode, ReceiptText, Search, ShoppingCart, Trash2, UserPlus, XCircle, Smartphone, Link, Copy, Check } from "lucide-react";
+import { Banknote, Download, Minus, Plus, Printer, QrCode, ReceiptText, Search, ShoppingCart, Trash2, UserPlus, XCircle, Smartphone, Link, Copy, Check, ArrowLeft, Info, User, CreditCard, FileText, Coins } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import { createPortal } from "react-dom";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { useLanguage } from "@/contexts/language-context";
 import { useSettings } from "@/contexts/settings-context";
@@ -110,8 +111,40 @@ function sanitizeVietQrContent(value: string) {
     .slice(0, 50);
 }
 
+function formatCategoryName(name: string) {
+  let s = name.trim();
+  // Remove prefix THIẾT BỊ / Thiết bị
+  s = s.replace(/^(thiết bị|THIẾT BỊ)\s+/i, "");
+  
+  // If it was all uppercase, convert to lowercase first so we can capitalize it nicely
+  if (s === s.toUpperCase()) {
+    s = s.toLowerCase();
+  }
+  
+  // Capitalize the very first letter
+  if (s.length > 0) {
+    s = s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  
+  // Capitalize words inside parentheses to uppercase (e.g. (kit) -> (KIT))
+  s = s.replace(/\((kit|care|pos|vat|sku)\)/i, (m) => m.toUpperCase());
+  
+  return s;
+}
+
+function getStockBadgeStyle(qty: number) {
+  if (qty <= 0) {
+    return "bg-red-600 text-white border-red-600";
+  }
+  if (qty < 20) {
+    return "bg-amber-500 text-white border-amber-500";
+  }
+  return "bg-emerald-600 text-white border-emerald-600";
+}
+
 export default function PosPage() {
   const router = useRouter();
+  const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null);
   const user = useCurrentUser();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -148,6 +181,7 @@ export default function PosPage() {
   const [isCopied, setIsCopied] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
+  const [isQrLoading, setIsQrLoading] = useState(true);
   const { t } = useLanguage();
   const cartScrollRef = useRef<HTMLDivElement | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
@@ -201,6 +235,24 @@ export default function PosPage() {
     return sanitizeVietQrContent(raw);
   })();
   const isBankConfigured = Boolean(setting?.bankName && setting?.bankAccountNumber && setting?.bankAccountName);
+  const generateVietQRUrl = useCallback(() => {
+    const bankId = "MB";
+    const accountNo = setting?.bankAccountNumber || "";
+    const amount = totalPayable;
+    const memo = encodeURIComponent(transferContent);
+    const rawAccountName = setting?.bankAccountName || "";
+    const cleanAccountName = encodeURIComponent(
+      rawAccountName
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/đ/g, "d")
+        .replace(/Đ/g, "D")
+        .toUpperCase()
+    );
+
+    return `https://img.vietqr.io/image/${bankId}-${accountNo}-compact.png?amount=${amount}&addInfo=${memo}&accountName=${cleanAccountName}`;
+  }, [setting, totalPayable, transferContent]);
+
   const transferQrValue = buildVietQrDemoValue(setting, totalPayable, transferContent);
   const lastInvoicePublicUrl =
     lastCompletedOrder && typeof window !== "undefined"
@@ -352,6 +404,7 @@ export default function PosPage() {
   }
 
   useEffect(() => {
+    setHeaderPortalTarget(document.getElementById("page-title-portal"));
     setSessionId(getOrCreateRemoteBarcodeSessionId());
     loadCategories();
     loadProducts();
@@ -361,6 +414,26 @@ export default function PosPage() {
     restoreDraftOrderFromStorage();
     focusBarcodeInput();
   }, []);
+
+  useEffect(() => {
+    if (checkoutStep === "qr") {
+      setIsQrLoading(true);
+    }
+  }, [checkoutStep, transferContent]);
+
+  useEffect(() => {
+    function handleGlobalKeyDown(event: KeyboardEvent) {
+      if (event.key === "F9") {
+        event.preventDefault();
+        if (!isCheckoutDisabled) {
+          startCheckout();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [isCheckoutDisabled, startCheckout]);
 
   useEffect(() => {
     if (!isCheckoutDialogOpen) {
@@ -412,7 +485,7 @@ export default function PosPage() {
       setAppliedPromotionCode("");
       setAppliedDiscountAmount(0);
       setDiscountMessage("");
-      toast.error("Voucher đã bị gỡ do thay đổi khách hàng");
+      toast.error(t("toast.pos.voucherRemovedCustomerChanged"));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
@@ -485,7 +558,7 @@ export default function PosPage() {
 
   function addToCart(product: Product) {
     if (!setting?.allowOversell && product.stockQuantity <= 0) {
-      toast.error(t("settings.stockNotEnough") || "Không đủ tồn kho");
+      toast.error(t("settings.stockNotEnough"));
       return;
     }
 
@@ -497,7 +570,7 @@ export default function PosPage() {
           if (item.product.id !== product.id) return item;
           const newQty = item.quantity + 1;
           if (!setting?.allowOversell && newQty > product.stockQuantity) {
-            toast.warning(t("settings.stockNotEnough") || "Không đủ tồn kho");
+            toast.warning(t("settings.stockNotEnough"));
             return item;
           }
           return { ...item, quantity: newQty };
@@ -519,15 +592,15 @@ export default function PosPage() {
 
     if (localProduct) {
       if (localProduct.status !== "ACTIVE") {
-        toast.error("Sản phẩm đang ngừng hoạt động.");
+        toast.error(t("pos.productInactive"));
         return;
       }
       if (!setting?.allowOversell && localProduct.stockQuantity <= 0) {
-        toast.error(t("settings.stockNotEnough") || "Không đủ tồn kho");
+        toast.error(t("settings.stockNotEnough"));
         return;
       }
       addToCart(localProduct);
-      toast.success(`${t("barcode.addedProduct") || "Đã thêm"}: ${localProduct.name}`);
+      toast.success(`${t("barcode.addedProduct")}: ${localProduct.name}`);
       focusBarcodeInput();
       return;
     }
@@ -535,17 +608,17 @@ export default function PosPage() {
     try {
       const product = await productService.getProductByBarcode(barcode);
       if (product.status !== "ACTIVE") {
-        toast.error("Sản phẩm đang ngừng hoạt động.");
+        toast.error(t("pos.productInactive"));
         return;
       }
       if (!setting?.allowOversell && product.stockQuantity <= 0) {
-        toast.error(t("settings.stockNotEnough") || "Không đủ tồn kho");
+        toast.error(t("settings.stockNotEnough"));
         return;
       }
       addToCart(product);
-      toast.success(`${t("barcode.addedProduct") || "Đã thêm"}: ${product.name}`);
+      toast.success(`${t("barcode.addedProduct")}: ${product.name}`);
     } catch (error) {
-      toast.error(`${t("barcode.notFound") || "Không tìm thấy sản phẩm có mã"} ${barcode}`);
+      toast.error(`${t("barcode.notFound")} ${barcode}`);
     } finally {
       focusBarcodeInput();
     }
@@ -565,32 +638,32 @@ export default function PosPage() {
 
     if (localProduct) {
       if (localProduct.status !== "ACTIVE") {
-        toast.error("Sản phẩm quét từ ĐT đang ngừng hoạt động.");
+        toast.error(t("pos.remoteProductInactive"));
         return;
       }
       if (!setting?.allowOversell && localProduct.stockQuantity <= 0) {
-        toast.error(`${t("settings.stockNotEnough") || "Không đủ tồn kho"} (${localProduct.name})`);
+        toast.error(`${t("settings.stockNotEnough")} (${localProduct.name})`);
         return;
       }
       addToCart(localProduct);
-      toast.success(`${t("barcode.phoneScanSuccess") || "ĐT đã quét thành công!"}: ${localProduct.name}`);
+      toast.success(`${t("barcode.phoneScanSuccess")}: ${localProduct.name}`);
       return;
     }
 
     try {
       const product = await productService.getProductByBarcode(barcode);
       if (product.status !== "ACTIVE") {
-        toast.error("Sản phẩm quét từ ĐT đang ngừng hoạt động.");
+        toast.error(t("pos.remoteProductInactive"));
         return;
       }
       if (!setting?.allowOversell && product.stockQuantity <= 0) {
-        toast.error(`${t("settings.stockNotEnough") || "Không đủ tồn kho"} (${product.name})`);
+        toast.error(`${t("settings.stockNotEnough")} (${product.name})`);
         return;
       }
       addToCart(product);
-      toast.success(`${t("barcode.phoneScanSuccess") || "ĐT đã quét thành công!"}: ${product.name}`);
+      toast.success(`${t("barcode.phoneScanSuccess")}: ${product.name}`);
     } catch (error) {
-      toast.error(`${t("barcode.notFound") || "Không tìm thấy sản phẩm có mã"} ${barcode}`);
+      toast.error(`${t("barcode.notFound")} ${barcode}`);
     } finally {
       if (barcodeInputRef.current) {
         barcodeInputRef.current.value = "";
@@ -610,7 +683,7 @@ export default function PosPage() {
     const nextSessionId = resetRemoteBarcodeSessionId();
     setSessionId(nextSessionId);
     setIsCopied(false);
-    toast.success("Đã tạo mã kết nối máy quét mới.");
+    toast.success(t("barcode.remoteSessionReset"));
   };
 
   const mobileScanUrl = useMemo(() => buildMobileScanUrl(sessionId), [sessionId]);
@@ -619,10 +692,10 @@ export default function PosPage() {
     try {
       await navigator.clipboard.writeText(mobileScanUrl);
       setIsCopied(true);
-      toast.success(t("barcode.scanLinkCopied") || "Đã sao chép link quét.");
+      toast.success(t("barcode.scanLinkCopied"));
       setTimeout(() => setIsCopied(false), 2000);
     } catch (err) {
-      toast.error("Không thể sao chép liên kết.");
+      toast.error(t("barcode.copyLinkFailed"));
     }
   };
 
@@ -698,18 +771,18 @@ export default function PosPage() {
   function startCheckout() {
     if (setting?.requireCustomerPhone) {
       if (!customerId) {
-        toast.error(t("settings.customerPhoneRequired") || "Vui lòng nhập SĐT khách hàng");
+        toast.error(t("settings.customerPhoneRequired"));
         return;
       }
       const c = customers.find(x => String(x.id) === customerId);
       if (!c?.phone) {
-        toast.error(t("settings.customerPhoneRequired") || "Khách hàng phải có SĐT");
+        toast.error(t("settings.customerPhoneRequired"));
         return;
       }
     }
 
     if (Number(setting?.maxDiscount) > 0 && discountAmount > Number(setting?.maxDiscount)) {
-      toast.error(t("settings.discountLimitExceeded") || "Giảm giá vượt giới hạn");
+      toast.error(t("settings.discountLimitExceeded"));
       return;
     }
 
@@ -718,7 +791,7 @@ export default function PosPage() {
         setCheckoutStep("cash");
       } else {
         void prepareTransferCheckout();
-        return; // Don't open dialog yet, wait for prepareTransferCheckout to open it? No, prepareTransferCheckout expects it to be open.
+        return;
       }
     } else {
       setCheckoutStep("confirm");
@@ -1090,15 +1163,61 @@ export default function PosPage() {
             }
           }}
         />
-        {/* Header cố định trong vùng POS */}
-        <div className="shrink-0 flex items-center justify-between">
-          <PageHeader title={t("pos.title")} description={t("pos.description")} />
-          {user?.role === "CASHIER" && !currentShift ? (
+        {/* Header cố định trong vùng POS (chỉ chứa nút cảnh báo ca làm việc nếu cần) */}
+        {user?.role === "CASHIER" && !currentShift ? (
+          <div className="shrink-0 flex items-center justify-end mb-2">
             <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm text-rose-800 shadow-sm animate-in fade-in">
               <span className="font-semibold">{t("pos.shiftRequired")}</span>
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
+
+        {headerPortalTarget && createPortal(
+          <div className="flex items-center justify-between w-full min-w-0 gap-3">
+            <h2 className="truncate text-base font-black tracking-tight text-slate-800 lg:text-lg shrink-0">
+              {t("pos.title")}
+            </h2>
+            
+            <div className="flex items-center gap-2 flex-1 max-w-lg justify-end md:justify-start">
+              <form onSubmit={handleProductSearch} className="flex-1 min-w-0">
+                <div className="relative w-full">
+                  <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    autoFocus
+                    className="h-9 bg-slate-50 pl-8 pr-2.5 text-xs border-slate-200 focus:border-primary focus:bg-white transition-all rounded-lg w-full"
+                    placeholder={t("pos.searchProduct")}
+                    value={productSearch}
+                    onChange={(event) => setProductSearch(event.target.value)}
+                  />
+                </div>
+              </form>
+              
+              <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+                {setting?.enableBarcodeScanner !== false ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleOpenRemoteScan}
+                    className="h-9 px-2.5 border-blue-200 bg-blue-50/50 text-blue-600 hover:bg-blue-100/70 flex items-center gap-1 text-[11px] rounded-lg font-bold shadow-xs cursor-pointer shrink-0 animate-in fade-in duration-200"
+                    title={t("barcode.remoteScanner")}
+                  >
+                    <span>{t("barcode.remoteScannerShort")}</span>
+                  </Button>
+                ) : null}
+
+                <div className={cn(
+                  "hidden md:flex rounded-lg px-2.5 py-1 text-[10px] font-bold shrink-0 border h-9 items-center justify-center transition-colors shadow-xs",
+                  setting?.enableBarcodeScanner 
+                    ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
+                    : "bg-slate-50 text-slate-500 border-slate-200"
+                )}>
+                  {setting?.enableBarcodeScanner ? t("barcode.scannerEnabled") : t("barcode.scannerDisabled")}
+                </div>
+              </div>
+            </div>
+          </div>,
+          headerPortalTarget
+        )}
 
         {/* Floating Notifications */}
         <div className="fixed top-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full">
@@ -1111,70 +1230,43 @@ export default function PosPage() {
         <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,400px)] xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)]">
           {/* Cột trái: tìm kiếm và danh sách sản phẩm */}
           <div className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/50 bg-white shadow-sm overflow-hidden">
-            <div className="shrink-0 p-4 space-y-3 border-b border-border/40">
-              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <form onSubmit={handleProductSearch} className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      autoFocus
-                      className="h-12 bg-slate-50 pl-12 text-base border-border/60"
-                      placeholder={t("pos.searchProduct")}
-                      value={productSearch}
-                      onChange={(event) => setProductSearch(event.target.value)}
-                    />
-                  </div>
-                  <Button type="submit" className="h-12 px-6">
-                    {t("common.search")}
-                  </Button>
-                </form>
-
-                <div className="flex gap-2 shrink-0">
-                  {setting?.enableBarcodeScanner !== false ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleOpenRemoteScan}
-                      className="h-12 px-4 border-blue-200 bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center gap-1.5 rounded-full font-bold shadow-sm cursor-pointer shrink-0"
-                    >
-                      <span>📱 {t("barcode.remoteScanner") || "Máy quét ĐT"}</span>
-                    </Button>
-                  ) : null}
-
-                  <div className={cn(
-                    "rounded-full px-4 py-2 text-xs font-bold shrink-0 border h-12 flex items-center justify-center transition-colors shadow-sm",
-                    setting?.enableBarcodeScanner 
-                      ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
-                      : "bg-slate-50 text-slate-500 border-slate-200"
-                  )}>
-                    {setting?.enableBarcodeScanner 
-                      ? (t("barcode.scannerEnabled") || "Quét mã vạch: Đang bật") 
-                      : (t("barcode.scannerDisabled") || "Quét mã vạch: Đang tắt")}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-                <Button
+            <div className="shrink-0 px-4 py-2 border-b border-border/40 bg-slate-50/30">
+              <style>{`
+                .no-scrollbar::-webkit-scrollbar {
+                  display: none;
+                }
+                .no-scrollbar {
+                  -ms-overflow-style: none;
+                  scrollbar-width: none;
+                }
+              `}</style>
+              <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
+                <button
                   type="button"
-                  size="sm"
-                  className="shrink-0 rounded-full px-5 py-2 text-xs font-bold uppercase"
-                  variant={selectedCategoryId === "" ? "default" : "outline"}
+                  className={cn(
+                    "shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-200 border cursor-pointer",
+                    selectedCategoryId === ""
+                      ? "bg-primary text-white border-primary shadow-sm"
+                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  )}
                   onClick={() => setSelectedCategoryId("")}
                 >
                   {t("common.all")}
-                </Button>
+                </button>
                 {categories.map((category) => (
-                  <Button
+                  <button
                     key={category.id}
                     type="button"
-                    size="sm"
-                    className="shrink-0 rounded-full px-5 py-2 text-xs font-bold uppercase"
-                    variant={selectedCategoryId === String(category.id) ? "default" : "outline"}
+                    className={cn(
+                      "shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-200 border cursor-pointer",
+                      selectedCategoryId === String(category.id)
+                        ? "bg-primary text-white border-primary shadow-sm"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                    )}
                     onClick={() => setSelectedCategoryId(String(category.id))}
                   >
-                    {category.name}
-                  </Button>
+                    {formatCategoryName(category.name)}
+                  </button>
                 ))}
               </div>
             </div>
@@ -1188,8 +1280,17 @@ export default function PosPage() {
                   const isLowStock = product.stockQuantity <= product.minStock;
 
                   return (
-                    <Card key={product.id} className="group flex min-w-0 cursor-pointer flex-col overflow-hidden border-border/40 transition-all duration-300 hover:scale-[1.02] hover:border-primary/30 hover:shadow-md" onClick={() => product.stockQuantity > 0 && addToCart(product)}>
-                      <div className="relative h-28 overflow-hidden bg-slate-100">
+                    <Card
+                      key={product.id}
+                      className={cn(
+                        "group flex min-w-0 flex-col overflow-hidden border border-slate-200/60 bg-white transition-all duration-300 rounded-xl hover:shadow-md",
+                        product.stockQuantity > 0
+                          ? "cursor-pointer hover:border-primary/45 hover:scale-[1.01]"
+                          : "opacity-85 cursor-not-allowed"
+                      )}
+                      onClick={() => product.stockQuantity > 0 && addToCart(product)}
+                    >
+                      <div className="relative h-28 overflow-hidden bg-slate-50 border-b border-slate-100 flex items-center justify-center">
                         <img
                           src={getProductImage(product)}
                           alt={product.name}
@@ -1201,29 +1302,64 @@ export default function PosPage() {
                         />
                         <div
                           className={cn(
-                            "absolute right-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-black shadow-sm backdrop-blur-md",
-                            isLowStock ? "bg-destructive/90 text-white" : "bg-white/90 text-slate-700"
+                            "absolute right-2 top-2 rounded px-1.5 py-0.5 text-[9px] font-bold shadow-sm border",
+                            getStockBadgeStyle(product.stockQuantity)
                           )}
                         >
-                          {product.stockQuantity <= 0 ? t("pos.outOfStock") : formatNumber(product.stockQuantity)}
+                          {t("pos.stockLabel", { count: product.stockQuantity })}
                         </div>
                         {product.stockQuantity <= 0 ? (
-                          <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
-                            <span className="rounded-full bg-destructive px-3 py-1 text-[10px] font-black uppercase text-white shadow-sm">
+                          <div className="absolute inset-0 flex items-center justify-center bg-white/60 backdrop-blur-[0.5px]">
+                            <span className="rounded bg-red-600 px-2 py-0.5 text-[9px] font-bold uppercase text-white shadow-sm">
                               {t("pos.outOfStock")}
                             </span>
                           </div>
                         ) : null}
                       </div>
+                      
                       <div className="flex flex-col flex-1 p-3">
-                        <h3 className="line-clamp-2 text-xs font-bold text-slate-800 leading-tight mb-2 flex-1">{product.name}</h3>
-                        <div className="flex items-end justify-between mt-auto">
+                        <h3 className="line-clamp-2 text-xs font-bold text-slate-800 leading-snug mb-1 h-8 flex-none" title={product.name}>
+                          {product.name}
+                        </h3>
+                        
+                        <div className="text-[10px] text-slate-400 font-mono font-semibold mb-2">
+                          {product.sku || "N/A"}
+                        </div>
+                        
+                        <div className="mt-auto flex items-baseline justify-between">
                           <div>
                             {product.originalPrice && product.originalPrice > product.salePrice ? (
-                              <div className="text-[10px] font-semibold text-muted-foreground line-through mb-0.5">{formatCurrency(product.originalPrice)}</div>
-                            ) : <div className="h-4"></div>}
-                            <div className="font-black text-primary text-sm leading-none">{formatCurrency(product.salePrice)}</div>
+                              <div className="text-[9px] font-semibold text-muted-foreground line-through mb-0.5">
+                                {formatCurrency(product.originalPrice)}
+                              </div>
+                            ) : null}
+                            <div className="font-black text-primary text-xs sm:text-sm">
+                              {formatCurrency(product.salePrice)}
+                            </div>
                           </div>
+                        </div>
+
+                        {/* Nút thêm ở đáy */}
+                        <div className="mt-3 pt-2 border-t border-slate-100">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className={cn(
+                              "w-full h-8 text-[11px] font-bold rounded-lg border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-white transition-all duration-200 flex items-center justify-center gap-1",
+                              product.stockQuantity <= 0 && "opacity-50 cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-50 hover:text-slate-400"
+                            )}
+                            disabled={product.stockQuantity <= 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (product.stockQuantity > 0) {
+                                addToCart(product);
+                              }
+                            }}
+                          >
+                            <Plus className="h-3 w-3" />
+                            <span>{t("pos.addToCartShort")}</span>
+                          </Button>
                         </div>
                       </div>
                     </Card>
@@ -1393,7 +1529,7 @@ export default function PosPage() {
                       const tiersText = p.eligibleTiers === "ALL" || !p.eligibleTiers ? t("promotions.tierAll") : p.eligibleTiers.split(",").map(tier => getTierLabel(tier.trim(), t)).join(", ");
                       return (
                         <option key={p.id} value={p.code}>
-                          {p.code} - {p.discountType === "PERCENT" ? `${p.discountValue}%` : formatCurrency(p.discountValue)} (Tối thiểu: {formatCurrency(p.minOrderAmount)} | Hạng: {tiersText})
+                          {p.code} - {p.discountType === "PERCENT" ? `${p.discountValue}%` : formatCurrency(p.discountValue)} ({t("pos.minimumOrderLabel", { amount: formatCurrency(p.minOrderAmount) })} | {t("pos.tierLabel", { tiers: tiersText })})
                         </option>
                       );
                     })}
@@ -1473,21 +1609,30 @@ export default function PosPage() {
                 {/* Payment Methods */}
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   {paymentMethods.map((method) => {
-                    const PaymentIcon = method === "CASH" ? Banknote : QrCode;
+                    let PaymentIcon;
+                    let label = "";
+                    if (method === "CASH") {
+                      PaymentIcon = Banknote;
+                      label = t("paymentMethod.CASH");
+                    } else {
+                      PaymentIcon = QrCode;
+                      label = t("paymentMethod.TRANSFER");
+                    }
+
                     return (
                       <button
                         key={method}
                         type="button"
                         onClick={() => setPaymentMethod(method)}
                         className={cn(
-                          "flex items-center justify-center gap-1.5 rounded-lg border py-1.5 text-[11px] font-bold transition",
+                          "flex flex-col sm:flex-row items-center justify-center gap-1.5 rounded-lg border py-2 text-xs font-bold transition duration-200 cursor-pointer",
                           paymentMethod === method
                             ? "border-primary bg-primary text-white shadow-sm"
-                            : "border-border bg-muted/40 text-muted-foreground hover:bg-muted"
+                            : "border-border bg-slate-50 text-slate-600 hover:bg-slate-100"
                         )}
                       >
                         <PaymentIcon className="h-3.5 w-3.5" />
-                        <span>{t(`paymentMethod.${method}`)}</span>
+                        <span>{label}</span>
                       </button>
                     );
                   })}
@@ -1499,7 +1644,7 @@ export default function PosPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground rounded-lg h-10 px-3 text-xs"
+                      className="border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground rounded-lg h-12 px-3 text-xs"
                       disabled={isSubmitting}
                       onClick={() => setIsCancelDraftDialogOpen(true)}
                     >
@@ -1507,12 +1652,17 @@ export default function PosPage() {
                       {t("pos.cancelOrder")}
                     </Button>
                   ) : (
-                    <Button type="button" variant="outline" className="rounded-lg h-10 px-3 text-xs shrink-0" disabled={isSubmitting || cart.length === 0} onClick={createDraft}>
+                    <Button type="button" variant="outline" className="rounded-lg h-12 px-3 text-xs shrink-0" disabled={isSubmitting || cart.length === 0} onClick={createDraft}>
                       {t("pos.createDraft")}
                     </Button>
                   )}
-                  <Button type="button" className="flex-1 rounded-lg bg-accent text-sm font-black uppercase tracking-wider text-white shadow-md hover:bg-accent/90 h-10" disabled={isCheckoutDisabled} onClick={startCheckout}>
-                    {t("pos.checkout")}
+                  <Button
+                    type="button"
+                    className="flex-1 rounded-lg bg-accent text-sm sm:text-base font-black uppercase tracking-wider text-white shadow-md hover:bg-accent/90 h-12 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+                    disabled={isCheckoutDisabled}
+                    onClick={startCheckout}
+                  >
+                    <span>{t("pos.checkout")} (F9)</span>
                   </Button>
                 </div>
                 {draftOrder ? (
@@ -1525,18 +1675,20 @@ export default function PosPage() {
         </div>
 
         <Dialog open={isCheckoutDialogOpen} onOpenChange={setIsCheckoutDialogOpen}>
-          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>
-                {checkoutStep === "confirm" ? t("pos.confirmOrderTitle") : checkoutStep === "qr" ? t("pos.qrPaymentTitle") : t("pos.cashCheckoutTitle")}
-              </DialogTitle>
-              <DialogDescription>
-                {checkoutStep === "confirm" ? t("pos.confirmOrderDescription") : checkoutStep === "qr" ? t("pos.qrPaymentDescription") : t("pos.cashCheckoutDescription")}
-              </DialogDescription>
-            </DialogHeader>
+          <DialogContent className={cn("max-h-[90vh] overflow-y-auto transition-all duration-300", checkoutStep === "qr" ? "max-w-4xl p-0" : "max-w-2xl")}>
+            {checkoutStep !== "qr" ? (
+              <DialogHeader>
+                <DialogTitle>
+                  {checkoutStep === "confirm" ? t("pos.confirmOrderTitle") : t("pos.cashCheckoutTitle")}
+                </DialogTitle>
+                <DialogDescription>
+                  {checkoutStep === "confirm" ? t("pos.confirmOrderDescription") : t("pos.cashCheckoutDescription")}
+                </DialogDescription>
+              </DialogHeader>
+            ) : null}
 
             <form
-              className="space-y-4"
+              className={cn(checkoutStep !== "qr" && "space-y-4")}
               onSubmit={(event) => {
                 event.preventDefault();
                 if (checkoutStep === "confirm") {
@@ -1558,64 +1710,66 @@ export default function PosPage() {
                 }
               }}
             >
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-                <div className="min-w-0 rounded-xl border border-slate-100">
-                  <div className="border-b border-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
-                    {t("pos.orderItems")}
-                  </div>
-                  <div className="max-h-56 divide-y divide-slate-100 overflow-y-auto">
-                    {cart.map((item) => (
-                      <div key={item.product.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2.5">
-                        <div className="min-w-0">
-                          <p className="truncate text-xs font-black text-slate-800">{item.product.name}</p>
-                          <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                            {item.product.sku} x {item.quantity}
-                          </p>
+              {checkoutStep !== "qr" ? (
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+                  <div className="min-w-0 rounded-xl border border-slate-100">
+                    <div className="border-b border-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      {t("pos.orderItems")}
+                    </div>
+                    <div className="max-h-56 divide-y divide-slate-100 overflow-y-auto">
+                      {cart.map((item) => (
+                        <div key={item.product.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-black text-slate-800">{item.product.name}</p>
+                            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                              {item.product.sku} x {item.quantity}
+                            </p>
+                          </div>
+                          <span className="shrink-0 text-xs font-black text-slate-800">{formatCurrency(item.product.salePrice * item.quantity)}</span>
                         </div>
-                        <span className="shrink-0 text-xs font-black text-slate-800">{formatCurrency(item.product.salePrice * item.quantity)}</span>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="space-y-3 rounded-xl border bg-slate-50 p-3 text-sm">
-                  <div className="min-w-0">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("customers.title")}</p>
-                  <p className="truncate font-bold text-slate-800">{selectedCustomer?.fullName || t("customers.retail")}</p>
-                  {selectedCustomer ? (
-                    <p className="mt-1 text-[11px] font-bold text-amber-700">
-                      {t(`customerTier.${selectedCustomer.tier || "SILVER"}`)} - {formatNumber(selectedCustomer.points)} {t("customers.points")}
-                    </p>
-                  ) : null}
-                </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.paymentMethod")}</p>
-                    <p className="truncate font-bold text-slate-800">{t(`paymentMethod.${paymentMethod}`)}</p>
-                  </div>
-                  <div className="space-y-2 border-t border-slate-200 pt-3">
-                    <div className="flex justify-between gap-4">
-                      <span className="text-slate-500">{t("pos.subtotal")}</span>
-                      <span className="font-bold text-slate-800">{formatCurrency(subtotal)}</span>
+                  <div className="space-y-3 rounded-xl border bg-slate-50 p-3 text-sm">
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("customers.title")}</p>
+                      <p className="truncate font-bold text-slate-800">{selectedCustomer?.fullName || t("customers.retail")}</p>
+                      {selectedCustomer ? (
+                        <p className="mt-1 text-[11px] font-bold text-amber-700">
+                          {t(`customerTier.${selectedCustomer.tier || "SILVER"}`)} - {formatNumber(selectedCustomer.points)} {t("customers.points")}
+                        </p>
+                      ) : null}
                     </div>
-                    {appliedPromotionCode ? (
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.paymentMethod")}</p>
+                      <p className="truncate font-bold text-slate-800">{t(`paymentMethod.${paymentMethod}`)}</p>
+                    </div>
+                    <div className="space-y-2 border-t border-slate-200 pt-3">
                       <div className="flex justify-between gap-4">
-                        <span className="text-emerald-600 font-medium">Voucher ({appliedPromotionCode})</span>
-                        <span className="font-bold text-emerald-700">-{formatCurrency(discountAmount)}</span>
+                        <span className="text-slate-500">{t("pos.subtotal")}</span>
+                        <span className="font-bold text-slate-800">{formatCurrency(subtotal)}</span>
                       </div>
-                    ) : null}
-                    {!appliedPromotionCode && discountAmount > 0 ? (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-amber-600 font-medium">{t("pos.manualDiscount")}</span>
-                        <span className="font-bold text-amber-700">-{formatCurrency(discountAmount)}</span>
+                      {appliedPromotionCode ? (
+                        <div className="flex justify-between gap-4">
+                          <span className="text-emerald-600 font-medium">Voucher ({appliedPromotionCode})</span>
+                          <span className="font-bold text-emerald-700">-{formatCurrency(discountAmount)}</span>
+                        </div>
+                      ) : null}
+                      {!appliedPromotionCode && discountAmount > 0 ? (
+                        <div className="flex justify-between gap-4">
+                          <span className="text-amber-600 font-medium">{t("pos.manualDiscount")}</span>
+                          <span className="font-bold text-amber-700">-{formatCurrency(discountAmount)}</span>
+                        </div>
+                      ) : null}
+                      <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 text-base">
+                        <span className="font-black text-slate-900">{t("pos.totalPayable")}</span>
+                        <span className="font-black text-primary">{formatCurrency(totalPayable)}</span>
                       </div>
-                    ) : null}
-                    <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 text-base">
-                      <span className="font-black text-slate-900">{t("pos.totalPayable")}</span>
-                      <span className="font-black text-primary">{formatCurrency(totalPayable)}</span>
                     </div>
                   </div>
                 </div>
-              </div>
+              ) : null}
 
               {checkoutStep === "cash" ? (
                 <div className="grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-2">
@@ -1641,64 +1795,223 @@ export default function PosPage() {
               ) : null}
 
               {checkoutStep === "qr" ? (
-                <div className="grid gap-4 rounded-xl border bg-slate-50 p-4 md:grid-cols-[180px_minmax(0,1fr)]">
-                  <div className="mx-auto rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-                    <QRCodeSVG value={transferQrValue} size={150} />
-                  </div>
-                  <div className="min-w-0 space-y-3 text-sm">
-                    {!isBankConfigured ? (
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
-                        {t("pos.bankNotConfigured")}
-                        {user?.role === "ADMIN" ? (
-                          <Button type="button" variant="outline" size="sm" className="mt-2 w-full" onClick={() => router.push("/settings")}>
-                            {t("settings.title")}
-                          </Button>
-                        ) : null}
+                <div className="flex flex-col min-h-0">
+                  {/* Body with 2 columns */}
+                  <div className="grid grid-cols-1 md:grid-cols-[40%_60%] lg:grid-cols-[45%_55%] min-h-[480px]">
+                    
+                    {/* Left Column: QR Area */}
+                    <div className="bg-slate-50/80 p-8 flex flex-col items-center justify-between border-r border-slate-100 min-h-[450px]">
+                      <div className="w-full text-center md:text-left space-y-2">
+                        {/* Title & Subtitle */}
+                        <div className="flex items-center gap-2 justify-center md:justify-start">
+                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                            <QrCode className="h-4 w-4" />
+                          </div>
+                          <h3 className="text-base font-black tracking-tight text-slate-800 uppercase">
+                            {t("pos.qrPaymentTitle")}
+                          </h3>
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium pl-0 md:pl-9">
+                          {t("pos.qrPaymentDescriptionShort")}
+                        </p>
                       </div>
-                    ) : null}
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.beneficiary")}</p>
-                      <p className="truncate font-black text-slate-800">{setting?.bankAccountName || "-"}</p>
-                      <p className="truncate font-semibold text-slate-600">{setting?.bankName || "-"} - {setting?.bankAccountNumber || "-"}</p>
+
+                      {/* QR Frame Container */}
+                      <div className="relative my-3 flex items-center justify-center bg-white p-2 rounded-2xl border border-slate-100 shadow-sm w-[280px] h-[280px]">
+                        {/* Scanner Corners [ ] */}
+                        <div className="absolute top-2 left-2 w-6 h-6 border-t-2 border-l-2 border-blue-600 rounded-tl z-10"></div>
+                        <div className="absolute top-2 right-2 w-6 h-6 border-t-2 border-r-2 border-blue-600 rounded-tr z-10"></div>
+                        <div className="absolute bottom-2 left-2 w-6 h-6 border-b-2 border-l-2 border-blue-600 rounded-bl z-10"></div>
+                        <div className="absolute bottom-2 right-2 w-6 h-6 border-b-2 border-r-2 border-blue-600 rounded-br z-10"></div>
+
+                        {/* Loading Skeleton / Spinner */}
+                        {isQrLoading ? (
+                          <div className="absolute inset-2 flex flex-col items-center justify-center bg-slate-50/50 rounded-xl animate-pulse space-y-2 z-0">
+                            <div className="h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent animate-spin"></div>
+                            <span className="text-[10px] font-bold text-slate-400">{t("pos.qrLoading")}</span>
+                          </div>
+                        ) : null}
+
+                        {/* QR Code IMG */}
+                        <img
+                          src={generateVietQRUrl()}
+                          alt="VietQR Payment Code"
+                          className={cn("w-[264px] h-[264px] object-contain transition-opacity duration-300 z-0", isQrLoading ? "opacity-0" : "opacity-100")}
+                          onLoad={() => setIsQrLoading(false)}
+                        />
+                      </div>
+
+                      {/* Bottom scan label */}
+                      <div className="text-center space-y-3">
+                        <p className="text-[11px] text-slate-400 font-bold tracking-wide flex items-center justify-center gap-1">
+                          <span className="inline-block animate-pulse w-2.5 h-2.5 rounded-full bg-blue-500"></span>
+                          {t("pos.scanToPay")}
+                        </p>
+                        <span className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50/50 px-3 py-1 text-[10px] font-black uppercase text-blue-600 tracking-wider">
+                          <Check className="h-3 w-3" /> NAPAS 247
+                        </span>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.transferContent")}</p>
-                      <p className="truncate font-black text-primary">{transferContent}</p>
+
+                    {/* Right Column: Info Area */}
+                    <div className="p-8 flex flex-col justify-between space-y-6 bg-white min-h-[450px]">
+                      {/* Close button space placeholder */}
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600 font-black text-xs shrink-0">
+                            {setting?.bankName?.substring(0, 2).toUpperCase() || "NH"}
+                          </div>
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t("pos.beneficiaryBank")}</p>
+                            <p className="text-xs font-black text-slate-700">
+                              {setting?.bankName || t("pos.bankNotConfiguredShort")}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Transfer info boxes */}
+                      <div className="space-y-3 flex-1 justify-center flex flex-col">
+                        {[
+                          {
+                            id: "bankAccountNumber",
+                            icon: CreditCard,
+                            title: t("pos.bankAccountNumber"),
+                            value: setting?.bankAccountNumber || "-",
+                            copyValue: setting?.bankAccountNumber || "",
+                          },
+                          {
+                            id: "bankAccountName",
+                            icon: User,
+                            title: t("pos.bankAccountName"),
+                            value: setting?.bankAccountName || "-",
+                            copyValue: setting?.bankAccountName || "",
+                          },
+                          {
+                            id: "amount",
+                            icon: Coins,
+                            title: t("pos.paymentAmount"),
+                            value: formatCurrency(totalPayable),
+                            copyValue: String(totalPayable),
+                          },
+                          {
+                            id: "content",
+                            icon: FileText,
+                            title: t("pos.transferMemo"),
+                            value: transferContent,
+                            copyValue: transferContent,
+                            highlight: true,
+                          },
+                        ].map((box) => {
+                          const BoxIcon = box.icon;
+                          return (
+                            <div
+                              key={box.id}
+                              className={cn(
+                                "flex items-center justify-between rounded-xl border p-3.5 transition-all",
+                                box.highlight
+                                  ? "bg-orange-50/80 border-orange-200 shadow-sm"
+                                  : "bg-slate-50/50 border-slate-100 hover:bg-slate-50 hover:border-slate-200"
+                              )}
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className={cn(
+                                  "flex h-9 w-9 items-center justify-center rounded-lg shrink-0",
+                                  box.highlight ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
+                                )}>
+                                  <BoxIcon className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{box.title}</p>
+                                  <p className={cn(
+                                    "font-black tracking-tight truncate",
+                                    box.highlight ? "text-orange-700 text-sm" : "text-slate-800 text-xs"
+                                  )}>
+                                    {box.value}
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(box.copyValue);
+                                  toast.success(t("pos.copiedField", { field: box.title.toLowerCase() }));
+                                }}
+                                className={cn(
+                                  "h-8 w-8 hover:bg-slate-100 rounded-lg cursor-pointer",
+                                  box.highlight ? "hover:bg-orange-100 text-orange-600" : "text-slate-400 hover:text-slate-600"
+                                )}
+                                title={t("common.copyField", { field: box.title })}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Warning/Alert */}
+                      <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-3 flex items-start gap-2.5">
+                        <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                        <p className="text-[11px] font-semibold text-blue-700 leading-normal">
+                          {t("pos.transferMemoWarning")}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("orders.total")}</p>
-                      <p className="text-xl font-black text-slate-900">{formatCurrency(totalPayable)}</p>
-                    </div>
+                  </div>
+
+                  {/* Footer (Action buttons) */}
+                  <div className="border-t border-slate-100 p-4 bg-white flex flex-col sm:flex-row gap-3 rounded-b-2xl">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-12 px-6 flex items-center justify-center gap-2 text-xs font-bold text-slate-600 border-slate-200 hover:bg-slate-50 rounded-xl"
+                      onClick={() => setCheckoutStep("confirm")}
+                      disabled={isSubmitting}
+                    >
+                      <ArrowLeft className="h-4 w-4" /> {t("common.back")}
+                    </Button>
+                    <Button
+                      type="submit"
+                      className="h-12 flex-1 bg-teal-700 hover:bg-teal-800 text-white rounded-xl shadow-md transition duration-200 cursor-pointer flex flex-col items-center justify-center relative py-1"
+                      disabled={isSubmitting}
+                    >
+                      <span className="font-bold text-sm">{t("pos.confirmReceivedTransfer")}</span>
+                      <span className="text-[9px] font-medium opacity-80 mt-0.5">{t("pos.f9ConfirmHint")}</span>
+                    </Button>
                   </div>
                 </div>
               ) : null}
 
-              <div className="grid gap-2 sm:grid-cols-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    if (checkoutStep === "confirm") {
-                      setIsCheckoutDialogOpen(false);
-                    } else {
-                      setCheckoutStep("confirm");
-                    }
-                  }}
-                  disabled={isSubmitting}
-                >
-                  {checkoutStep === "confirm" ? t("common.cancel") : t("common.back")}
-                </Button>
-                <Button type="submit" size="lg" className="w-full text-base font-semibold" disabled={isSubmitting || (checkoutStep === "cash" && isCashPaymentInvalid)}>
-                  {checkoutStep === "confirm"
-                    ? paymentMethod === "CASH"
-                      ? t("pos.continueToCash")
-                      : t("pos.continueToQr")
-                    : checkoutStep === "qr"
-                      ? t("pos.confirmReceivedTransfer")
+              {checkoutStep !== "qr" ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      if (checkoutStep === "confirm") {
+                        setIsCheckoutDialogOpen(false);
+                      } else {
+                        setCheckoutStep("confirm");
+                      }
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    {checkoutStep === "confirm" ? t("common.cancel") : t("common.back")}
+                  </Button>
+                  <Button type="submit" size="lg" className="w-full text-base font-semibold" disabled={isSubmitting || (checkoutStep === "cash" && isCashPaymentInvalid)}>
+                    {checkoutStep === "confirm"
+                      ? paymentMethod === "CASH"
+                        ? t("pos.continueToCash")
+                        : t("pos.continueToQr")
                       : t("pos.confirmPayment")}
-                </Button>
-              </div>
+                  </Button>
+                </div>
+              ) : null}
             </form>
           </DialogContent>
         </Dialog>
@@ -1767,10 +2080,10 @@ export default function PosPage() {
                 <Smartphone className="h-6 w-6" />
               </div>
               <DialogTitle className="text-lg font-extrabold uppercase tracking-wide text-white">
-                {t("barcode.connectPhoneScanner") || "KẾT NỐI MÁY QUÉT ĐIỆN THOẠI"}
+                {t("barcode.connectPhoneScanner")}
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-400 max-w-xs text-center leading-relaxed">
-                Biến điện thoại của bạn thành máy quét mã vạch từ xa bằng cách quét mã QR bên dưới.
+                {t("barcode.remoteScannerDescription")}
               </DialogDescription>
             </DialogHeader>
 
@@ -1778,13 +2091,13 @@ export default function PosPage() {
               {/* Pairing Code */}
               <div className="text-center">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">
-                  {t("barcode.pairingCode") || "MÃ GHÉP ĐÔI"}
+                  {t("barcode.pairingCode")}
                 </span>
                 <span className="text-3xl font-black text-blue-400 tracking-[0.2em] font-mono select-all">
                   {sessionId}
                 </span>
                 <Button type="button" size="sm" variant="outline" onClick={handleResetRemoteScanSession} className="mt-3 h-8 rounded-xl border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700">
-                  Tạo mã mới
+                  {t("barcode.newPairingCode")}
                 </Button>
               </div>
 
@@ -1808,12 +2121,12 @@ export default function PosPage() {
                   {isCopied ? (
                     <>
                       <Check className="h-3.5 w-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">Copied</span>
+                      <span className="text-emerald-400">{t("common.copied")}</span>
                     </>
                   ) : (
                     <>
                       <Copy className="h-3.5 w-3.5" />
-                      <span>{t("barcode.copyScanLink") || "Sao chép"}</span>
+                      <span>{t("barcode.copyScanLink")}</span>
                     </>
                   )}
                 </Button>
@@ -1823,15 +2136,15 @@ export default function PosPage() {
             {/* Instruction Help & Polling Status */}
             <div className="space-y-4 pt-4 border-t border-slate-800/80">
               <div className="text-[11px] text-slate-400 leading-relaxed space-y-1">
-                <p>1. Dùng camera điện thoại hoặc Zalo để quét mã QR bên trên.</p>
-                <p>2. Cho phép trình duyệt truy cập Camera trên điện thoại.</p>
-                <p>3. Di chuyển camera đưa mã vạch của sản phẩm vào tiêu cự.</p>
-                <p>4. Sản phẩm sẽ tự động được thêm vào giỏ hàng tại đây.</p>
+                <p>{t("barcode.remoteInstruction1")}</p>
+                <p>{t("barcode.remoteInstruction2")}</p>
+                <p>{t("barcode.remoteInstruction3")}</p>
+                <p>{t("barcode.remoteInstruction4")}</p>
               </div>
 
               <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-300">
                 <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></span>
-                <span>{t("barcode.waitingForScan") || "Đang chờ điện thoại quét..."}</span>
+                <span>{t("barcode.waitingForScan")}</span>
               </div>
             </div>
           </DialogContent>

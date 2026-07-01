@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin", "vietnamese"], variable: "--font-inter"
 
 export const metadata: Metadata = {
   title: "Homex POS",
-  description: "Website POS quản lý bán hàng cho cửa hàng đồ gia dụng Homex",
+  description: "Homex POS sales management system for home appliance stores",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -19,3 +19,4 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     </html>
   );
 }
+

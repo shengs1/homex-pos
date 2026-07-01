@@ -161,6 +161,7 @@ type CashierQuickCardProps = {
 
 function CashierQuickCard({ title, description, href, icon: Icon, badge }: CashierQuickCardProps) {
   const router = useRouter();
+  const { t } = useLanguage();
 
   return (
     <button
@@ -181,7 +182,7 @@ function CashierQuickCard({ title, description, href, icon: Icon, badge }: Cashi
         <p className="min-h-12 text-sm leading-6 text-muted-foreground">{description}</p>
       </div>
       <div className="mt-6 flex items-center gap-2 text-sm font-semibold text-primary">
-        <span>Mở nhanh</span>
+        <span>{t("dashboard.quickOpen")}</span>
         <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
       </div>
     </button>
@@ -417,36 +418,19 @@ export default function DashboardPage() {
 
   const range = useMemo(() => chartDateRange(), []);
 
-  const cashierText = useMemo(() => {
-    if (language === "en") {
-      return {
-        title: "Cashier Dashboard",
-        description: "Quick access to the daily cashier workflow: sell, track orders, and look up warranties.",
-        posTitle: "POS - Ready to sell",
-        posDescription: "Open the sales counter, search products, add to cart, create drafts, and complete checkout.",
-        ordersTitle: "Orders - Track transactions",
-        ordersDescription: "Review recent orders, continue draft orders, and check transaction status.",
-        warrantiesTitle: "Warranty - Quick lookup",
-        warrantiesDescription: "Search warranty codes and view warranty details for customers at the counter.",
-        quick: "Quick",
-        daily: "Daily",
-        lookup: "Lookup",
-      };
-    }
-    return {
-      title: "Dashboard thu ngân",
-      description: "Truy cập nhanh các nghiệp vụ hằng ngày của thu ngân: bán hàng, theo dõi đơn và tra cứu bảo hành.",
-      posTitle: "POS - Sẵn sàng bán hàng",
-      posDescription: "Mở quầy bán hàng, tìm sản phẩm, thêm vào giỏ, tạo bản nháp và hoàn tất thanh toán.",
-      ordersTitle: "Đơn hàng - Theo dõi giao dịch",
-      ordersDescription: "Xem đơn hàng mới, tiếp tục đơn nháp và kiểm tra trạng thái giao dịch của khách.",
-      warrantiesTitle: "Bảo hành - Tra cứu nhanh",
-      warrantiesDescription: "Tra cứu mã bảo hành và xem thông tin bảo hành cho khách ngay tại quầy.",
-      quick: "Nhanh",
-      daily: "Hằng ngày",
-      lookup: "Tra cứu",
-    };
-  }, [language]);
+  const cashierText = useMemo(() => ({
+    title: t("dashboard.cashierTitle"),
+    description: t("dashboard.cashierDescription"),
+    posTitle: t("dashboard.cashierPosTitle"),
+    posDescription: t("dashboard.cashierPosDescription"),
+    ordersTitle: t("dashboard.cashierOrdersTitle"),
+    ordersDescription: t("dashboard.cashierOrdersDescription"),
+    warrantiesTitle: t("dashboard.cashierWarrantiesTitle"),
+    warrantiesDescription: t("dashboard.cashierWarrantiesDescription"),
+    quick: t("dashboard.quick"),
+    daily: t("dashboard.daily"),
+    lookup: t("dashboard.lookup"),
+  }), [t]);
 
   useEffect(() => {
     if (user?.role !== "ADMIN") return;
@@ -541,7 +525,7 @@ export default function DashboardPage() {
   // ─── ADMIN Dashboard ───
   return (
     <div className="min-w-0 space-y-4">
-      <PageHeader title={t("dashboard.adminTitle") || "Tổng quan quản trị"} description={t("dashboard.adminDescription") || "Báo cáo tổng hợp số liệu kinh doanh hôm nay"} />
+      <PageHeader title={t("dashboard.adminTitle")} description={t("dashboard.adminDescription")} />
 
       {errorMessage ? <ErrorState message={errorMessage} /> : null}
 
@@ -606,8 +590,8 @@ export default function DashboardPage() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-sm font-extrabold uppercase text-slate-900 tracking-wide">{t("dashboard.revenue7Days")}</h2>
             <select className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 outline-none focus:border-primary focus:ring-1 focus:ring-primary">
-              <option value="7days">7 ngày qua</option>
-              <option value="30days">30 ngày qua</option>
+              <option value="7days">{t("dashboard.last7DaysOption")}</option>
+              <option value="30days">{t("dashboard.last30DaysOption")}</option>
             </select>
           </div>
           <div className="min-h-[260px] flex-1">
@@ -676,7 +660,7 @@ export default function DashboardPage() {
                             {category.name}
                           </p>
                           <p className="mt-0.5 text-xs text-slate-500">
-                            {t("dashboard.sold")}: {formatNumber(totalQty)} món
+                            {t("dashboard.sold")}: {formatNumber(totalQty)} {t("dashboard.itemsUnit")}
                           </p>
                         </div>
                         <MoneyText value={totalRev} size="sm" />
@@ -765,3 +749,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+

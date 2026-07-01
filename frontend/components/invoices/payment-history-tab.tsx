@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { getApiErrorMessage } from "@/lib/api";
+import { confirmAction } from "@/lib/confirm-action";
 import { formatCurrency } from "@/lib/format";
 import { paymentService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
@@ -147,11 +148,11 @@ export function PaymentHistoryTab() {
     }
 
     const fallbackLabels: Record<string, string> = {
-      CASH: language === "en" ? "Cash" : "Tiền mặt",
-      TRANSFER: language === "en" ? "Bank Transfer" : "Chuyển khoản ngân hàng",
-      BANK_TRANSFER: language === "en" ? "Bank Transfer" : "Chuyển khoản ngân hàng",
-      CARD: language === "en" ? "Card Swipe" : "Quẹt thẻ",
-      WALLET: language === "en" ? "E-Wallet" : "Ví điện tử",
+      CASH: "Cash",
+      TRANSFER: "Bank Transfer",
+      BANK_TRANSFER: "Bank Transfer",
+      CARD: "Card Swipe",
+      WALLET: "E-Wallet",
     };
 
     return fallbackLabels[methodValue] || methodValue;
@@ -165,10 +166,10 @@ export function PaymentHistoryTab() {
     }
 
     const fallbackLabels: Record<string, string> = {
-      PAID: language === "en" ? "Paid" : "Đã thanh toán",
-      PENDING: language === "en" ? "Pending" : "Chờ xử lý",
-      REFUNDED: language === "en" ? "Refunded" : "Hoàn tiền",
-      FAILED: language === "en" ? "Failed" : "Thất bại",
+      PAID: "Paid",
+      PENDING: "Pending",
+      REFUNDED: "Refunded",
+      FAILED: "Failed",
     };
 
     return fallbackLabels[statusValue] || statusValue;
@@ -218,7 +219,7 @@ export function PaymentHistoryTab() {
   }
 
   async function handleRefund(payment: Payment) {
-    const confirmed = window.confirm(t("payments.refundConfirm", { code: getPaymentTransactionCode(payment) }));
+    const confirmed = await confirmAction({ description: t("payments.refundConfirm", { code: getPaymentTransactionCode(payment) }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel"), destructive: true });
     if (!confirmed) return;
 
     try {
@@ -442,5 +443,6 @@ export function PaymentHistoryTab() {
     </RoleGuard>
   );
 }
+
 
 

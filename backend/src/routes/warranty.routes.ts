@@ -15,6 +15,7 @@ import {
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
 import { createAuditLog } from "../utils/audit";
+import { sendWarrantyEmail } from "../services/email.service";
 
 const router = Router();
 
@@ -299,6 +300,67 @@ router.get(
         customerPhone: order.customer?.phone || null,
         items,
       },
+    });
+  })
+);
+
+// GET /api/warranties/lookup (Public lookup endpoint)
+router.get(
+  "/lookup",
+  catchAsync(async (req, res) => {
+    const code = String(req.query.code || "").trim();
+    const phone = String(req.query.phone || "").trim();
+
+    if (!code && !phone) {
+      throw new AppError("Vui lòng nhập mã bảo hành hoặc số điện thoại", 400);
+    }
+
+    let warranties: any[] = [];
+
+    if (code) {
+      const warranty = await prisma.warranty.findFirst({
+        where: {
+          warrantyCode: {
+            equals: code,
+            mode: "insensitive",
+          },
+        },
+        include: warrantyInclude,
+      });
+
+      if (warranty) {
+        warranties.push(warranty);
+      }
+    } else if (phone) {
+      const customer = await prisma.customer.findFirst({
+        where: {
+          phone: {
+            equals: phone,
+          },
+        },
+      });
+
+      if (customer) {
+        warranties = await prisma.warranty.findMany({
+          where: {
+            customerId: customer.id,
+          },
+          include: warrantyInclude,
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
+      }
+    }
+
+    if (warranties.length === 0) {
+      throw new AppError("Không tìm thấy thông tin bảo hành khớp với dữ liệu tra cứu", 404);
+    }
+
+    return res.json({
+      success: true,
+      message: "Tra cứu bảo hành thành công",
+      data: warranties.map(formatWarranty),
     });
   })
 );
@@ -851,6 +913,70 @@ router.patch(
       success: true,
       message: "Cập nhật ghi chú bảo hành thành công",
       data: formatWarranty(warranty),
+    });
+  })
+);
+
+// POST /api/warranties/:id/send-email
+router.post(
+  "/:id/send-email",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const warrantyId = getWarrantyId(String(req.params.id));
+
+    const warranty = await prisma.warranty.findUnique({
+      where: { id: warrantyId },
+      include: warrantyInclude,
+    });
+
+    if (!warranty) {
+      throw new AppError("Không tìm thấy phiếu bảo hành", 404);
+    }
+
+    if (!warranty.customer) {
+      throw new AppError("Phiếu bảo hành này không có thông tin khách hàng", 400);
+    }
+
+    if (!warranty.customer.email) {
+      throw new AppError("Khách hàng của phiếu bảo hành này chưa đăng ký địa chỉ email", 400);
+    }
+
+    const setting = await prisma.setting.findFirst();
+    if (!setting) {
+      throw new AppError("Chưa có cấu hình hệ thống", 400);
+    }
+
+    const domain = process.env.FRONTEND_URL || "http://localhost:3000";
+    const trackingLink = `${domain}/tra-cuu-bao-hanh?code=${warranty.warrantyCode}`;
+
+    const formattedEndDate = new Date(warranty.endDate).toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+    await sendWarrantyEmail(setting as any, {
+      customerName: warranty.customer.fullName,
+      customerPhone: warranty.customer.phone,
+      customerEmail: warranty.customer.email,
+      productName: warranty.orderDetail?.product?.name || "Sản phẩm",
+      warrantyCode: warranty.warrantyCode,
+      endDate: formattedEndDate,
+      trackingLink,
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "WARRANTY_SEND_EMAIL",
+      entityType: "WARRANTY",
+      entityId: warranty.id,
+      metadata: { to: warranty.customer.email },
+    });
+
+    return res.json({
+      success: true,
+      message: "Gửi email thông báo bảo hành thành công",
     });
   })
 );

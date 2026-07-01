@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { displayDateToIsoDate, isoDateToDisplayDate } from "@/lib/date-format";
+import { useLanguage } from "@/contexts/language-context";
 
 type DateFilterInputProps = {
   label: string;
@@ -26,6 +27,7 @@ export function DateFilterInput({
   placeholder = "dd/mm/yyyy",
   prefixLabel,
 }: DateFilterInputProps) {
+  const { t } = useLanguage();
   const nativeDateInputRef = useRef<HTMLInputElement | null>(null);
   const [displayValue, setDisplayValue] = useState(isoDateToDisplayDate(value));
   const [isInvalid, setIsInvalid] = useState(false);
@@ -98,7 +100,7 @@ export function DateFilterInput({
           />
           <button
             type="button"
-            aria-label="Mở lịch chọn ngày"
+            aria-label={t("dateFilter.openCalendar")}
             onClick={openNativeDatePicker}
             className="flex h-full items-center justify-center text-muted-foreground hover:text-foreground focus:outline-none"
           >
@@ -119,9 +121,10 @@ export function DateFilterInput({
 
       {isInvalid ? (
         <p className="absolute left-0 -bottom-5 z-10 whitespace-nowrap text-xs text-red-500">
-          Vui lòng nhập ngày theo định dạng dd/mm/yyyy.
+          {t("dateFilter.invalidFormat")}
         </p>
       ) : null}
     </div>
   );
 }
+

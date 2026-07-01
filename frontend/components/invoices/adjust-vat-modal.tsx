@@ -52,11 +52,11 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
     if (!item) return;
 
     if (!companyName.trim()) {
-      toast.error(t("vat.companyNameRequired") || "Tên công ty không được để trống");
+      toast.error(t("vat.companyNameRequired"));
       return;
     }
     if (!taxCode.trim()) {
-      toast.error(t("vat.taxCodeRequired") || "Mã số thuế không được để trống");
+      toast.error(t("vat.taxCodeRequired"));
       return;
     }
 
@@ -73,7 +73,7 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
         status,
       });
 
-      toast.success(t("common.saveSuccess") || "Lưu cài đặt thành công");
+      toast.success(t("common.saveSuccess"));
       onSuccess();
       onClose();
     } catch (error) {
@@ -88,7 +88,7 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
       <DialogContent className="max-w-lg rounded-2xl p-6">
         <DialogHeader className="relative pb-4 border-b">
           <DialogTitle className="text-lg font-bold text-slate-800">
-            Điều chỉnh yêu cầu VAT #{item?.id}
+            {t("vat.adjustTitle", { id: item?.id || "" })}
           </DialogTitle>
           <button
             onClick={onClose}
@@ -101,7 +101,7 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Mã số thuế</Label>
+              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t("vat.taxCode")}</Label>
               <Input
                 className="h-10 border-slate-200 text-sm text-slate-800"
                 value={taxCode}
@@ -110,21 +110,21 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Trạng thái</Label>
+              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t("vat.status")}</Label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as any)}
                 className="flex h-10 w-full rounded-md border border-slate-200 bg-background px-3 py-2 text-sm text-slate-800 outline-none focus:ring-1 focus:ring-teal-500"
               >
-                <option value="PENDING">Chờ duyệt</option>
-                <option value="APPROVED">Đã duyệt</option>
-                <option value="REJECTED">Bị từ chối</option>
+                <option value="PENDING">{t("status.PENDING")}</option>
+                <option value="APPROVED">{t("status.APPROVED")}</option>
+                <option value="REJECTED">{t("status.REJECTED")}</option>
               </select>
             </div>
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Tên công ty</Label>
+            <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t("vat.companyName")}</Label>
             <Input
               className="h-10 border-slate-200 text-sm text-slate-800"
               value={companyName}
@@ -134,7 +134,7 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Địa chỉ công ty</Label>
+            <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t("vat.companyAddress")}</Label>
             <Input
               className="h-10 border-slate-200 text-sm text-slate-800"
               value={companyAddress}
@@ -144,7 +144,7 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Email nhận hóa đơn</Label>
+              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t("vat.buyerEmail")}</Label>
               <Input
                 type="email"
                 className="h-10 border-slate-200 text-sm text-slate-800"
@@ -153,12 +153,12 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Mã hóa đơn đỏ</Label>
+              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t("vat.redInvoiceCode")}</Label>
               <Input
                 className="h-10 border-slate-200 text-sm text-slate-800"
                 value={redInvoiceCode}
                 onChange={(e) => setRedInvoiceCode(e.target.value)}
-                placeholder="Nhập mã hóa đơn đỏ..."
+                placeholder={t("vat.redInvoiceCodeInputPlaceholder")}
                 disabled={status !== "APPROVED"}
               />
             </div>
@@ -166,7 +166,7 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Ghi chú của khách</Label>
+              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t("vat.customerNote")}</Label>
               <Textarea
                 className="min-h-[60px] border-slate-200 text-sm text-slate-800 resize-none"
                 value={note}
@@ -174,7 +174,7 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
               />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Ghi chú của admin</Label>
+              <Label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{t("vat.adminNote")}</Label>
               <Textarea
                 className="min-h-[60px] border-slate-200 text-sm text-slate-800 resize-none"
                 value={adminNote}
@@ -190,7 +190,7 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
               onClick={onClose}
               className="h-10 px-4 text-sm font-medium"
             >
-              Hủy
+              {t("common.cancel")}
             </Button>
             <Button
               type="submit"
@@ -200,10 +200,10 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Đang lưu...
+                  {t("common.saving")}
                 </>
               ) : (
-                "Lưu thay đổi"
+                t("vat.saveChanges")
               )}
             </Button>
           </div>
@@ -212,3 +212,5 @@ export function AdjustVatModal({ isOpen, onClose, onSuccess, item }: AdjustVatMo
     </Dialog>
   );
 }
+
+

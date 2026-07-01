@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useLanguage } from "@/contexts/language-context";
 import { getApiErrorMessage } from "@/lib/api";
+import { confirmAction } from "@/lib/confirm-action";
 import { formatCurrency, formatDateTime, formatMoneyInputValue, parseMoneyInput } from "@/lib/format";
 import { productService, purchaseOrderService, supplierService, inventoryService } from "@/services/homex.service";
 import type { Pagination } from "@/types/api";
@@ -34,13 +35,7 @@ import type { Product, PurchaseOrder, Supplier, StockTransaction } from "@/types
 
 const PAGE_SIZE = 10;
 
-const formSchema = z.object({
-  name: z.string().trim().min(1, "Tên không được để trống"),
-  phone: z.string().trim().min(1, "SĐT không được để trống"),
-  email: z.string().trim().email("Email không hợp lệ").optional().or(z.literal("")),
-  address: z.string().trim().optional(),
-});
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = { name: string; phone: string; email?: string; address?: string };
 
 type DraftItem = {
   productId: number;
@@ -86,6 +81,7 @@ export default function SuppliersPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
+  const formSchema = useMemo(() => z.object({ name: z.string().trim().min(1, t("suppliers.nameRequired")), phone: z.string().trim().min(1, t("suppliers.phoneRequired")), email: z.string().trim().email(t("suppliers.emailInvalid")).optional().or(z.literal("")), address: z.string().trim().optional() }), [t]);
   const form = useForm<FormValues>({ resolver: zodResolver(formSchema), defaultValues: { name: "", phone: "", email: "", address: "" } });
   const totalDraftAmount = useMemo(() => draftItems.reduce((sum, item) => sum + item.quantity * item.unitCost, 0), [draftItems]);
 
@@ -159,8 +155,8 @@ export default function SuppliersPage() {
     } catch (error) { setErrorMessage(getApiErrorMessage(error)); }
   }
 
-  async function handleDelete(item: Supplier) { if (!window.confirm(t("suppliers.deleteConfirm", { name: item.name }))) return; try { await supplierService.remove(item.id); setSuccessMessage(t("message.deleted")); await Promise.all([loadData(page), loadOptions()]); } catch (error) { setErrorMessage(getApiErrorMessage(error)); } }
-  async function handleRestore(item: Supplier) { if (!window.confirm(t("suppliers.restoreConfirm", { name: item.name }))) return; try { await supplierService.restore(item.id); setSuccessMessage(t("message.restored")); await Promise.all([loadData(page), loadOptions()]); } catch (error) { setErrorMessage(getApiErrorMessage(error)); } }
+  async function handleDelete(item: Supplier) { if (!(await confirmAction({ description: t("suppliers.deleteConfirm", { name: item.name }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel"), destructive: true }))) return; try { await supplierService.remove(item.id); setSuccessMessage(t("message.deleted")); await Promise.all([loadData(page), loadOptions()]); } catch (error) { setErrorMessage(getApiErrorMessage(error)); } }
+  async function handleRestore(item: Supplier) { if (!(await confirmAction({ description: t("suppliers.restoreConfirm", { name: item.name }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel") }))) return; try { await supplierService.restore(item.id); setSuccessMessage(t("message.restored")); await Promise.all([loadData(page), loadOptions()]); } catch (error) { setErrorMessage(getApiErrorMessage(error)); } }
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) { event.preventDefault(); setPage(1); loadData(1); }
 
   // Draft items functions
@@ -209,24 +205,24 @@ export default function SuppliersPage() {
           <TabsContent value="list" className="space-y-6">
             <div className="grid gap-4 md:grid-cols-4">
               <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-                <div className="text-sm font-medium text-slate-500">Tổng nhà cung cấp</div>
+                <div className="text-sm font-medium text-slate-500">{t("suppliers.totalSuppliers")}</div>
                 <div className="mt-1 text-2xl font-bold text-slate-900">{pagination?.totalItems || items.length}</div>
-                <p className="mt-1 text-xs font-medium text-slate-500">Tổng đối tác cung ứng hàng hóa</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.totalSuppliersDesc")}</p>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-                <div className="text-sm font-medium text-slate-500">Hoạt động</div>
+                <div className="text-sm font-medium text-slate-500">{t("suppliers.active")}</div>
                 <div className="mt-1 text-2xl font-bold text-emerald-600">{allSuppliers.length}</div>
-                <p className="mt-1 text-xs font-medium text-slate-500">Nhà cung cấp đang hoạt động</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.activeSuppliersDesc")}</p>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-                <div className="text-sm font-medium text-slate-500">Tổng giá trị nhập</div>
+                <div className="text-sm font-medium text-slate-500">{t("suppliers.totalPurchaseValue")}</div>
                 <div className="mt-1 text-2xl font-bold text-amber-600">{formatCurrency(allPurchaseOrders.reduce((sum, po) => sum + Number(po.totalAmount), 0))}</div>
-                <p className="mt-1 text-xs font-medium text-slate-500">Tổng tiền hàng đã nhập</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.totalPurchaseValueDesc")}</p>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-                <div className="text-sm font-medium text-slate-500">Tổng phiếu nhập</div>
+                <div className="text-sm font-medium text-slate-500">{t("suppliers.totalPurchaseOrders")}</div>
                 <div className="mt-1 text-2xl font-bold text-blue-600">{allPurchaseOrders.length}</div>
-                <p className="mt-1 text-xs font-medium text-slate-500">Tổng số phiếu nhập kho</p>
+                <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.totalPurchaseOrdersDesc")}</p>
               </div>
             </div>
 

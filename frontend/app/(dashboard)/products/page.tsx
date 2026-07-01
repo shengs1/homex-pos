@@ -25,6 +25,7 @@ import { useLanguage } from "@/contexts/language-context";
 import { useToast } from "@/contexts/toast-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getApiErrorMessage } from "@/lib/api";
+import { confirmAction } from "@/lib/confirm-action";
 import { buildDemoProductPayloads, parseProductImportFileContent, resolveRealProductImageFromProductName, REAL_PRODUCT_FALLBACK_IMAGE } from "@/lib/demo-products";
 import { compactProductPrice, formatCurrency, formatMoneyInputValue, formatNumber, formatDateTime, parseMoneyInput } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -33,14 +34,15 @@ import { categoryService, posService, productService, supplierService, type Prod
 import type { Pagination } from "@/types/api";
 import type { Category, Product, Supplier } from "@/types/domain";
 
-const formSchema = z.object({
+function createFormSchema(t: (key: string) => string) {
+  return z.object({
   sku: z.string().trim().max(50).optional(),
-  name: z.string().trim().min(1, "Tên sản phẩm không được để trống").max(150),
-  description: z.string().trim().max(500, "Mô tả tối đa 500 ký tự").optional(),
-  categoryId: z.coerce.number().int().positive("Vui lòng chọn danh mục"),
-  supplierId: z.coerce.number().int().positive("Vui lòng chọn nhà cung cấp"),
-  costPrice: z.preprocess((value) => parseMoneyInput(value as string | number), z.number().min(0, "Giá nhập không được âm")),
-  salePrice: z.preprocess((value) => parseMoneyInput(value as string | number), z.number().positive("Giá bán phải lớn hơn 0")),
+  name: z.string().trim().min(1, t("products.nameRequired")).max(150),
+  description: z.string().trim().max(500, t("products.descriptionMax")).optional(),
+  categoryId: z.coerce.number().int().positive(t("products.categoryRequired")),
+  supplierId: z.coerce.number().int().positive(t("products.supplierRequired")),
+  costPrice: z.preprocess((value) => parseMoneyInput(value as string | number), z.number().min(0, t("products.costPriceMin"))),
+  salePrice: z.preprocess((value) => parseMoneyInput(value as string | number), z.number().positive(t("products.salePricePositive"))),
   originalPrice: z.preprocess((value) => parseMoneyInput(value as string | number), z.number().min(0).optional()),
   stockQuantity: z.coerce.number().int().min(0).optional(),
   minStock: z.coerce.number().int().min(0).optional(),
@@ -49,10 +51,11 @@ const formSchema = z.object({
   imageUrl: z.string().trim().optional(),
   barcode: z.string().trim().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
-});
+  });
+}
 
-type FormInput = z.input<typeof formSchema>;
-type FormValues = z.output<typeof formSchema>;
+type FormInput = z.input<ReturnType<typeof createFormSchema>>;
+type FormValues = z.output<ReturnType<typeof createFormSchema>>;
 
 type ProductActionItem = {
   label: string;
@@ -84,7 +87,7 @@ const emptyForm: FormValues = {
 const jsonStructureExample = `[
   {
     "sku": "KIT-SH-NC000001",
-    "name": "Nồi cơm điện 1.8L Homex NC000001",
+    "name": "Homex Rice Cooker 1.8L NC000001",
     "categoryId": 1,
     "supplierId": 1,
     "costPrice": 520,
@@ -98,7 +101,7 @@ const jsonStructureExample = `[
 ]`;
 
 const csvStructureExample = `sku,name,categoryId,supplierId,costPrice,salePrice,stockQuantity,minStock,warrantyMonths,imageUrl
-KIT-SH-NC000001,Nồi cơm điện 1.8L Homex NC000001,1,1,520,750,30,5,24,/assets/real-products/rice-cooker.jpg`;
+KIT-SH-NC000001,Homex Rice Cooker 1.8L NC000001,1,1,520,750,30,5,24,/assets/real-products/rice-cooker.jpg`;
 
 function sortByIdAsc<T extends { id: number }>(items: T[]) {
   return [...items].sort((a, b) => a.id - b.id);
@@ -172,6 +175,7 @@ export default function ProductsPage() {
   const remoteBarcodePollNetworkErrorShownRef = useRef(false);
   const lastRemoteBarcodeRef = useRef("");
 
+  const formSchema = useMemo(() => createFormSchema(t), [t]);
   const form = useForm<FormInput, unknown, FormValues>({resolver: zodResolver(formSchema), defaultValues: emptyForm, });
 
   const selectedIds = useMemo(() => Object.keys(rowSelection).filter((key) => rowSelection[key]).map((key) => Number(key)), [rowSelection]);
@@ -196,7 +200,7 @@ export default function ProductsPage() {
     const nextSessionId = resetRemoteBarcodeSessionId();
     setRemoteBarcodeSessionId(nextSessionId);
     setIsBarcodeLinkCopied(false);
-    toast.success("Đã tạo mã kết nối máy quét mới.");
+    toast.success(t("barcode.remoteSessionReset"));
   }
 
   const remoteBarcodeScanUrl = useMemo(() => buildMobileScanUrl(remoteBarcodeSessionId), [remoteBarcodeSessionId]);
@@ -207,10 +211,10 @@ export default function ProductsPage() {
     try {
       await navigator.clipboard.writeText(remoteBarcodeScanUrl);
       setIsBarcodeLinkCopied(true);
-      toast.success(t("barcode.scanLinkCopied") || "Đã sao chép link quét.");
+      toast.success(t("barcode.scanLinkCopied"));
       window.setTimeout(() => setIsBarcodeLinkCopied(false), 2000);
     } catch {
-      toast.error("Không thể sao chép liên kết quét.");
+      toast.error(t("barcode.copyLinkFailed"));
     }
   }
 
@@ -231,7 +235,7 @@ export default function ProductsPage() {
           if (!scannedBarcode || scannedBarcode === lastRemoteBarcodeRef.current) return;
           lastRemoteBarcodeRef.current = scannedBarcode;
           form.setValue("barcode", scannedBarcode, { shouldDirty: true, shouldValidate: true });
-          toast.success(`Đã nhận barcode: ${scannedBarcode}`);
+          toast.success(t("barcode.receivedBarcode", { barcode: scannedBarcode }));
           setRemoteBarcodeOpen(false);
           await enrichBarcode(scannedBarcode);
         }
@@ -239,7 +243,7 @@ export default function ProductsPage() {
         if (!remoteBarcodePollNetworkErrorShownRef.current) {
           remoteBarcodePollNetworkErrorShownRef.current = true;
           if (remoteBarcodeOpen) {
-            toast.error("Không kết nối được backend để nhận barcode. Hãy kiểm tra server API.");
+            toast.error(t("barcode.pollBackendFailed"));
           }
         }
       }
@@ -394,7 +398,7 @@ export default function ProductsPage() {
     setBarcodeEnrichMissingFields(data.missingFields || []);
 
     if (data.existingProductId && (!editingItem || editingItem.id !== data.existingProductId)) {
-      toast.warning("Mã vạch này đã tồn tại trong hệ thống.");
+      toast.warning(t("barcode.duplicate"));
     }
 
     if (data.barcode && !form.getValues("barcode")) {
@@ -442,7 +446,7 @@ export default function ProductsPage() {
       if (matchedCategory) {
         form.setValue("categoryId", matchedCategory.id, { shouldDirty: true, shouldValidate: true });
       } else {
-        toast.warning("Đã tra cứu thông tin nhưng chưa khớp danh mục hiện có.");
+        toast.warning(t("barcode.categoryNotMatched"));
       }
     }
 
@@ -457,37 +461,37 @@ export default function ProductsPage() {
     const hasIdentityEnrichedData = Boolean(data.name || data.category);
 
     if (!hasUsefulEnrichedData) {
-      toast.warning("Không tìm thấy dữ liệu mã vạch đáng tin cậy. Vui lòng nhập thủ công.");
+      toast.warning(t("barcode.noReliableData"));
       return;
     }
 
     if (!hasIdentityEnrichedData) {
-      toast.warning("Chỉ tìm thấy dữ liệu phụ từ mã vạch, chưa xác định được tên/danh mục sản phẩm. Vui lòng nhập thủ công.");
+      toast.warning(t("barcode.partialDataOnly"));
       return;
     }
 
     if (data.source === "DATABASE") {
-      toast.warning("Mã vạch này đã tồn tại trong hệ thống.");
+      toast.warning(t("barcode.duplicate"));
       return;
     }
 
     if (data.source === "HYBRID") {
-      toast.success("Đã tra cứu barcode và AI đã bù thông tin còn thiếu.");
+      toast.success(t("barcode.hybridFilled"));
       return;
     }
 
     if (data.source === "AI") {
-      toast.success("AI đã gợi ý thông tin sản phẩm.");
+      toast.success(t("barcode.aiSuggested"));
       return;
     }
 
-    toast.success("Đã tìm thấy thông tin từ dữ liệu mã vạch.");
+    toast.success(t("barcode.dataFound"));
   }
 
   async function enrichBarcode(barcodeValue?: string) {
     const barcode = (barcodeValue || form.getValues("barcode") || "").trim();
     if (!barcode) {
-      toast.error(t("barcode.enterBarcodeFirst") || "Vui lòng nhập mã vạch trước.");
+      toast.error(t("barcode.enterBarcodeFirst"));
       return;
     }
 
@@ -499,7 +503,7 @@ export default function ProductsPage() {
       applyEnrichedProductData(res);
     } catch (error: any) {
       console.error(error);
-      toast.error(error.message || t("barcode.aiFailed") || "Không thể tra cứu mã vạch lúc này.");
+      toast.error(error.message || t("barcode.aiFailed"));
     } finally {
       setIsEnriching(false);
     }
@@ -581,7 +585,7 @@ export default function ProductsPage() {
   }
 
   async function handleDelete(item: Product) {
-    if (!window.confirm(t("products.deleteConfirm", { name: item.name }))) return;
+    if (!(await confirmAction({ description: t("products.deleteConfirm", { name: item.name }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel"), destructive: true }))) return;
 
     try {
       setErrorMessage("");
@@ -594,7 +598,7 @@ export default function ProductsPage() {
   }
 
   async function handleRestore(item: Product) {
-    if (!window.confirm(t("products.restoreConfirm", { name: item.name }))) return;
+    if (!(await confirmAction({ description: t("products.restoreConfirm", { name: item.name }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel") }))) return;
 
     try {
       setErrorMessage("");
@@ -627,12 +631,12 @@ export default function ProductsPage() {
 
   async function handleRestoreLastDeletedBatch() {
     if (lastDeletedProductIds.length === 0) {
-      setToastMessage("Chưa có batch sản phẩm vừa xóa để khôi phục. Nút này chỉ khôi phục batch xóa tất cả gần nhất.");
+      setToastMessage(t("products.noDeletedBatch"));
       window.setTimeout(() => setToastMessage(""), 4000);
       return;
     }
 
-    if (!window.confirm(`Khôi phục ${lastDeletedProductIds.length} sản phẩm vừa xóa gần nhất và chuyển trạng thái về ACTIVE?`)) return;
+    if (!(await confirmAction({ description: t("products.restoreLastDeletedConfirm", { count: lastDeletedProductIds.length }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel") }))) return;
 
     try {
       setIsBulkLoading(true);
@@ -643,7 +647,7 @@ export default function ProductsPage() {
       setStatus("ACTIVE");
       setPage(1);
       setRowSelection({});
-      setSuccessMessage(`Đã khôi phục ${result.restored} sản phẩm về trạng thái ACTIVE. Lỗi: ${result.failed}.`);
+      setSuccessMessage(t("products.restoreBatchResult", { restored: result.restored, failed: result.failed }));
       await loadData(1);
     } catch (error) {
       setErrorMessage(getApiErrorMessage(error));
@@ -692,7 +696,7 @@ export default function ProductsPage() {
       setSuppliers(sortByIdAsc(activeSuppliers));
 
       if (activeCategories.length === 0 || activeSuppliers.length === 0) {
-        setErrorMessage("Cần có ít nhất 1 danh mục ACTIVE và 1 nhà cung cấp ACTIVE trước khi nhập dữ liệu mẫu.");
+        setErrorMessage(t("products.demoRequiresCategorySupplier"));
         return;
       }
 
@@ -791,7 +795,7 @@ export default function ProductsPage() {
 
   async function handleBulkDelete() {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(t("products.bulkDeleteConfirm", { count: selectedIds.length }))) return;
+    if (!(await confirmAction({ description: t("products.bulkDeleteConfirm", { count: selectedIds.length }), confirmLabel: t("common.confirm"), cancelLabel: t("common.cancel"), destructive: true }))) return;
 
     try {
       setIsBulkLoading(true);
@@ -810,7 +814,7 @@ export default function ProductsPage() {
 
   async function handleDeleteAllProducts() {
     if (deleteAllPassword !== "Admin@123") {
-      setToastMessage("Mật khẩu xác nhận không đúng. Hành động xóa tất cả đã bị hủy.");
+      setToastMessage(t("products.deleteAllPasswordIncorrect"));
       window.setTimeout(() => setToastMessage(""), 3500);
       return;
     }
@@ -866,8 +870,8 @@ export default function ProductsPage() {
       setIsDeleteAllDialogOpen(false);
       setSuccessMessage(
         deleteAllMode === "soft"
-          ? `Đã xóa mềm ${totalDeleted} sản phẩm. Lỗi: ${totalFailed}. Có thể bấm Khôi phục sản phẩm để chỉ khôi phục batch vừa xóa này.`
-          : `Đã xóa vĩnh viễn ${totalDeleted} sản phẩm. Lỗi: ${totalFailed}. Sản phẩm đã phát sinh đơn hàng/giao dịch kho có thể không xóa cứng được.`
+          ? t("products.softDeleteAllResult", { deleted: totalDeleted, failed: totalFailed })
+          : t("products.hardDeleteAllResult", { deleted: totalDeleted, failed: totalFailed })
       );
       setPage(1);
       await loadData(1);
@@ -884,7 +888,7 @@ export default function ProductsPage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setToastMessage("Vui lòng chọn đúng file hình ảnh.");
+      setToastMessage(t("products.invalidImageFile"));
       window.setTimeout(() => setToastMessage(""), 3500);
       return;
     }
@@ -893,11 +897,11 @@ export default function ProductsPage() {
     reader.onload = () => {
       const base64 = String(reader.result || "");
       form.setValue("imageUrl", base64, { shouldDirty: true, shouldValidate: true });
-      setToastMessage("Đã tải ảnh từ máy và gán vào form sản phẩm.");
+      setToastMessage(t("products.imageUploaded"));
       window.setTimeout(() => setToastMessage(""), 3500);
     };
     reader.onerror = () => {
-      setToastMessage("Không đọc được file ảnh. Vui lòng chọn file khác.");
+      setToastMessage(t("products.imageReadFailed"));
       window.setTimeout(() => setToastMessage(""), 3500);
     };
     reader.readAsDataURL(file);
@@ -1102,7 +1106,7 @@ export default function ProductsPage() {
               label={t("common.actions")}
               items={[
                 { label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(row.original) },
-                { label: "Xem mã QR", icon: <QrCode className="h-4 w-4" />, onClick: () => setSelectedQrProduct(row.original) },
+                { label: t("products.viewQr"), icon: <QrCode className="h-4 w-4" />, onClick: () => setSelectedQrProduct(row.original) },
                 row.original.status === "ACTIVE"
                   ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(row.original), variant: "destructive" }
                   : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(row.original) },
@@ -1124,20 +1128,20 @@ export default function ProductsPage() {
         {t("common.addNew")}
       </Button>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button variant="outline" className="h-10 gap-2"><Upload className="h-4 w-4" />Nhập / Xuất</Button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><Button variant="outline" className="h-10 gap-2"><Upload className="h-4 w-4" />{t("products.importExport")}</Button></DropdownMenuTrigger>
         <DropdownMenuPortal>
           <DropdownMenuContent align="end" className="w-48 bg-white border border-slate-100 p-1 shadow-lg rounded-lg">
-            <DropdownMenuItem onClick={() => setIsImportGuideOpen(true)} disabled={isBulkLoading} className="gap-2 cursor-pointer"><FileUp className="h-4 w-4" />Nhập JSON/CSV</DropdownMenuItem>
-            <DropdownMenuItem onClick={handleBulkDemoImport} disabled={isBulkLoading} className="gap-2 cursor-pointer"><Database className="h-4 w-4" />Nhập dữ liệu mẫu</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setIsImportGuideOpen(true)} disabled={isBulkLoading} className="gap-2 cursor-pointer"><FileUp className="h-4 w-4" />{t("products.importJsonCsv")}</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleBulkDemoImport} disabled={isBulkLoading} className="gap-2 cursor-pointer"><Database className="h-4 w-4" />{t("products.importDemoData")}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenuPortal>
       </DropdownMenu>
       <DropdownMenu>
-        <DropdownMenuTrigger asChild><Button variant="outline" className="h-10 gap-2"><SlidersHorizontal className="h-4 w-4" />Thao tác khác</Button></DropdownMenuTrigger>
+        <DropdownMenuTrigger asChild><Button variant="outline" className="h-10 gap-2"><SlidersHorizontal className="h-4 w-4" />{t("products.otherActions")}</Button></DropdownMenuTrigger>
         <DropdownMenuPortal>
           <DropdownMenuContent align="end" className="w-56 bg-white border border-slate-100 p-1 shadow-lg rounded-lg">
-            <DropdownMenuItem onClick={handleRestoreLastDeletedBatch} disabled={isBulkLoading} className="gap-2 cursor-pointer"><RotateCcw className="h-4 w-4" />{lastDeletedProductIds.length > 0 ? `Khôi phục sản phẩm (${lastDeletedProductIds.length})` : "Khôi phục sản phẩm"}</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setIsDeleteAllDialogOpen(true)} disabled={isBulkLoading} className="text-destructive hover:text-destructive gap-2 cursor-pointer"><Trash2 className="h-4 w-4" />Xóa tất cả sản phẩm</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleRestoreLastDeletedBatch} disabled={isBulkLoading} className="gap-2 cursor-pointer"><RotateCcw className="h-4 w-4" />{lastDeletedProductIds.length > 0 ? t("products.restoreProductsCount", { count: lastDeletedProductIds.length }) : t("products.restoreProducts")}</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setIsDeleteAllDialogOpen(true)} disabled={isBulkLoading} className="text-destructive hover:text-destructive gap-2 cursor-pointer"><Trash2 className="h-4 w-4" />{t("products.deleteAllProducts")}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenuPortal>
       </DropdownMenu>
@@ -1161,9 +1165,9 @@ export default function ProductsPage() {
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 shadow-sm">
           <div className="flex items-center gap-2 font-semibold">
             <LockKeyhole className="h-4 w-4" />
-            Chế độ Chỉ xem (CASHIER)
+            {t("products.cashierReadOnlyTitle")}
           </div>
-          <p className="mt-1">Tài khoản của bạn chỉ được phép xem danh sách và tồn kho. Không được xem giá nhập hoặc thao tác thay đổi dữ liệu.</p>
+          <p className="mt-1">{t("products.cashierReadOnlyDescription")}</p>
         </div>
       ) : null}
 
@@ -1174,30 +1178,30 @@ export default function ProductsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-bold text-slate-500 uppercase">Tổng số sản phẩm</p>
+            <p className="text-xs font-bold text-slate-500 uppercase">{t("products.totalProducts")}</p>
             <p className="text-2xl font-black text-slate-900">{formatNumber(pagination?.totalItems || items.length)}</p>
-            <p className="mt-1 text-xs font-medium text-slate-500">Tổng sản phẩm trong danh mục bán hàng</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.totalProductsDesc")}</p>
           </div>
         </div>
         <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-bold text-slate-500 uppercase">Sản phẩm đang bán</p>
+            <p className="text-xs font-bold text-slate-500 uppercase">{t("products.activeProducts")}</p>
             <p className="text-2xl font-black text-emerald-600">{formatNumber(items.filter(i => i.status === 'ACTIVE').length)}</p>
-            <p className="mt-1 text-xs font-medium text-slate-500">Sản phẩm đang hoạt động</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.activeProductsDesc")}</p>
           </div>
         </div>
         <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-bold text-slate-500 uppercase">Ngừng kinh doanh</p>
+            <p className="text-xs font-bold text-slate-500 uppercase">{t("products.inactiveProducts")}</p>
             <p className="text-2xl font-black text-slate-500">{formatNumber(items.filter(i => i.status === 'INACTIVE').length)}</p>
-            <p className="mt-1 text-xs font-medium text-slate-500">Sản phẩm đã tạm ngừng bán</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.inactiveProductsDesc")}</p>
           </div>
         </div>
         <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
           <div className="space-y-1">
-            <p className="text-xs font-bold text-slate-500 uppercase">Sắp hết hàng</p>
+            <p className="text-xs font-bold text-slate-500 uppercase">{t("products.lowStock")}</p>
             <p className="text-2xl font-black text-amber-600">{formatNumber(items.filter(i => i.stockQuantity <= i.minStock).length)}</p>
-            <p className="mt-1 text-xs font-medium text-slate-500">Sản phẩm dưới ngưỡng tồn tối thiểu</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.lowStockDesc")}</p>
           </div>
         </div>
       </div>
@@ -1248,13 +1252,13 @@ export default function ProductsPage() {
           </DialogHeader>
           <form onSubmit={form.handleSubmit(onSubmit)} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <div className="space-y-2">
-                <Label>SKU tự động</Label>
-                <Input value={editingItem ? form.watch("sku") || "" : ""} placeholder="Tự động tạo sau khi lưu" disabled readOnly />
-                <p className="text-xs text-muted-foreground">SKU được hệ thống tự sinh và không thể sửa trực tiếp.</p>
+                <Label>{t("products.autoSku")}</Label>
+                <Input value={editingItem ? form.watch("sku") || "" : ""} placeholder={t("products.autoSkuPlaceholder")} disabled readOnly />
+                <p className="text-xs text-muted-foreground">{t("products.autoSkuHint")}</p>
               </div>
               <div className="space-y-2">
                 <Label>{t("products.name")}</Label>
-                <Input placeholder="Nồi cơm điện Homex 1.8L" {...form.register("name")} />
+                <Input placeholder={t("products.namePlaceholder")} {...form.register("name")} />
                 {form.formState.errors.name ? <p className="text-sm text-destructive">{form.formState.errors.name.message}</p> : null}
               </div>
               <div className="space-y-2">
@@ -1293,7 +1297,7 @@ export default function ProductsPage() {
               <div className="space-y-2"><Label>{t("products.qrCode")}</Label><Input {...form.register("qrCode")} placeholder={t("products.qrPlaceholder")} /></div>
               <div className="space-y-2 md:col-span-2 xl:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">{t("barcode.fieldLabel") || "MÃ VẠCH (BARCODE)"}</span>
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">{t("barcode.fieldLabel")}</span>
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
@@ -1301,7 +1305,7 @@ export default function ProductsPage() {
                       className="rounded-full border border-emerald-200 bg-emerald-50/70 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 flex items-center gap-1.5 transition-colors h-7 whitespace-nowrap"
                     >
                       <Smartphone className="h-3.5 w-3.5" />
-                      Quét bằng ĐT
+                      {t("barcode.remoteScannerShort")}
                     </button>
                     <button
                       type="button"
@@ -1310,12 +1314,12 @@ export default function ProductsPage() {
                       className="rounded-full border border-blue-200 bg-blue-50/60 px-3 py-1 text-xs font-semibold text-blue-500 hover:bg-blue-100 disabled:opacity-50 flex items-center gap-1.5 transition-colors h-7 whitespace-nowrap"
                     >
                       <Search className="h-3.5 w-3.5" />
-                      {isEnriching ? "Đang tra cứu..." : "Tra cứu / AI nhận diện"}
+                      {isEnriching ? t("barcode.enriching") : t("barcode.lookupAi")}
                     </button>
                   </div>
                 </div>
                 <Input
-                  placeholder="Quét hoặc nhập mã vạch sản phẩm"
+                  placeholder={t("barcode.fieldPlaceholder")}
                   {...form.register("barcode", {
                     onBlur: (event) => void enrichBarcode(event.target.value),
                   })}
@@ -1327,9 +1331,9 @@ export default function ProductsPage() {
                   }}
                 />
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  {isEnriching ? <span>Đang tra cứu mã vạch...</span> : null}
-                  {barcodeEnrichSource ? <Badge variant="outline">Nguồn: {barcodeEnrichSource === "HYBRID" ? "Hybrid" : barcodeEnrichSource}</Badge> : null}
-                  {barcodeEnrichMissingFields.length > 0 ? <span>Thiếu: {barcodeEnrichMissingFields.join(", ")}</span> : null}
+                  {isEnriching ? <span>{t("barcode.lookupInProgress")}</span> : null}
+                  {barcodeEnrichSource ? <Badge variant="outline">{t("barcode.source", { source: barcodeEnrichSource === "HYBRID" ? "Hybrid" : barcodeEnrichSource })}</Badge> : null}
+                  {barcodeEnrichMissingFields.length > 0 ? <span>{t("barcode.missingFields", { fields: barcodeEnrichMissingFields.join(", ") })}</span> : null}
                 </div>
               </div>
               <div className="space-y-2">
@@ -1344,11 +1348,11 @@ export default function ProductsPage() {
                 <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
                   <Input
                     {...form.register("imageUrl")}
-                    placeholder="Dán URL ảnh hoặc tải ảnh từ máy tính"
+                    placeholder={t("products.imageUrlPlaceholder")}
                   />
                   <Button type="button" variant="outline" onClick={() => productImageFileRef.current?.click()}>
                     <ImageIcon className="h-4 w-4" />
-                    Tải ảnh từ máy
+                    {t("products.uploadImage")}
                   </Button>
                 </div>
                 <input
@@ -1358,14 +1362,14 @@ export default function ProductsPage() {
                   className="hidden"
                   onChange={handleProductImageFileChange}
                 />
-                <p className="text-xs text-muted-foreground">Có thể dùng link ảnh CDN hoặc chọn file ảnh từ máy. File cục bộ sẽ được chuyển sang Base64 để demo nhanh.</p>
+                <p className="text-xs text-muted-foreground">{t("products.imageHelp")}</p>
                 {currentImageUrl ? (
                   <div className="flex items-center gap-3 rounded-lg border bg-muted/30 p-3">
                     <div className="h-16 w-16 overflow-hidden rounded-md border bg-background">
-                      <img src={currentImageUrl} alt="Ảnh sản phẩm xem trước" className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+                      <img src={currentImageUrl} alt={t("products.imagePreview")} className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />
                     </div>
                     <div className="min-w-0 text-sm">
-                      <p className="font-medium">Ảnh xem trước</p>
+                      <p className="font-medium">{t("products.imagePreview")}</p>
                       <p className="break-words whitespace-normal line-clamp-2 text-muted-foreground">{currentImageUrl}</p>
                     </div>
                   </div>
@@ -1373,7 +1377,7 @@ export default function ProductsPage() {
               </div>
               <div className="space-y-2 md:col-span-2 xl:col-span-3">
                 <Label>{t("products.descriptionField")}</Label>
-                <Textarea {...form.register("description")} placeholder="Nhập mô tả ngắn về sản phẩm, công suất, dung tích, chất liệu..." />
+                <Textarea {...form.register("description")} placeholder={t("products.descriptionPlaceholder")} />
                 {form.formState.errors.description ? <p className="text-sm text-destructive">{form.formState.errors.description.message}</p> : null}
               </div>
               <div className="flex flex-wrap gap-2 md:col-span-2 xl:col-span-3">
@@ -1406,8 +1410,8 @@ export default function ProductsPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-              <p className="font-semibold">Hướng dẫn ảnh khi import</p>
-              <p>Trường <code>imageUrl</code> nên dùng ảnh thật cố định trong project, ví dụ <code>/assets/real-products/rice-cooker.jpg</code>, hoặc chuỗi Base64 dạng <code>data:image/png;base64,...</code>. Không dùng link random online như <code>source.unsplash.com</code>. Nếu bỏ trống, hệ thống sẽ dùng ảnh fallback cục bộ.</p>
+              <p className="font-semibold">{t("products.importImageGuideTitle")}</p>
+              <p>{t("products.importImageGuideDescription")}</p>
             </div>
             <div>
               <p className="mb-2 text-sm font-semibold">{t("products.jsonExample")}</p>
@@ -1442,41 +1446,41 @@ export default function ProductsPage() {
             <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
               <div className="flex items-start gap-2">
                 <AlertTriangle className="mt-0.5 h-4 w-4" />
-                <p>{deleteAllMode === "soft" ? "Xóa mềm sẽ chuyển toàn bộ sản phẩm đang hoạt động sang trạng thái ngừng kinh doanh và có thể khôi phục." : "Xóa cứng sẽ xóa vĩnh viễn sản phẩm khỏi cơ sở dữ liệu. Sản phẩm đã có đơn hàng hoặc giao dịch kho có thể bị chặn bởi ràng buộc dữ liệu."}</p>
+                <p>{deleteAllMode === "soft" ? t("products.softDeleteAllWarning") : t("products.hardDeleteAllWarning")}</p>
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Kiểu xóa</Label>
+              <Label>{t("products.deleteMode")}</Label>
               <div className="grid gap-2 sm:grid-cols-2">
                 <label className="flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm">
                   <input type="radio" name="deleteAllMode" value="soft" checked={deleteAllMode === "soft"} onChange={() => setDeleteAllMode("soft")} />
-                  <span><span className="block font-semibold">Xóa mềm</span><span className="text-xs text-muted-foreground">Có thể khôi phục sản phẩm sau khi xóa.</span></span>
+                  <span><span className="block font-semibold">{t("products.softDelete")}</span><span className="text-xs text-muted-foreground">{t("products.softDeleteHint")}</span></span>
                 </label>
                 <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                   <input type="radio" name="deleteAllMode" value="hard" checked={deleteAllMode === "hard"} onChange={() => setDeleteAllMode("hard")} />
-                  <span><span className="block font-semibold">Xóa cứng vĩnh viễn</span><span className="text-xs opacity-80">Không thể khôi phục sau khi xóa.</span></span>
+                  <span><span className="block font-semibold">{t("products.hardDelete")}</span><span className="text-xs opacity-80">{t("products.hardDeleteHint")}</span></span>
                 </label>
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Nhập mật khẩu xác nhận</Label>
+              <Label>{t("products.deleteAllPasswordLabel")}</Label>
               <div className="relative">
                 <LockKeyhole className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   type="password"
                   className="pl-9"
-                  placeholder="Nhập Admin@123 để xác nhận"
+                  placeholder={t("products.deleteAllPasswordPlaceholder")}
                   value={deleteAllPassword}
                   onChange={(event) => setDeleteAllPassword(event.target.value)}
                 />
               </div>
-              <p className="text-xs text-muted-foreground">Mật khẩu demo: Admin@123</p>
+              <p className="text-xs text-muted-foreground">{t("products.deleteAllPasswordHint")}</p>
             </div>
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => { setIsDeleteAllDialogOpen(false); setDeleteAllPassword(""); setDeleteAllMode("soft"); }}>{t("products.cancelDanger")}</Button>
               <Button type="button" variant="destructive" disabled={isBulkLoading} onClick={handleDeleteAllProducts}>
                 <Trash2 className="h-4 w-4" />
-                {isBulkLoading ? "Đang xóa..." : deleteAllMode === "soft" ? "Xóa mềm tất cả" : "Xóa cứng vĩnh viễn"}
+                {isBulkLoading ? t("products.deleting") : deleteAllMode === "soft" ? t("products.softDeleteAll") : t("products.hardDeleteAll")}
               </Button>
             </div>
           </div>
@@ -1492,21 +1496,21 @@ export default function ProductsPage() {
               <Smartphone className="h-6 w-6" />
             </div>
             <DialogTitle className="text-lg font-extrabold uppercase tracking-wide text-white">
-              Quét barcode sản phẩm
+              {t("products.scanBarcodeTitle")}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-400 max-w-xs text-center leading-relaxed">
-              Quét mã QR bên dưới bằng điện thoại, sau đó quét barcode sản phẩm để tự điền vào ô mã vạch.
+              {t("products.scanBarcodeDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="my-6 flex flex-col items-center justify-center gap-4">
             <div className="text-center">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">MÃ GHÉP ĐÔI</span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">{t("barcode.pairingCode")}</span>
               <span className="text-3xl font-black text-emerald-400 tracking-[0.2em] font-mono select-all">
                 {remoteBarcodeSessionId}
               </span>
               <Button type="button" size="sm" variant="outline" onClick={resetRemoteBarcodeScanner} className="mt-3 h-8 rounded-xl border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700">
-                Tạo mã mới
+                {t("barcode.newPairingCode")}
               </Button>
             </div>
 
@@ -1528,12 +1532,12 @@ export default function ProductsPage() {
                 {isBarcodeLinkCopied ? (
                   <>
                     <Check className="h-3.5 w-3.5 text-emerald-400" />
-                    <span className="text-emerald-400">Copied</span>
+                    <span className="text-emerald-400">{t("common.copied")}</span>
                   </>
                 ) : (
                   <>
                     <Copy className="h-3.5 w-3.5" />
-                    <span>Sao chép</span>
+                    <span>{t("barcode.copyScanLink")}</span>
                   </>
                 )}
               </Button>
@@ -1542,13 +1546,13 @@ export default function ProductsPage() {
 
           <div className="space-y-3 pt-4 border-t border-slate-800/80">
             <div className="text-[11px] text-slate-400 leading-relaxed space-y-1">
-              <p>1. Mở link quét trên điện thoại bằng QR hoặc nút sao chép.</p>
-              <p>2. Bấm Bật camera trên điện thoại.</p>
-              <p>3. Khi quét thành công, mã sẽ tự điền vào ô Barcode của form sản phẩm.</p>
+              <p>{t("products.scanInstruction1")}</p>
+              <p>{t("products.scanInstruction2")}</p>
+              <p>{t("products.scanInstruction3")}</p>
             </div>
             <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-300">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-              <span>Đang chờ điện thoại quét...</span>
+              <span>{t("barcode.waitingForScan")}</span>
             </div>
           </div>
         </DialogContent>

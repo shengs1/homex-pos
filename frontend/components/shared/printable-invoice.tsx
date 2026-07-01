@@ -80,9 +80,9 @@ export function PrintableInvoice({ order, setting, publicUrl, className }: Print
         </table>
 
         <div className="mt-4 space-y-1 border-b border-dashed border-black pb-4 text-right">
-          <p>{language === "en" ? "Subtotal" : "Tạm tính"}: {formatCurrency(order.totalAmount)}</p>
+          <p>{t("invoice.subtotal")}: {formatCurrency(order.totalAmount)}</p>
           {order.payment && order.payment.amount < order.totalAmount ? (
-            <p>{language === "en" ? "Discount" : "Chiết khấu"}: -{formatCurrency(Number(order.totalAmount) - Number(order.payment.amount))}</p>
+            <p>{t("invoice.discount")}: -{formatCurrency(Number(order.totalAmount) - Number(order.payment.amount))}</p>
           ) : null}
           <p>{t("orders.total")}: <span className="font-bold">{formatCurrency(order.payment?.amount || order.totalAmount)}</span></p>
           {order.payment ? <p>{t("payments.method")}: {t(`paymentMethod.${order.payment.method}`)}</p> : null}
@@ -106,3 +106,4 @@ export function PrintableInvoice({ order, setting, publicUrl, className }: Print
     </div>
   );
 }
+

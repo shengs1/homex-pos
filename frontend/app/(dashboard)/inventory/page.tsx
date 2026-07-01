@@ -26,22 +26,10 @@ import { inventoryService, productService, purchaseOrderService, supplierService
 import type { Pagination } from "@/types/api";
 import type { Product, StockTransaction, Supplier } from "@/types/domain";
 
-const importSchema = z.object({
-  productId: z.coerce.number().int().positive("Chọn sản phẩm"),
-  quantity: z.coerce.number().int().positive("Số lượng phải lớn hơn 0"),
-  note: z.string().trim().optional(),
-});
-
-const adjustSchema = z.object({
-  productId: z.coerce.number().int().positive("Chọn sản phẩm"),
-  newQuantity: z.coerce.number().int().min(0, "Tồn mới không được âm"),
-  note: z.string().trim().optional(),
-});
-
-type ImportInput = z.input<typeof importSchema>;
-type ImportValues = z.output<typeof importSchema>;
-type AdjustInput = z.input<typeof adjustSchema>;
-type AdjustValues = z.output<typeof adjustSchema>;
+type ImportInput = { productId: number; quantity: number; note?: string };
+type ImportValues = ImportInput;
+type AdjustInput = { productId: number; newQuantity: number; note?: string };
+type AdjustValues = AdjustInput;
 
 type DraftItem = {
   productId: number;
@@ -75,14 +63,16 @@ export default function InventoryPage() {
   const [errorMessage, setErrorMessage] = useState("");
 
   const totalDraftAmount = useMemo(() => draftItems.reduce((sum, item) => sum + item.quantity * item.unitCost, 0), [draftItems]);
+  const importSchema = useMemo(() => z.object({ productId: z.coerce.number().int().positive(t("inventory.productRequired")), quantity: z.coerce.number().int().positive(t("inventory.quantityPositive")), note: z.string().trim().optional() }), [t]);
+  const adjustSchema = useMemo(() => z.object({ productId: z.coerce.number().int().positive(t("inventory.productRequired")), newQuantity: z.coerce.number().int().min(0, t("inventory.newQuantityMin")), note: z.string().trim().optional() }), [t]);
 
   const importForm = useForm<ImportInput, unknown, ImportValues>({
-    resolver: zodResolver(importSchema),
+    resolver: zodResolver(importSchema) as any,
     defaultValues: { productId: 0, quantity: 1, note: "" },
   });
 
   const adjustForm = useForm<AdjustInput, unknown, AdjustValues>({
-    resolver: zodResolver(adjustSchema),
+    resolver: zodResolver(adjustSchema) as any,
     defaultValues: { productId: 0, newQuantity: 0, note: "" },
   });
 
@@ -259,11 +249,11 @@ export default function InventoryPage() {
         <ErrorState message={errorMessage} />
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant={activeTab === "overview" ? "default" : "outline"} onClick={() => setActiveTab("overview")}>Tổng quan</Button>
-          <Button variant="outline" onClick={() => setIsPurchaseDialogOpen(true)}>Nhập hàng</Button>
-          <Button variant="outline" onClick={() => setIsQuickImportDialogOpen(true)}>Nhập hàng nhanh</Button>
-          <Button variant="outline" onClick={() => setIsAdjustDialogOpen(true)}>Điều chỉnh tồn</Button>
-          <Button variant={activeTab === "history" ? "default" : "outline"} onClick={() => setActiveTab("history")}>Lịch sử</Button>
+          <Button variant={activeTab === "overview" ? "default" : "outline"} onClick={() => setActiveTab("overview")}>{t("inventory.overview")}</Button>
+          <Button variant="outline" onClick={() => setIsPurchaseDialogOpen(true)}>{t("inventory.purchaseStock")}</Button>
+          <Button variant="outline" onClick={() => setIsQuickImportDialogOpen(true)}>{t("inventory.quickImport")}</Button>
+          <Button variant="outline" onClick={() => setIsAdjustDialogOpen(true)}>{t("inventory.adjustStock")}</Button>
+          <Button variant={activeTab === "history" ? "default" : "outline"} onClick={() => setActiveTab("history")}>{t("inventory.history")}</Button>
         </div>
 
         {activeTab === "overview" ? (
@@ -271,33 +261,33 @@ export default function InventoryPage() {
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-xs font-bold text-slate-500 uppercase">Tổng sản phẩm</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase">{t("inventory.totalProducts")}</p>
                   <p className="text-2xl font-black text-slate-900">{formatNumber(products.length)}</p>
-                  <p className="mt-1 text-xs font-medium text-slate-500">Tổng sản phẩm đang theo dõi tồn kho</p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.inventoryTotalProductsDesc")}</p>
                 </div>
                 <PackagePlus className="h-8 w-8 text-slate-300" />
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-xs font-bold text-slate-500 uppercase">Tồn thấp</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase">{t("inventory.lowStock")}</p>
                   <p className="text-2xl font-black text-amber-600">{formatNumber(lowStockItems.length)}</p>
-                  <p className="mt-1 text-xs font-medium text-slate-500">Sản phẩm chạm ngưỡng tồn thấp</p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.lowStockDesc")}</p>
                 </div>
                 <ArrowDownCircle className="h-8 w-8 text-amber-500/50" />
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-xs font-bold text-slate-500 uppercase">Giao dịch kho</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase">{t("inventory.transactions")}</p>
                   <p className="text-2xl font-black text-blue-600">{formatNumber(pagination?.totalItems || 0)}</p>
-                  <p className="mt-1 text-xs font-medium text-slate-500">Tổng số giao dịch nhập/xuất/điều chỉnh</p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.inventoryTransactionsDesc")}</p>
                 </div>
                 <SlidersHorizontal className="h-8 w-8 text-blue-500/50" />
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-xs font-bold text-slate-500 uppercase">Tổng giá trị tồn</p>
+                  <p className="text-xs font-bold text-slate-500 uppercase">{t("inventory.totalValue")}</p>
                   <p className="text-xl font-black text-emerald-600 truncate">{formatCurrency(products.reduce((acc, p) => acc + Number(p.stockQuantity) * Number(p.costPrice || 0), 0))}</p>
-                  <p className="mt-1 text-xs font-medium text-slate-500">Giá trị hàng tồn theo giá nhập</p>
+                  <p className="mt-1 text-xs font-medium text-slate-500">{t("stats.inventoryValueDesc")}</p>
                 </div>
                 <CircleDollarSign className="h-8 w-8 text-emerald-500/50" />
               </div>
@@ -355,21 +345,21 @@ export default function InventoryPage() {
         <Dialog open={isPurchaseDialogOpen} onOpenChange={setIsPurchaseDialogOpen}>
           <DialogContent className="max-h-[90vh] max-w-6xl overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Nhập hàng</DialogTitle>
-              <DialogDescription>Tạo phiếu nhập theo nhà cung cấp và cập nhật tồn kho.</DialogDescription>
+              <DialogTitle>{t("inventory.purchaseStock")}</DialogTitle>
+              <DialogDescription>{t("inventory.purchaseStockDescription")}</DialogDescription>
             </DialogHeader>
             <form onSubmit={submitPurchaseOrder} className="space-y-5">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label>Chọn nhà cung cấp</Label>
+                  <Label>{t("common.chooseSupplier")}</Label>
                   <Select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required>
                     <option value="">{t("common.chooseSupplier")}</option>
                     {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Ghi chú</Label>
-                  <Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ghi chú cho phiếu nhập" />
+                  <Label>{t("common.note")}</Label>
+                  <Textarea value={note} onChange={(event) => setNote(event.target.value)} placeholder={t("inventory.purchaseNotePlaceholder")} />
                 </div>
               </div>
 
@@ -377,11 +367,11 @@ export default function InventoryPage() {
                 <div className="overflow-x-auto">
                   <div className="min-w-[920px]">
                     <div className="grid grid-cols-[minmax(320px,1fr)_120px_160px_160px_64px] gap-3 bg-slate-50 px-4 py-3 text-xs font-medium uppercase text-slate-500">
-                      <span>Sản phẩm</span>
-                      <span>Số lượng</span>
-                      <span>Giá nhập</span>
-                      <span className="text-right">Thành tiền</span>
-                      <span className="text-center">Xóa</span>
+                      <span>{t("products.product")}</span>
+                      <span>{t("reports.quantity")}</span>
+                      <span>{t("products.costPrice")}</span>
+                      <span className="text-right">{t("orders.total")}</span>
+                      <span className="text-center">{t("common.delete")}</span>
                     </div>
                     <div className="divide-y divide-slate-100 bg-white">
                       {draftItems.map((item, index) => (
@@ -391,7 +381,7 @@ export default function InventoryPage() {
                               list={`purchase-product-options-${index}`}
                               value={item.productSearch}
                               onChange={(event) => handleProductSearchChange(index, event.target.value)}
-                              placeholder="Gõ SKU hoặc tên sản phẩm để chọn"
+                              placeholder={t("inventory.productSearchPlaceholder")}
                               required={!item.productId}
                             />
                             <datalist id={`purchase-product-options-${index}`}>
@@ -400,15 +390,15 @@ export default function InventoryPage() {
                               ))}
                             </datalist>
                             {item.productId ? (
-                              <p className="text-xs font-medium text-emerald-700">Đã chọn: {products.find((product) => product.id === item.productId)?.sku}</p>
+                              <p className="text-xs font-medium text-emerald-700">{t("inventory.selectedProductSku", { sku: products.find((product) => product.id === item.productId)?.sku || "-" })}</p>
                             ) : (
-                              <p className="text-xs text-slate-500">Chọn một gợi ý trong danh sách để thêm sản phẩm vào phiếu.</p>
+                              <p className="text-xs text-slate-500">{t("inventory.chooseSuggestionHint")}</p>
                             )}
                           </div>
                           <Input type="number" min={1} value={item.quantity} onChange={(event) => updateDraftItem(index, { quantity: Number(event.target.value || 1) })} />
                           <Input inputMode="numeric" value={formatMoneyInputValue(item.unitCost)} onChange={(event) => updateDraftItem(index, { unitCost: parseMoneyInput(event.target.value) })} />
                           <div className="text-right font-semibold text-slate-700">{formatCurrency(item.quantity * item.unitCost)}</div>
-                          <Button type="button" variant="outline" size="icon" className="mx-auto text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => removeDraftItem(index)} title="Xóa dòng hàng">
+                          <Button type="button" variant="outline" size="icon" className="mx-auto text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={() => removeDraftItem(index)} title={t("inventory.deleteLine")}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -439,16 +429,16 @@ export default function InventoryPage() {
         <Dialog open={isQuickImportDialogOpen} onOpenChange={setIsQuickImportDialogOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Nhập hàng nhanh</DialogTitle>
-              <DialogDescription>Nhập thêm số lượng cho một sản phẩm hiện có.</DialogDescription>
+              <DialogTitle>{t("inventory.quickImport")}</DialogTitle>
+              <DialogDescription>{t("inventory.quickImportDescription")}</DialogDescription>
             </DialogHeader>
             <form onSubmit={importForm.handleSubmit(submitImport)} className="space-y-4">
-              <div className="space-y-2"><Label>{t("inventory.product")}</Label><Select value={String(importForm.watch("productId") || "")} onChange={(event) => importForm.setValue("productId", Number(event.target.value || 0), { shouldValidate: true })}><option value="">Chọn sản phẩm</option>{products.map((product) => <option key={product.id} value={product.id}>{product.sku} - {product.name}</option>)}</Select>{importForm.formState.errors.productId ? <p className="text-sm text-destructive">{importForm.formState.errors.productId.message}</p> : null}</div>
+              <div className="space-y-2"><Label>{t("inventory.product")}</Label><Select value={String(importForm.watch("productId") || "")} onChange={(event) => importForm.setValue("productId", Number(event.target.value || 0), { shouldValidate: true })}><option value="">{t("inventory.selectProduct")}</option>{products.map((product) => <option key={product.id} value={product.id}>{product.sku} - {product.name}</option>)}</Select>{importForm.formState.errors.productId ? <p className="text-sm text-destructive">{importForm.formState.errors.productId.message}</p> : null}</div>
               <div className="space-y-2"><Label>{t("inventory.importQuantity")}</Label><Input type="number" {...importForm.register("quantity")} />{importForm.formState.errors.quantity ? <p className="text-sm text-destructive">{importForm.formState.errors.quantity.message}</p> : null}</div>
               <div className="space-y-2"><Label>{t("inventory.note")}</Label><Textarea {...importForm.register("note")} /></div>
               <div className="flex justify-end gap-2 pt-2">
                 <Button type="button" variant="outline" onClick={() => setIsQuickImportDialogOpen(false)}>{t("common.cancel")}</Button>
-                <Button type="submit" disabled={importForm.formState.isSubmitting}>Nhập hàng</Button>
+                <Button type="submit" disabled={importForm.formState.isSubmitting}>{t("inventory.purchaseStock")}</Button>
               </div>
             </form>
           </DialogContent>
@@ -458,10 +448,10 @@ export default function InventoryPage() {
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>{t("inventory.adjustStock")}</DialogTitle>
-              <DialogDescription>Điều chỉnh số lượng tồn thực tế của sản phẩm.</DialogDescription>
+              <DialogDescription>{t("inventory.adjustStockDescription")}</DialogDescription>
             </DialogHeader>
             <form onSubmit={adjustForm.handleSubmit(submitAdjust)} className="space-y-4">
-              <div className="space-y-2"><Label>{t("inventory.product")}</Label><Select value={String(adjustForm.watch("productId") || "")} onChange={(event) => adjustForm.setValue("productId", Number(event.target.value || 0), { shouldValidate: true })}><option value="">Chọn sản phẩm</option>{products.map((product) => <option key={product.id} value={product.id}>{product.sku} - {product.name}</option>)}</Select>{adjustForm.formState.errors.productId ? <p className="text-sm text-destructive">{adjustForm.formState.errors.productId.message}</p> : null}</div>
+              <div className="space-y-2"><Label>{t("inventory.product")}</Label><Select value={String(adjustForm.watch("productId") || "")} onChange={(event) => adjustForm.setValue("productId", Number(event.target.value || 0), { shouldValidate: true })}><option value="">{t("inventory.selectProduct")}</option>{products.map((product) => <option key={product.id} value={product.id}>{product.sku} - {product.name}</option>)}</Select>{adjustForm.formState.errors.productId ? <p className="text-sm text-destructive">{adjustForm.formState.errors.productId.message}</p> : null}</div>
               <div className="space-y-2"><Label>{t("inventory.newQuantity")}</Label><Input type="number" {...adjustForm.register("newQuantity")} />{adjustForm.formState.errors.newQuantity ? <p className="text-sm text-destructive">{adjustForm.formState.errors.newQuantity.message}</p> : null}</div>
               <div className="space-y-2"><Label>{t("inventory.note")}</Label><Textarea {...adjustForm.register("note")} /></div>
               <div className="flex justify-end gap-2 pt-2">

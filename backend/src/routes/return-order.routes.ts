@@ -247,7 +247,8 @@ router.post(
         }
 
         if (order.customerId) {
-          const pointsToRemove = Math.floor(totalAmount / 10000);
+          const POINT_CONVERSION_RATE = 10;
+          const pointsToRemove = Math.floor(totalAmount / POINT_CONVERSION_RATE);
           if (pointsToRemove > 0) {
             const customer = await tx.customer.findUnique({
               where: { id: order.customerId },

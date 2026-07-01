@@ -165,7 +165,7 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
               <ul className="space-y-0.5">
                 {section.items.map((item) => {
                   const Icon = item.icon;
-                  const label = item.href === "/shifts" ? (role === "ADMIN" ? "Ca làm" : "Ca làm thu ngân") : t(item.titleKey);
+                  const label = t(item.titleKey);
                   const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
 
                   return (
@@ -213,3 +213,4 @@ export function Sidebar({ role, collapsed = false, onToggleCollapsed, onNavigate
     </aside>
   );
 }
+
