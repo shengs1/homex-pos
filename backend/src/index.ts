@@ -24,6 +24,7 @@ import vatInvoiceRoutes from "./routes/vat-invoice.routes";
 import notificationRoutes from "./routes/notification.routes";
 import publicInvoiceRoutes from "./routes/public-invoice.routes";
 import remoteScanRoutes from "./routes/remote-scan.routes";
+import salesAssistantRoutes from "./routes/sales-assistant.routes";
 import { demoModeMiddleware } from "./middlewares/demo-mode.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 
@@ -118,6 +119,7 @@ app.use("/api/vat-invoices", vatInvoiceRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/invoices/public", publicInvoiceRoutes);
 app.use("/api/pos", remoteScanRoutes);
+app.use("/api/pos", salesAssistantRoutes);
 app.use(errorMiddleware);
 
 const PORT = process.env.PORT || 5000;

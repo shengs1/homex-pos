@@ -24,6 +24,8 @@ import type {
   VatInvoiceRequest,
   Warranty,
   NotificationItem,
+  SalesAssistantRequest,
+  SalesAssistantResponse,
 } from "@/types/domain";
 
 export type ListParams = Record<string, string | number | boolean | undefined | null>;
@@ -40,8 +42,8 @@ function cleanParams(params?: ListParams) {
   return result;
 }
 
-async function getData<T>(url: string, params?: ListParams) {
-  const response = await api.get<ApiSuccess<T>>(url, { params: cleanParams(params) });
+async function getData<T>(url: string, params?: ListParams, config?: Record<string, any>) {
+  const response = await api.get<ApiSuccess<T>>(url, { params: cleanParams(params), ...config });
   return response.data.data;
 }
 
@@ -193,6 +195,7 @@ export const inventoryService = {
   transactions: (params?: ListParams) => getPaginatedDataByIdAsc<StockTransaction>("/inventory/transactions", params),
   importStock: (body: { productId: number; quantity: number; note?: string }) => postData<StockTransaction>("/inventory/import", body),
   adjustStock: (body: { productId: number; newQuantity: number; note?: string }) => postData<StockTransaction>("/inventory/adjust", body),
+  aiForecast: (params: { days: number }) => getData<any>("/inventory/ai-forecast", params, { timeout: 120000 }),
 };
 
 export type OrderLinePayload = { productId: number; quantity: number };
@@ -306,10 +309,32 @@ export const warrantyService = {
   publicLookup: (params: { code?: string; phone?: string }) => getData<Warranty[]>("/warranties/lookup", params),
 };
 
+export type PayOSPayment = {
+  paymentId: number;
+  orderId: number;
+  provider: "PAYOS";
+  providerOrderCode: number;
+  amount: number;
+  status: string;
+  checkoutUrl?: string | null;
+  qrCode?: string | null;
+  description?: string | null;
+};
+
+export type PaymentStatusResponse = {
+  paymentId: number;
+  orderId: number;
+  status: string;
+  orderStatus: string;
+  paidAt?: string | null;
+};
+
 export const paymentService = {
   list: (params?: ListParams) => getPaginatedDataByIdAsc<Payment>("/payments", params),
   detail: (id: number) => getData<Payment>(`/payments/${id}`),
   byOrder: (orderId: number) => getData<Payment>(`/payments/order/${orderId}`),
+  createPayOSPayment: (body: { orderId: number; discountAmount?: number; promotionCode?: string }) => postData<PayOSPayment>("/payments/payos/create", body),
+  getPaymentStatus: (paymentId: number) => getData<PaymentStatusResponse>(`/payments/${paymentId}/status`),
   refund: (id: number) => patchData<Payment>(`/payments/${id}/refund`),
 };
 
@@ -353,7 +378,9 @@ export const auditLogService = {
 export const posService = {
   sendRemoteScan: (body: { sessionId: string; barcode: string }) => postData<{ success: boolean; message: string }>("/pos/remote-scan", body),
   pollRemoteScan: (sessionId: string) => getData<{ success: boolean; barcode?: string }>(`/pos/remote-scan-poll/${encodeURIComponent(sessionId)}`),
+  getSalesAssistantSuggestions: (body: SalesAssistantRequest) => postData<SalesAssistantResponse>("/pos/sales-assistant", body),
 };
+
 
 
 

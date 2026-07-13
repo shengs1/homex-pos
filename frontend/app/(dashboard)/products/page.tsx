@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode, type SyntheticEvent } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { createColumnHelper, getCoreRowModel, useReactTable, type ColumnDef, type RowSelectionState } from "@tanstack/react-table";
-import { AlertTriangle, Check, CheckSquare, Clipboard, Copy, Database, Edit, FileUp, ImageIcon, Link, LockKeyhole, MoreHorizontal, Plus, Printer, QrCode, RotateCcw, Search, SlidersHorizontal, Smartphone, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Barcode, Check, CheckSquare, Clipboard, Copy, Database, Edit, FileUp, ImageIcon, Link, LockKeyhole, MoreHorizontal, Plus, Printer, QrCode, RotateCcw, Search, SlidersHorizontal, Smartphone, Trash2, Upload } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
+import JsBarcode from "jsbarcode";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { TanStackDataTable } from "@/components/shared/tanstack-data-table";
@@ -90,8 +91,8 @@ const jsonStructureExample = `[
     "name": "Homex Rice Cooker 1.8L NC000001",
     "categoryId": 1,
     "supplierId": 1,
-    "costPrice": 520,
-    "salePrice": 750,
+    "costPrice": 5200,
+    "salePrice": 7500,
     "stockQuantity": 30,
     "minStock": 5,
     "warrantyMonths": 24,
@@ -101,7 +102,7 @@ const jsonStructureExample = `[
 ]`;
 
 const csvStructureExample = `sku,name,categoryId,supplierId,costPrice,salePrice,stockQuantity,minStock,warrantyMonths,imageUrl
-KIT-SH-NC000001,Homex Rice Cooker 1.8L NC000001,1,1,520,750,30,5,24,/assets/real-products/rice-cooker.jpg`;
+KIT-SH-NC000001,Homex Rice Cooker 1.8L NC000001,1,1,5200,7500,30,5,24,/assets/real-products/rice-cooker.jpg`;
 
 function sortByIdAsc<T extends { id: number }>(items: T[]) {
   return [...items].sort((a, b) => a.id - b.id);
@@ -134,6 +135,28 @@ function ProductActionMenu({ label, items }: { label: string; items: ProductActi
 }
 
 const columnHelper = createColumnHelper<Product>();
+
+function BarcodeRenderer({ value }: { value: string }) {
+  const elementRef = useRef<SVGSVGElement | null>(null);
+
+  useEffect(() => {
+    if (elementRef.current && value) {
+      try {
+        JsBarcode(elementRef.current, value, {
+          format: "CODE128",
+          width: 2,
+          height: 80,
+          displayValue: false,
+          margin: 0,
+        });
+      } catch (e) {
+        console.error("Barcode rendering failed:", e);
+      }
+    }
+  }, [value]);
+
+  return <svg ref={elementRef} className="mx-auto" />;
+}
 
 export default function ProductsPage() {
   const { t } = useLanguage();
@@ -1106,7 +1129,7 @@ export default function ProductsPage() {
               label={t("common.actions")}
               items={[
                 { label: t("common.update"), icon: <Edit className="h-4 w-4" />, onClick: () => openEditForm(row.original) },
-                { label: t("products.viewQr"), icon: <QrCode className="h-4 w-4" />, onClick: () => setSelectedQrProduct(row.original) },
+                { label: t("products.viewBarcode"), icon: <Barcode className="h-4 w-4" />, onClick: () => setSelectedQrProduct(row.original) },
                 row.original.status === "ACTIVE"
                   ? { label: t("common.delete"), icon: <Trash2 className="h-4 w-4" />, onClick: () => handleDelete(row.original), variant: "destructive" }
                   : { label: t("common.restore"), icon: <RotateCcw className="h-4 w-4" />, onClick: () => handleRestore(row.original) },
@@ -1279,17 +1302,17 @@ export default function ProductsPage() {
               </div>
               <div className="space-y-2">
                 <Label>{t("products.costPrice")}</Label>
-                <Input inputMode="numeric" placeholder="500" value={formatMoneyInputValue(costPriceInput)} onChange={(event) => setMoneyFormField("costPrice", event.target.value)} />
+                <Input inputMode="numeric" placeholder="5.000" value={formatMoneyInputValue(costPriceInput)} onChange={(event) => setMoneyFormField("costPrice", event.target.value)} />
                 {form.formState.errors.costPrice ? <p className="text-sm text-destructive">{form.formState.errors.costPrice.message}</p> : null}
               </div>
               <div className="space-y-2">
                 <Label>{t("products.salePrice")}</Label>
-                <Input inputMode="numeric" placeholder="750" value={formatMoneyInputValue(salePriceInput)} onChange={(event) => setMoneyFormField("salePrice", event.target.value)} />
+                <Input inputMode="numeric" placeholder="7.500" value={formatMoneyInputValue(salePriceInput)} onChange={(event) => setMoneyFormField("salePrice", event.target.value)} />
                 {form.formState.errors.salePrice ? <p className="text-sm text-destructive">{form.formState.errors.salePrice.message}</p> : null}
               </div>
               <div className="space-y-2">
                 <Label>{t("products.originalPrice")}</Label>
-                <Input inputMode="numeric" placeholder="950" value={formatMoneyInputValue(originalPriceInput)} onChange={(event) => setMoneyFormField("originalPrice", event.target.value)} />
+                <Input inputMode="numeric" placeholder="9.500" value={formatMoneyInputValue(originalPriceInput)} onChange={(event) => setMoneyFormField("originalPrice", event.target.value)} />
               </div>
               <div className="space-y-2"><Label>{t("products.stockQuantity")}</Label><Input type="number" placeholder="30" {...form.register("stockQuantity")} /></div>
               <div className="space-y-2"><Label>{t("products.minStock")}</Label><Input type="number" placeholder="5" {...form.register("minStock")} /></div>
@@ -1557,18 +1580,18 @@ export default function ProductsPage() {
           </div>
         </DialogContent>
       </Dialog>
-      {/* QR preview dialog */}
+      {/* Barcode preview dialog */}
       <Dialog open={Boolean(selectedQrProduct)} onOpenChange={(open) => !open && setSelectedQrProduct(null)}>
         <DialogContent className="max-w-md">
           {selectedQrProduct ? (
             <>
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2"><QrCode className="h-5 w-5" />{t("products.qrDialogTitle")}</DialogTitle>
-                <DialogDescription>{t("products.qrDialogDescription")}</DialogDescription>
+                <DialogTitle className="flex items-center gap-2"><Barcode className="h-5 w-5" />{t("products.barcodeDialogTitle")}</DialogTitle>
+                <DialogDescription>{t("products.barcodeDialogDescription")}</DialogDescription>
               </DialogHeader>
               <div className="flex flex-col items-center gap-4 text-center">
-                <div id="homex-product-qr-print-area" className="rounded-xl border bg-white p-5">
-                  <QRCodeSVG value={selectedQrProduct.qrCode || selectedQrProduct.sku} size={220} />
+                <div id="homex-product-qr-print-area" className="rounded-xl border bg-white p-5 w-full flex justify-center">
+                  <BarcodeRenderer value={selectedQrProduct.barcode || selectedQrProduct.sku} />
                 </div>
                 <div>
                   <p className="font-bold">{selectedQrProduct.sku}</p>
@@ -1576,7 +1599,7 @@ export default function ProductsPage() {
                 </div>
                 <Button type="button" onClick={() => printQrCode(selectedQrProduct)}>
                   <Printer className="h-4 w-4" />
-                  {t("products.printQr")}
+                  {t("products.printBarcode")}
                 </Button>
               </div>
             </>
@@ -1586,6 +1609,7 @@ export default function ProductsPage() {
     </div>
   );
 }
+
 
 
 

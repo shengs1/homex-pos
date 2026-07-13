@@ -29,6 +29,7 @@ const FALLBACK_SETTINGS: SettingPayload = {
   bankAccountName: "",
   vietQrTemplate: "",
   transferContentTemplate: "",
+  enablePayOSPayment: false,
   defaultPaymentMethod: "CASH",
   productsPerPage: 24,
   autoLockMinutes: 30,
@@ -67,6 +68,7 @@ function normalizeSettings(data: Partial<SettingPayload>): SettingPayload {
     bankAccountName: data.bankAccountName || FALLBACK_SETTINGS.bankAccountName,
     vietQrTemplate: data.vietQrTemplate || FALLBACK_SETTINGS.vietQrTemplate,
     transferContentTemplate: data.transferContentTemplate || FALLBACK_SETTINGS.transferContentTemplate,
+    enablePayOSPayment: data.enablePayOSPayment ?? FALLBACK_SETTINGS.enablePayOSPayment,
     defaultPaymentMethod: data.defaultPaymentMethod || FALLBACK_SETTINGS.defaultPaymentMethod,
     productsPerPage: data.productsPerPage || FALLBACK_SETTINGS.productsPerPage,
     autoLockMinutes: data.autoLockMinutes || FALLBACK_SETTINGS.autoLockMinutes,
@@ -137,3 +139,4 @@ export function useSettings() {
   }
   return context;
 }
+

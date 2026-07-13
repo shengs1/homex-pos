@@ -18,7 +18,7 @@ function normalizeProductPrice(value: Prisma.Decimal | number | string | null | 
   const numberValue = Number(value || 0);
   if (!Number.isFinite(numberValue) || numberValue <= 0) return 0;
 
-  return numberValue >= 10000 ? Math.round(numberValue / 1000) : numberValue;
+  return Math.round(numberValue);
 }
 
 const productInclude = {
@@ -140,13 +140,13 @@ const baseProductSchema = z.object({
     .int("ID nhà cung cấp phải là số nguyên")
     .positive("ID nhà cung cấp không hợp lệ"),
 
-  costPrice: z.coerce.number().min(0, "Giá nhập không được âm"),
+  costPrice: z.coerce.number().min(0, "Giá vốn không được âm"),
 
   salePrice: z.coerce.number().positive("Giá bán phải lớn hơn 0"),
 
   originalPrice: z.coerce
     .number()
-    .min(0, "Giá gốc không được âm")
+    .min(0, "Giá niêm yết không được âm")
     .optional(),
 
   stockQuantity: z.coerce
@@ -177,7 +177,7 @@ const baseProductSchema = z.object({
 const createProductSchema = baseProductSchema.refine(
   (data) => data.salePrice >= data.costPrice,
   {
-    message: "Giá bán phải lớn hơn hoặc bằng giá nhập",
+    message: "Giá bán phải lớn hơn hoặc bằng giá vốn",
     path: ["salePrice"],
   }
 );
@@ -185,7 +185,7 @@ const createProductSchema = baseProductSchema.refine(
 const updateProductSchema = baseProductSchema.refine(
   (data) => data.salePrice >= data.costPrice,
   {
-    message: "Giá bán phải lớn hơn hoặc bằng giá nhập",
+    message: "Giá bán phải lớn hơn hoặc bằng giá vốn",
     path: ["salePrice"],
   }
 );
@@ -998,6 +998,7 @@ router.post(
   })
 );
 export default router;
+
 
 
 

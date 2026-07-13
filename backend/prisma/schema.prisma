@@ -226,18 +226,41 @@ model OrderDetail {
 }
 
 model Payment {
-  id           Int           @id @default(autoincrement())
-  orderId      Int           @unique
-  method       PaymentMethod
-  amount       Decimal       @db.Decimal(12, 2)
-  cashReceived Decimal?      @db.Decimal(12, 2)
-  changeAmount Decimal?      @db.Decimal(12, 2)
-  status       PaymentStatus @default(PAID)
-  paidAt       DateTime?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id                    Int           @id @default(autoincrement())
+  orderId               Int           @unique
+  method                PaymentMethod
+  amount                Decimal       @db.Decimal(12, 2)
+  cashReceived          Decimal?      @db.Decimal(12, 2)
+  changeAmount          Decimal?      @db.Decimal(12, 2)
+  status                PaymentStatus @default(PAID)
+  provider              String        @default("MANUAL")
+  providerOrderCode     Int?          @unique
+  providerPaymentLinkId String?
+  checkoutUrl           String?
+  qrCode                String?
+  paymentCode           String?
+  providerTransactionId String?
+  rawWebhookPayload     Json?
+  paidAt                DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
-  order Order @relation(fields: [orderId], references: [id])
+  order       Order               @relation(fields: [orderId], references: [id])
+  webhookLogs PaymentWebhookLog[]
+}
+
+model PaymentWebhookLog {
+  id           Int      @id @default(autoincrement())
+  provider     String
+  eventId      String?
+  paymentId    Int?
+  orderCode    Int?
+  payload      Json
+  status       String
+  errorMessage String?
+  createdAt    DateTime @default(now())
+
+  payment Payment? @relation(fields: [paymentId], references: [id])
 }
 
 model StockTransaction {
@@ -474,3 +497,6 @@ model Notification {
 
   @@index([isRead, createdAt])
 }
+
+
+

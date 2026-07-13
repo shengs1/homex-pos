@@ -251,8 +251,8 @@ export function PaymentHistoryTab() {
 
         <Card className="w-full min-w-0">
           <CardContent className="pt-6">
-            <form onSubmit={handleFilter} className="flex w-full flex-wrap items-end gap-4">
-              <div className="w-full min-w-[260px] flex-1">
+            <form onSubmit={handleFilter} className="flex w-full flex-wrap items-end gap-3">
+              <div className="w-full md:flex-[1.5] md:min-w-[200px]">
                 <Label className="mb-2 block">{t("common.search")}</Label>
                 <Input
                   placeholder={t("payments.searchPlaceholder")}
@@ -261,7 +261,7 @@ export function PaymentHistoryTab() {
                 />
               </div>
 
-              <div className="w-full min-w-[190px] md:w-auto">
+              <div className="w-full md:flex-1 md:min-w-[150px]">
                 <Label className="mb-2 block">{t("payments.method")}</Label>
                 <Select
                   value={method}
@@ -277,7 +277,7 @@ export function PaymentHistoryTab() {
                 </Select>
               </div>
 
-              <div className="w-full min-w-[170px] md:w-auto">
+              <div className="w-full md:flex-1 md:min-w-[140px]">
                 <Label className="mb-2 block">{t("common.status")}</Label>
                 <Select
                   value={status}
@@ -293,10 +293,10 @@ export function PaymentHistoryTab() {
                 </Select>
               </div>
 
-              <DateFilterInput label={t("reports.fromDate")} value={fromDate} onChange={setFromDate} className="w-full min-w-[180px] md:w-[190px]" />
-              <DateFilterInput label={t("reports.toDate")} value={toDate} onChange={setToDate} className="w-full min-w-[180px] md:w-[190px]" />
+              <DateFilterInput label={t("reports.fromDate")} value={fromDate} onChange={setFromDate} className="w-full md:flex-1 md:min-w-[140px]" />
+              <DateFilterInput label={t("reports.toDate")} value={toDate} onChange={setToDate} className="w-full md:flex-1 md:min-w-[140px]" />
 
-              <Button type="submit" className="w-full md:w-auto">
+              <Button type="submit" className="w-full md:w-auto md:min-w-[90px]">
                 <Search className="h-4 w-4" />
                 {t("common.filter")}
               </Button>
@@ -369,10 +369,12 @@ export function PaymentHistoryTab() {
                               <Eye className="h-4 w-4" />
                               {t("payments.viewVoucher")}
                             </Button>
-                            <Button type="button" size="sm" variant="destructive" onClick={() => handleRefund(payment)} disabled={payment.status === "REFUNDED"}>
-                              <RotateCcw className="h-4 w-4" />
-                              {t("payments.refundTransaction")}
-                            </Button>
+                            {payment.status === "PAID" && (
+                              <Button type="button" size="sm" variant="destructive" onClick={() => handleRefund(payment)}>
+                                <RotateCcw className="h-4 w-4" />
+                                {t("payments.refundTransaction")}
+                              </Button>
+                            )}
                           </div>
                         </Td>
                       </tr>
@@ -392,10 +394,12 @@ export function PaymentHistoryTab() {
               <CardHeader className="border-b">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <CardTitle>{t("payments.voucherTitle", { code: getPaymentTransactionCode(selectedPayment) })}</CardTitle>
-                  <Button type="button" variant="destructive" onClick={() => handleRefund(selectedPayment)} disabled={selectedPayment.status === "REFUNDED"}>
-                    <RotateCcw className="h-4 w-4" />
-                    {t("payments.refundTransaction")}
-                  </Button>
+                  {selectedPayment.status === "PAID" && (
+                    <Button type="button" variant="destructive" onClick={() => handleRefund(selectedPayment)}>
+                      <RotateCcw className="h-4 w-4" />
+                      {t("payments.refundTransaction")}
+                    </Button>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">

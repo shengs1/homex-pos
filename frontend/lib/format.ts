@@ -1,7 +1,8 @@
 export function formatCurrency(value: number | string | null | undefined) {
-  const numberValue = compactMoneyDisplayValue(value);
+  const numberValue = Number(value || 0);
+  const safeValue = Number.isFinite(numberValue) ? numberValue : 0;
 
-  return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(numberValue)} VND`;
+  return `${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(safeValue)} VND`;
 }
 
 export function formatNumber(value: number | string | null | undefined) {
@@ -68,12 +69,12 @@ export function compactMoneyDisplayValue(value: string | number | null | undefin
   const numberValue = Number(value || 0);
   if (!Number.isFinite(numberValue) || numberValue <= 0) return 0;
 
-  return numberValue >= 10000 ? Math.round(numberValue / 1000) : numberValue;
+  return Math.round(numberValue);
 }
 
 export function compactProductPrice(value: string | number | null | undefined) {
   const numberValue = typeof value === "number" ? value : parseMoneyInput(value);
   if (!Number.isFinite(numberValue) || numberValue <= 0) return 0;
 
-  return compactMoneyDisplayValue(numberValue);
+  return Math.round(numberValue);
 }

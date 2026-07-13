@@ -16,6 +16,7 @@
     "class-variance-authority": "latest",
     "clsx": "latest",
     "html5-qrcode": "^2.3.8",
+    "jsbarcode": "^3.12.3",
     "lucide-react": "latest",
     "next": "16.2.6",
     "qrcode.react": "^4.2.0",
@@ -29,6 +30,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/jsbarcode": "^3.11.4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

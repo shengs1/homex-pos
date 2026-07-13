@@ -30,7 +30,7 @@ const maxDescriptionLength = 500;
 function normalizePrice(value: unknown) {
   const numberValue = Number(value);
   if (!Number.isFinite(numberValue) || numberValue < 0) return undefined;
-  return Math.round(numberValue >= 10000 ? numberValue / 1000 : numberValue);
+  return Math.round(numberValue);
 }
 
 function cleanString(value: unknown, maxLength = 250) {
@@ -305,14 +305,42 @@ function isConsumableProduct(data: Partial<EnrichedProductData>) {
 
 function roundToNicePrice(value: number) {
   if (!Number.isFinite(value) || value <= 0) return undefined;
-  if (value < 10) return Math.max(1, Math.round(value));
-  return Math.max(1, Math.round(value / 5) * 5);
+  if (value < 1000) return Math.max(1000, Math.round(value / 50) * 50);
+  return Math.max(1000, Math.round(value / 50) * 50);
+}
+
+function normalizeSuggestedRetailPrice(value: number | undefined, minimum = 1000) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
+
+  let nextValue = value;
+  while (nextValue > 0 && nextValue < minimum) {
+    nextValue *= 10;
+  }
+
+  return roundToNicePrice(Math.max(nextValue, minimum));
+}
+
+function normalizeSuggestedPriceBand(data: Partial<EnrichedProductData>) {
+  const salePrice = normalizeSuggestedRetailPrice(data.estimatedSalePrice, 1000);
+  const importPrice = normalizeSuggestedRetailPrice(data.estimatedImportPrice, 700);
+  const originalPrice = normalizeSuggestedRetailPrice(data.originalPrice, salePrice ? Math.ceil(salePrice * 1.1) : 1200);
+
+  return {
+    ...data,
+    estimatedSalePrice: salePrice,
+    estimatedImportPrice: importPrice && salePrice && importPrice >= salePrice
+      ? roundToNicePrice(salePrice * 0.72)
+      : importPrice,
+    originalPrice: originalPrice && salePrice && originalPrice <= salePrice
+      ? roundToNicePrice(salePrice * 1.18)
+      : originalPrice,
+  };
 }
 
 function applyAiOperationalSuggestions(data: EnrichedProductData) {
   if (!hasTrustedProductName(data)) return data;
 
-  const suggested = { ...data };
+  const suggested = normalizeSuggestedPriceBand({ ...data });
   const consumable = isConsumableProduct(suggested);
   const outOfScope = isOutOfScopeRetailProduct(suggested);
 
@@ -348,7 +376,7 @@ function applyAiOperationalSuggestions(data: EnrichedProductData) {
   }
   suggested.description = sanitizeDescriptionAgainstProduct(suggested.description, suggested) || buildCleanDescription(suggested);
 
-  return suggested;
+  return normalizeSuggestedPriceBand(suggested);
 }
 function sanitizePartialData(data: Partial<EnrichedProductData>) {
   const cleanData: Partial<EnrichedProductData> = {};
@@ -717,7 +745,7 @@ async function enrichFromImageWithAi(barcode: string, imageUrl: string) {
         {
           role: "system",
           content:
-            "Bạn là hệ thống đọc nhãn sản phẩm từ ảnh thật. Chỉ dựa vào chữ/nhãn nhìn thấy trong ảnh, không suy đoán từ barcode. BẮT BUỘC trả về duy nhất JSON thuần túy gồm: name, brand, category, supplierName, unit, estimatedImportPrice, estimatedSalePrice, originalPrice, stockQuantity, minStock, warrantyMonths, description. Nếu không đọc rõ tên sản phẩm từ ảnh, trả về object rỗng {}. Category chỉ chọn một trong: Thiết bị nhà bếp (KIT), Thiết bị làm sạch (CARE), Đồ dùng gia đình (UTIL), Dụng cụ nấu ăn (COOK), Thiết bị làm mát (COOL), Thiết bị điện (ELEC), Đồ phòng tắm (BATH), Khác (OTHER). Với sản phẩm ngoài phạm trù đồ gia dụng như đồ chơi trẻ em, băng keo cá nhân, nước, thực phẩm, hàng tiêu dùng linh tinh thì dùng Khác (OTHER) và supplierName là Nhà cung cấp lẻ. Giá tiền là số nguyên VND, nếu không chắc thì bỏ trống giá.",
+            "Bạn là hệ thống đọc nhãn sản phẩm từ ảnh thật. Chỉ dựa vào chữ/nhãn nhìn thấy trong ảnh, không suy đoán từ barcode. BẮT BUỘC trả về duy nhất JSON thuần túy gồm: name, brand, category, supplierName, unit, estimatedImportPrice, estimatedSalePrice, originalPrice, stockQuantity, minStock, warrantyMonths, description. Nếu không đọc rõ tên sản phẩm từ ảnh, trả về object rỗng {}. Category chỉ chọn một trong: Thiết bị nhà bếp (KIT), Thiết bị làm sạch (CARE), Đồ dùng gia đình (UTIL), Dụng cụ nấu ăn (COOK), Thiết bị làm mát (COOL), Thiết bị điện (ELEC), Đồ phòng tắm (BATH), Khác (OTHER). Với sản phẩm ngoài phạm trù đồ gia dụng như đồ chơi trẻ em, băng keo cá nhân, nước, thực phẩm, hàng tiêu dùng linh tinh thì dùng Khác (OTHER) và supplierName là Nhà cung cấp lẻ. Giá tiền trả về theo đơn vị nghìn của Homex POS: 1000 tương đương 1.000.000 VND thực tế; chỉ đề xuất trong khoảng từ 1000 đến vài chục nghìn, nếu không chắc thì bỏ trống giá.",
         },
         {
           role: "user",
@@ -775,11 +803,11 @@ async function enrichMissingFieldsWithAi(barcode: string, externalData: Partial<
         {
           role: "system",
           content:
-            "Bạn là hệ thống chuẩn hóa dữ liệu sản phẩm cho Homex POS. BẮT BUỘC trả về duy nhất một object JSON thuần túy, không markdown, không giải thích. JSON gồm: name, category, supplierName, unit, estimatedImportPrice, estimatedSalePrice, originalPrice, stockQuantity, minStock, warrantyMonths, description. Không được thay đổi danh tính sản phẩm. Field name/brand chỉ được trả về nếu trùng khớp rõ với tên/thương hiệu trong dữ liệu external. Nếu external không có tên sản phẩm thật, bỏ trống name. Không được bịa URL ảnh. Category chỉ được chọn một trong các nhóm Homex: Thiết bị nhà bếp (KIT), Thiết bị làm sạch (CARE), Đồ dùng gia đình (UTIL), Dụng cụ nấu ăn (COOK), Thiết bị làm mát (COOL), Thiết bị điện (ELEC), Đồ phòng tắm (BATH), Khác (OTHER). Với sản phẩm ngoài phạm trù đồ gia dụng như đồ chơi trẻ em, băng keo cá nhân, nước, thực phẩm, hàng tiêu dùng linh tinh thì chọn Khác (OTHER) và supplierName là Nhà cung cấp lẻ. Description phải mô tả đúng name/brand từ external; nếu không chắc thì bỏ trống.",
+            "Bạn là hệ thống chuẩn hóa dữ liệu sản phẩm cho Homex POS. BẮT BUỘC trả về duy nhất một object JSON thuần túy, không markdown, không giải thích. JSON gồm: name, category, supplierName, unit, estimatedImportPrice, estimatedSalePrice, originalPrice, stockQuantity, minStock, warrantyMonths, description. Không được thay đổi danh tính sản phẩm. Field name/brand chỉ được trả về nếu trùng khớp rõ với tên/thương hiệu trong dữ liệu external. Nếu external không có tên sản phẩm thật, bỏ trống name. Không được bịa URL ảnh. Category chỉ được chọn một trong các nhóm Homex: Thiết bị nhà bếp (KIT), Thiết bị làm sạch (CARE), Đồ dùng gia đình (UTIL), Dụng cụ nấu ăn (COOK), Thiết bị làm mát (COOL), Thiết bị điện (ELEC), Đồ phòng tắm (BATH), Khác (OTHER). Với sản phẩm ngoài phạm trù đồ gia dụng như đồ chơi trẻ em, băng keo cá nhân, nước, thực phẩm, hàng tiêu dùng linh tinh thì chọn Khác (OTHER) và supplierName là Nhà cung cấp lẻ. Description phải mô tả đúng name/brand từ external; nếu không chắc thì bỏ trống. Giá tiền trả về theo đơn vị nghìn của Homex POS: 1000 tương đương 1.000.000 VND thực tế; chỉ đề xuất trong khoảng từ 1000 đến vài chục nghìn.",
         },
         {
           role: "user",
-          content: `Barcode: ${barcode}\n\nDữ liệu đã lấy được từ external APIs:\n${JSON.stringify(externalData)}\n\nNhà cung cấp hiện có, supplierName phải chọn đúng một tên trong danh sách này nếu có thể:\n${JSON.stringify(supplierOptions.map((supplier) => supplier.name))}\n\nCác field còn thiếu:\n${missingFields.join(", ")}\n\nChỉ bù các field còn thiếu nếu không mâu thuẫn dữ liệu external. Không đổi tên sản phẩm. Không bịa sản phẩm khác cùng barcode. Giá tiền là số nguyên theo đơn vị hiển thị Homex: 25 nghĩa là 25.000 VND, 120 nghĩa là 120.000 VND. Gợi ý stockQuantity là tồn kho ban đầu hợp lý, minStock là tồn kho tối thiểu cảnh báo. Nếu là hàng tiêu dùng không bảo hành thì warrantyMonths = 0; hàng điện/gia dụng thường 6-24 tháng.`,
+          content: `Barcode: ${barcode}\n\nDữ liệu đã lấy được từ external APIs:\n${JSON.stringify(externalData)}\n\nNhà cung cấp hiện có, supplierName phải chọn đúng một tên trong danh sách này nếu có thể:\n${JSON.stringify(supplierOptions.map((supplier) => supplier.name))}\n\nCác field còn thiếu:\n${missingFields.join(", ")}\n\nChỉ bù các field còn thiếu nếu không mâu thuẫn dữ liệu external. Không đổi tên sản phẩm. Không bịa sản phẩm khác cùng barcode. Giá tiền là số nguyên theo đơn vị nghìn của Homex POS: 1000 tương đương 1.000.000 VND thực tế; chỉ đề xuất trong khoảng từ 1000 đến vài chục nghìn. Gợi ý stockQuantity là tồn kho ban đầu hợp lý, minStock là tồn kho tối thiểu cảnh báo. Nếu là hàng tiêu dùng không bảo hành thì warrantyMonths = 0; hàng điện/gia dụng thường 6-24 tháng.`,
         },
       ],
     });
@@ -876,6 +904,9 @@ export async function enrichProductByBarcode(barcode: string) {
     foundInDatabase: false,
   };
 }
+
+
+
 
 
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowDownCircle, ArrowUpCircle, CircleDollarSign, Download, PackagePlus, Plus, RotateCcw, SlidersHorizontal, Trash2 } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, CircleDollarSign, Download, PackagePlus, Plus, RotateCcw, SlidersHorizontal, Trash2, Sparkles, Bot, Loader2, ChevronDown, ChevronUp, Check, X, EyeOff, Hourglass } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { RoleGuard } from "@/components/auth/role-guard";
@@ -61,6 +61,114 @@ export default function InventoryPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmittingPurchase, setIsSubmittingPurchase] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+
+  // AI Drawer states
+  const [isAiDrawerOpen, setIsAiDrawerOpen] = useState(false);
+  const [forecastDays, setForecastDays] = useState(15);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [loadingStep, setLoadingStep] = useState(0); // 0, 1, 2, 3
+  const [aiData, setAiData] = useState<any>(null);
+  const [expandedItemSku, setExpandedItemSku] = useState<string | null>(null);
+  const [approvedItems, setApprovedItems] = useState<any[]>([]);
+  const [declinedSkus, setDeclinedSkus] = useState<string[]>([]);
+  const [activeFilter, setActiveFilter] = useState<"all" | "urgent" | "trends">("all");
+
+  useEffect(() => {
+    if (!isAnalyzing) return;
+    setLoadingStep(1);
+    
+    const timer1 = setTimeout(() => {
+      setLoadingStep(2);
+    }, 1200);
+
+    const timer2 = setTimeout(() => {
+      setLoadingStep(3);
+    }, 2400);
+
+    return () => {
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
+  }, [isAnalyzing]);
+
+  async function runAiAnalysis() {
+    try {
+      setIsAnalyzing(true);
+      setAiData(null);
+      setExpandedItemSku(null);
+      setApprovedItems([]);
+      setDeclinedSkus([]);
+      setActiveFilter("all");
+      
+      const res = await inventoryService.aiForecast({ days: forecastDays });
+      setAiData(res);
+    } catch (error) {
+      toast.error("Không thể phân tích dữ liệu kho: " + getApiErrorMessage(error));
+    } finally {
+      setIsAnalyzing(false);
+      setLoadingStep(0);
+    }
+  }
+
+  function handleApproveItem(item: any) {
+    if (item.suggestedRestockQuantity <= 0) return;
+    if (approvedItems.some(i => i.sku === item.sku)) return;
+    setApprovedItems(prev => [...prev, item]);
+  }
+
+  function handleDeclineItem(item: any) {
+    setDeclinedSkus(prev => [...prev, item.sku]);
+    setApprovedItems(prev => prev.filter(i => i.sku !== item.sku));
+  }
+
+  const visibleRestockList = useMemo(() => {
+    if (!aiData?.restockList) return [];
+    const nonDeclined = aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku));
+    if (activeFilter === "urgent") {
+      return nonDeclined.filter((item: any) => 
+        item.suggestedRestockQuantity > 0 || item.recommendationType === "LOW_STOCK"
+      );
+    }
+    if (activeFilter === "trends") {
+      return nonDeclined.filter((item: any) => 
+        item.recommendationType === "RISING_TREND" || item.recommendationType === "SEASONAL_HOT"
+      );
+    }
+    return nonDeclined;
+  }, [aiData, declinedSkus, activeFilter]);
+
+  function handleCreatePurchaseFromApproved() {
+    if (approvedItems.length === 0) return;
+
+    const mappedItems = approvedItems.map(item => {
+      const matchedProd = products.find(p => p.sku === item.sku);
+      return {
+        productId: matchedProd?.id || item.productId || 0,
+        productSearch: matchedProd ? `${matchedProd.sku} - ${matchedProd.name}` : `${item.sku} - ${item.name}`,
+        quantity: item.suggestedRestockQuantity,
+        unitCost: matchedProd ? Number(matchedProd.costPrice) : 0,
+      };
+    });
+
+    setDraftItems(mappedItems);
+    setIsPurchaseDialogOpen(true);
+    setIsAiDrawerOpen(false);
+    toast.success(`Đã chuyển ${approvedItems.length} đề xuất nhập kho sang phiếu nhập hàng!`);
+  }
+
+  function handleResetAiDrawer() {
+    setForecastDays(15);
+    setAiData(null);
+    setExpandedItemSku(null);
+    setApprovedItems([]);
+    setDeclinedSkus([]);
+    setActiveFilter("all");
+  }
+
+  function formatPercent(multiplier: number): string {
+    const pct = Math.round((multiplier - 1) * 100);
+    return pct >= 0 ? `+${pct}%` : `${pct}%`;
+  }
 
   const totalDraftAmount = useMemo(() => draftItems.reduce((sum, item) => sum + item.quantity * item.unitCost, 0), [draftItems]);
   const importSchema = useMemo(() => z.object({ productId: z.coerce.number().int().positive(t("inventory.productRequired")), quantity: z.coerce.number().int().positive(t("inventory.quantityPositive")), note: z.string().trim().optional() }), [t]);
@@ -248,12 +356,22 @@ export default function InventoryPage() {
         <PageHeader title={t("inventory.title")} description={t("inventory.description")} />
         <ErrorState message={errorMessage} />
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant={activeTab === "overview" ? "default" : "outline"} onClick={() => setActiveTab("overview")}>{t("inventory.overview")}</Button>
-          <Button variant="outline" onClick={() => setIsPurchaseDialogOpen(true)}>{t("inventory.purchaseStock")}</Button>
-          <Button variant="outline" onClick={() => setIsQuickImportDialogOpen(true)}>{t("inventory.quickImport")}</Button>
-          <Button variant="outline" onClick={() => setIsAdjustDialogOpen(true)}>{t("inventory.adjustStock")}</Button>
-          <Button variant={activeTab === "history" ? "default" : "outline"} onClick={() => setActiveTab("history")}>{t("inventory.history")}</Button>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button variant={activeTab === "overview" ? "default" : "outline"} onClick={() => setActiveTab("overview")}>{t("inventory.overview")}</Button>
+            <Button variant="outline" onClick={() => setIsPurchaseDialogOpen(true)}>{t("inventory.purchaseStock")}</Button>
+            <Button variant="outline" onClick={() => setIsQuickImportDialogOpen(true)}>{t("inventory.quickImport")}</Button>
+            <Button variant="outline" onClick={() => setIsAdjustDialogOpen(true)}>{t("inventory.adjustStock")}</Button>
+            <Button variant={activeTab === "history" ? "default" : "outline"} onClick={() => setActiveTab("history")}>{t("inventory.history")}</Button>
+          </div>
+
+          <Button
+            onClick={() => setIsAiDrawerOpen(true)}
+            className="bg-gradient-to-r from-teal-600 to-emerald-500 text-white hover:from-teal-700 hover:to-emerald-600 shadow-sm border border-teal-500/30 transition-all font-medium flex items-center gap-2 px-4 py-2 rounded-xl transform hover:scale-[1.02] active:scale-[0.98]"
+          >
+            <Sparkles className="h-4 w-4 animate-pulse text-yellow-300" />
+            Trợ lý AI Kho
+          </Button>
         </div>
 
         {activeTab === "overview" ? (
@@ -461,6 +579,490 @@ export default function InventoryPage() {
             </form>
           </DialogContent>
         </Dialog>
+
+        {/* AI Inventory Assistant Drawer */}
+        {isAiDrawerOpen && (
+          <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
+            {/* Backdrop */}
+            <div 
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300"
+              onClick={() => setIsAiDrawerOpen(false)}
+            />
+            
+            {/* Drawer Panel */}
+            <div className="relative w-full max-w-3xl bg-slate-50 shadow-2xl flex flex-col h-full border-l border-slate-200 z-10 animate-in slide-in-from-right duration-300">
+              
+              {/* Header */}
+              <div className="bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
+                    <Bot className="h-5 w-5 text-teal-600 animate-bounce" />
+                    Trợ lý AI Phân tích Kho
+                  </h3>
+                  <p className="text-xs font-semibold text-slate-500 uppercase mt-0.5">
+                    Dữ liệu bán hàng 30 ngày & dự phòng {forecastDays} ngày tới
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="rounded-full h-8 w-8 hover:bg-slate-100 border-slate-200" 
+                    onClick={handleResetAiDrawer}
+                    title="Đặt lại phân tích"
+                  >
+                    <RotateCcw className="h-4 w-4 text-slate-500" />
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    className="rounded-full h-8 w-8 hover:bg-slate-100 border-slate-200" 
+                    onClick={() => setIsAiDrawerOpen(false)}
+                  >
+                    <X className="h-4 w-4 text-slate-500" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                
+                {/* Control Panel */}
+                <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm space-y-4">
+                  <div className="flex items-end gap-4">
+                    <div className="flex-1 space-y-2">
+                      <Label className="text-xs font-bold text-slate-700 uppercase">Số ngày dự phòng hàng</Label>
+                      <Input 
+                        type="number" 
+                        min={1} 
+                        max={90} 
+                        value={forecastDays} 
+                        onChange={(e) => setForecastDays(Math.max(1, Number(e.target.value)))}
+                        className="bg-slate-50 border-slate-200 focus:bg-white"
+                        disabled={isAnalyzing}
+                      />
+                    </div>
+                    <Button 
+                      onClick={runAiAnalysis}
+                      disabled={isAnalyzing}
+                      className="bg-teal-600 hover:bg-teal-700 text-white font-bold flex items-center gap-2 px-6 h-10 shadow-sm transition-all duration-200"
+                    >
+                      {isAnalyzing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                      AI Phân tích mới
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Loading State */}
+                {isAnalyzing && (
+                  <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm flex flex-col items-center justify-center space-y-6">
+                    <Loader2 className="h-10 w-10 animate-spin text-teal-600" />
+                    <div className="w-full max-w-sm space-y-3">
+                      <div className="flex items-center gap-3 text-sm font-medium">
+                        {loadingStep >= 1 ? (
+                          <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0"><Check className="h-3 w-3 stroke-[3]" /></div>
+                        ) : (
+                          <div className="h-5 w-5 rounded-full border-2 border-teal-600 border-t-transparent animate-spin shrink-0" />
+                        )}
+                        <span className={loadingStep >= 1 ? "text-slate-500 line-through" : "text-teal-600 font-bold"}>
+                          Đang tổng hợp lịch sử bán hàng...
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-3 text-sm font-medium">
+                        {loadingStep >= 2 ? (
+                          <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0"><Check className="h-3 w-3 stroke-[3]" /></div>
+                        ) : loadingStep === 1 ? (
+                          <div className="h-5 w-5 rounded-full border-2 border-teal-600 border-t-transparent animate-spin shrink-0" />
+                        ) : (
+                          <div className="h-5 w-5 rounded-full border-2 border-slate-200 shrink-0" />
+                        )}
+                        <span className={loadingStep >= 2 ? "text-slate-500 line-through" : loadingStep === 1 ? "text-teal-600 font-bold" : "text-slate-400"}>
+                          Đang kiểm tra tồn kho hiện tại...
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center gap-3 text-sm font-medium">
+                        {loadingStep >= 3 ? (
+                          <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0"><Check className="h-3 w-3 stroke-[3]" /></div>
+                        ) : loadingStep === 2 ? (
+                          <div className="h-5 w-5 rounded-full border-2 border-teal-600 border-t-transparent animate-spin shrink-0" />
+                        ) : (
+                          <div className="h-5 w-5 rounded-full border-2 border-slate-200 shrink-0" />
+                        )}
+                        <span className={loadingStep >= 3 ? "text-teal-600 font-bold" : "text-slate-400"}>
+                          AI đang phân tích xu hướng nhập hàng...
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Dashboard / Report results */}
+                {aiData && !isAnalyzing && (
+                  <div className="space-y-6">
+                    {/* Stats Grid */}
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                      <div className="bg-red-50 rounded-xl border border-red-100 p-3 text-center shadow-sm">
+                        <p className="text-[10px] font-bold text-red-500 uppercase">Sắp hết</p>
+                        <p className="text-2xl font-black text-red-700 mt-1">{aiData.stats.outOfStock}</p>
+                      </div>
+                      <div className="bg-amber-50 rounded-xl border border-amber-100 p-3 text-center shadow-sm">
+                        <p className="text-[10px] font-bold text-amber-500 uppercase">Tồn thấp</p>
+                        <p className="text-2xl font-black text-amber-700 mt-1">{aiData.stats.lowStock}</p>
+                      </div>
+                      <div className="bg-teal-50 rounded-xl border border-teal-100 p-3 text-center shadow-sm">
+                        <p className="text-[10px] font-bold text-teal-500 uppercase">Đề xuất nhập</p>
+                        <p className="text-2xl font-black text-teal-700 mt-1">{aiData.stats.recommended}</p>
+                      </div>
+                      <div className="bg-orange-50 rounded-xl border border-orange-100 p-3 text-center shadow-sm">
+                        <p className="text-[10px] font-bold text-orange-500 uppercase">Xu hướng tăng</p>
+                        <p className="text-2xl font-black text-orange-700 mt-1">{aiData.stats.risingTrend || 0}</p>
+                      </div>
+                      <div className="bg-emerald-50 rounded-xl border border-emerald-100 p-3 text-center shadow-sm">
+                        <p className="text-[10px] font-bold text-emerald-500 uppercase">Hot mùa vụ</p>
+                        <p className="text-2xl font-black text-emerald-700 mt-1">{aiData.stats.seasonalHot || 0}</p>
+                      </div>
+                      <div className="bg-slate-100 rounded-xl border border-slate-200 p-3 text-center shadow-sm">
+                        <p className="text-[10px] font-bold text-slate-500 uppercase">Đủ hàng</p>
+                        <p className="text-2xl font-black text-slate-700 mt-1">{aiData.stats.safe}</p>
+                      </div>
+                    </div>
+
+                    {/* Overview Analysis */}
+                    <div className="bg-teal-50 rounded-2xl border border-teal-100 p-4 shadow-sm space-y-2">
+                      <h4 className="text-xs font-bold text-teal-800 uppercase flex items-center gap-1.5">
+                        <Bot className="h-4 w-4 text-teal-600" />
+                        Nhận định tổng quan từ AI
+                      </h4>
+                      <p className="text-sm text-slate-600 leading-relaxed font-medium">
+                        {aiData.overview}
+                      </p>
+                    </div>
+
+                    {/* Restock Recommendations List */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Danh sách Đề xuất Nhập kho</h4>
+                        <span className="text-xs font-semibold text-slate-400">Hiển thị {visibleRestockList.length} đề xuất</span>
+                      </div>
+
+                      {/* Tab Filters */}
+                      <div className="flex border-b border-slate-200 bg-white rounded-lg p-0.5 border shadow-sm">
+                        <button
+                          type="button"
+                          onClick={() => setActiveFilter("all")}
+                          className={`flex-1 py-1.5 text-center text-xs font-bold rounded-md transition-all ${activeFilter === "all" ? "bg-teal-50 text-teal-700 border border-teal-100/50" : "text-slate-400 hover:text-slate-600"}`}
+                        >
+                          Tất cả ({aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku)).length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveFilter("urgent")}
+                          className={`flex-1 py-1.5 text-center text-xs font-bold rounded-md transition-all ${activeFilter === "urgent" ? "bg-red-50 text-red-600" : "text-slate-400 hover:text-slate-600"}`}
+                        >
+                          Cần nhập gấp ({aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku) && (item.suggestedRestockQuantity > 0 || item.recommendationType === "LOW_STOCK")).length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setActiveFilter("trends")}
+                          className={`flex-1 py-1.5 text-center text-xs font-bold rounded-md transition-all ${activeFilter === "trends" ? "bg-orange-50 text-orange-600" : "text-slate-400 hover:text-slate-600"}`}
+                        >
+                          Xu hướng sắp hot ({aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku) && (item.recommendationType === "RISING_TREND" || item.recommendationType === "SEASONAL_HOT")).length})
+                        </button>
+                      </div>
+                      
+                      {visibleRestockList.length === 0 ? (
+                        <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500 font-medium">
+                          Không có đề xuất nào trong danh mục này. Kho hàng hiện tại an toàn!
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {visibleRestockList.map((item: any) => {
+                            const isApproved = approvedItems.some(i => i.sku === item.sku);
+                            const isExpanded = expandedItemSku === item.sku;
+                            
+                            let priorityColor = "bg-slate-100 text-slate-700 border-slate-200";
+                            if (item.priority === "HIGH") priorityColor = "bg-red-50 text-red-700 border-red-100";
+                            else if (item.priority === "MEDIUM") priorityColor = "bg-amber-50 text-amber-700 border-amber-100";
+
+                            const rawAvgDailySales = Number(item.avgDailySales ?? 0);
+                            const avgDailySales = rawAvgDailySales > 0 
+                              ? rawAvgDailySales 
+                              : (item.soldLast30Days > 0 ? item.soldLast30Days / 30 : 0);
+                            const predictedDailySales = Number(item.predictedDailySales ?? 0);
+                            const dailySales = predictedDailySales > 0 ? predictedDailySales : avgDailySales;
+                            const expectedSales = Math.ceil(dailySales * forecastDays);
+
+                            let stockCoverageLabel = "";
+                            if (item.currentStock <= 0) {
+                              stockCoverageLabel = "0 ngày";
+                            } else if (dailySales <= 0) {
+                              stockCoverageLabel = "Chưa xác định";
+                            } else {
+                              stockCoverageLabel = `~${Math.floor(item.currentStock / dailySales)} ngày`;
+                            }
+
+                            let typeBadge = null;
+                            const hasSales = item.soldLast7Days > 0 || item.soldLast30Days > 0;
+                            
+                            if (item.seasonName) {
+                              typeBadge = <span className="bg-emerald-50 text-emerald-700 border-emerald-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">Sắp hot theo mùa</span>;
+                            } else {
+                              if (!hasSales) {
+                                typeBadge = <span className="bg-slate-100 text-slate-500 border-slate-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">Chưa đủ dữ liệu</span>;
+                              } else {
+                                if (item.recommendationType === "LOW_STOCK") {
+                                  typeBadge = <span className="bg-red-50 text-red-700 border-red-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">Tồn thấp</span>;
+                                } else if (item.recommendationType === "CATEGORY_MOMENTUM") {
+                                  typeBadge = <span className="bg-blue-50 text-blue-700 border-blue-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">Danh mục tăng</span>;
+                                } else {
+                                  typeBadge = <span className="bg-orange-50 text-orange-700 border-orange-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">Xu hướng tăng</span>;
+                                }
+                              }
+                            }
+
+                            return (
+                              <div key={item.sku} className={`bg-white rounded-xl border transition-all duration-200 shadow-sm overflow-hidden ${isApproved ? 'border-emerald-200 bg-emerald-50/5' : 'border-slate-200 hover:border-slate-300'}`}>
+                                <div className="p-4 flex gap-4">
+                                  {/* Product image */}
+                                  <div className="h-16 w-16 rounded-lg bg-slate-100 border border-slate-200 shrink-0 overflow-hidden flex items-center justify-center">
+                                    {item.imageUrl ? (
+                                      <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400 font-bold">NO IMG</span>
+                                    )}
+                                  </div>
+
+                                  {/* Product detail info */}
+                                  <div className="flex-1 min-w-0 space-y-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0 flex-1">
+                                        <h5 className="font-bold text-slate-800 text-sm truncate" title={item.name}>{item.name}</h5>
+                                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                          <span className="text-[10px] font-mono text-slate-400">SKU: {item.sku}</span>
+                                          {typeBadge}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        {item.suggestedRestockQuantity <= 0 ? (
+                                          <span className="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 text-[9px] font-bold rounded-full uppercase">
+                                            Chưa cần nhập
+                                          </span>
+                                        ) : (
+                                          <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full border uppercase ${priorityColor}`}>
+                                            {item.priority}
+                                          </span>
+                                        )}
+                                        {isApproved && (
+                                          <span className="bg-emerald-100 text-emerald-800 border-emerald-200 px-2 py-0.5 text-[9px] font-bold rounded-full border flex items-center gap-0.5">
+                                            <Check className="h-2.5 w-2.5 stroke-[3]" />
+                                            Đã duyệt
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Stats grid */}
+                                    <div className="grid grid-cols-3 gap-2 pt-2 text-center border-t border-slate-100">
+                                      <div className="bg-slate-50 rounded px-1 py-1">
+                                        <p className="text-[8px] font-semibold text-slate-400 uppercase">Tồn / T.Thiểu</p>
+                                        <p className="text-xs font-black text-slate-700 mt-0.5">{item.currentStock} / {item.minimumStock}</p>
+                                      </div>
+                                      <div className="bg-slate-50 rounded px-1 py-1">
+                                        <p className="text-[8px] font-semibold text-slate-400 uppercase">Bán 30 ngày</p>
+                                        <p className="text-xs font-black text-slate-700 mt-0.5">{item.soldLast30Days}</p>
+                                      </div>
+                                      <div className="bg-slate-50 rounded px-1 py-1">
+                                        <p className="text-[8px] font-semibold text-slate-400 uppercase">Bán 7 ngày</p>
+                                        <p className="text-xs font-black text-slate-700 mt-0.5">{item.soldLast7Days || 0}</p>
+                                      </div>
+                                      <div className="bg-slate-50 rounded px-1 py-1">
+                                        <p className="text-[8px] font-semibold text-slate-400 uppercase">Dự kiến bán ({forecastDays} ngày)</p>
+                                        <p className="text-xs font-black text-slate-700 mt-0.5">~ {expectedSales} SP</p>
+                                      </div>
+                                      <div className="bg-slate-50 rounded px-1 py-1">
+                                        <p className="text-[8px] font-semibold text-slate-400 uppercase flex items-center justify-center gap-0.5">
+                                          <Hourglass className="h-2.5 w-2.5 text-slate-400 shrink-0" />
+                                          Đủ bán trong
+                                        </p>
+                                        <p className="text-xs font-black text-slate-700 mt-0.5">{stockCoverageLabel}</p>
+                                      </div>
+                                      <div className={`${item.suggestedRestockQuantity > 0 ? 'bg-teal-50' : 'bg-slate-50'} rounded px-1 py-1`}>
+                                        <p className={`text-[8px] font-bold ${item.suggestedRestockQuantity > 0 ? 'text-teal-600' : 'text-slate-500'} uppercase`}>
+                                          {item.suggestedRestockQuantity > 0 ? "Khuyên Nhập" : "Khuyến nghị"}
+                                        </p>
+                                        <p className={`text-xs font-black ${item.suggestedRestockQuantity > 0 ? 'text-teal-700' : 'text-slate-700'} mt-0.5`}>
+                                          {item.suggestedRestockQuantity > 0 ? item.suggestedRestockQuantity : "Theo dõi"}
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    {/* Reason */}
+                                    <p className="text-xs text-slate-500 pt-2 flex items-start gap-1">
+                                      <span className="font-bold text-slate-700 shrink-0">Lý do:</span>
+                                      <span className="italic text-slate-600">{item.reason}</span>
+                                    </p>
+
+                                    {/* Action Row */}
+                                    <div className="flex items-center justify-between pt-3 gap-2">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        type="button"
+                                        onClick={() => setExpandedItemSku(isExpanded ? null : item.sku)}
+                                        className="text-xs text-teal-600 hover:text-teal-700 p-0 h-auto flex items-center gap-0.5 hover:bg-transparent"
+                                      >
+                                        {isExpanded ? <ChevronUp className="h-4 w-4 text-teal-600" /> : <ChevronDown className="h-4 w-4 text-teal-600" />}
+                                        {isExpanded ? "Thu gọn phân tích" : "Xem AI phân tích chi tiết"}
+                                      </Button>
+
+                                      <div className="flex items-center gap-2">
+                                        {item.suggestedRestockQuantity > 0 ? (
+                                          <>
+                                            <Button 
+                                              variant="outline" 
+                                              size="sm"
+                                              type="button"
+                                              onClick={() => handleDeclineItem(item)}
+                                              className="text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 h-8 px-2.5 rounded-lg flex items-center gap-1 transition-colors"
+                                            >
+                                              <X className="h-3.5 w-3.5" />
+                                              Từ chối
+                                            </Button>
+                                            <Button 
+                                              variant="outline"
+                                              size="sm"
+                                              type="button"
+                                              onClick={() => handleApproveItem(item)}
+                                              disabled={isApproved}
+                                              className={`text-xs h-8 px-2.5 rounded-lg flex items-center gap-1 transition-colors ${isApproved ? 'border-slate-200 bg-slate-50 text-slate-400' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800'}`}
+                                            >
+                                              <Check className="h-3.5 w-3.5" />
+                                              Duyệt
+                                            </Button>
+                                          </>
+                                        ) : (
+                                          <Button 
+                                            variant="outline" 
+                                            size="sm"
+                                            type="button"
+                                            onClick={() => handleDeclineItem(item)}
+                                            className="text-xs border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 h-8 px-2.5 rounded-lg flex items-center gap-1 transition-colors"
+                                          >
+                                            <EyeOff className="h-3.5 w-3.5" />
+                                            Ẩn theo dõi
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                </div>
+
+                                {/* Expanded detailed analysis section */}
+                                {isExpanded && (
+                                  <div className="bg-slate-50/80 border-t border-slate-100 p-4 text-xs space-y-3">
+                                    <div className="space-y-1">
+                                      <p className="font-bold text-slate-700 uppercase text-[9px]">Quyết định nhập</p>
+                                      <p className="text-slate-600 font-medium">{item.detailAnalysis.decision}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="font-bold text-slate-700 uppercase text-[9px]">Lý do chính</p>
+                                      <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
+                                        {item.detailAnalysis.mainReasons.map((r: string, idx: number) => (
+                                          <li key={idx}>{r}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="font-bold text-slate-700 uppercase text-[9px]">Rủi ro cần kiểm soát</p>
+                                      <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
+                                        {item.detailAnalysis.risks.map((r: string, idx: number) => (
+                                          <li key={idx}>{r}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="font-bold text-slate-700 uppercase text-[9px]">Kế hoạch hành động</p>
+                                      <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
+                                        {item.detailAnalysis.actionPlan.map((r: string, idx: number) => (
+                                          <li key={idx}>{r}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                    <div className="space-y-1 pt-2 border-t border-slate-200/60 mt-2">
+                                      <p className="font-bold text-slate-700 uppercase text-[9px]">Tín hiệu dự báo</p>
+                                      <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
+                                        <li title={`Chỉ số chi tiết: ${formatPercent(item.trendRatio)}`}>
+                                          Xu hướng gần đây: {
+                                            Math.round((item.trendRatio - 1) * 100) > 0 
+                                              ? "Nhu cầu đang tăng so với giai đoạn trước." 
+                                              : Math.round((item.trendRatio - 1) * 100) < 0 
+                                                ? "Nhu cầu đang giảm so với giai đoạn trước." 
+                                                : "Chưa ghi nhận biến động rõ ràng."
+                                          }
+                                        </li>
+                                        <li title={`Chỉ số chi tiết: ${formatPercent(item.seasonBoost)}`}>
+                                          Yếu tố mùa vụ: {
+                                            item.seasonName
+                                              ? `Sản phẩm phù hợp với ${item.seasonName} (${item.seasonMonths}). ${item.seasonReason}`
+                                              : "Chưa có mùa vụ rõ ràng cho sản phẩm này."
+                                          }
+                                        </li>
+                                      </ul>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+                )}
+                
+                {/* Empty State */}
+                {!aiData && !isAnalyzing && (
+                  <div className="bg-white rounded-xl border border-slate-200 p-12 text-center flex flex-col items-center justify-center space-y-4">
+                    <div className="p-4 bg-teal-50 rounded-full text-teal-600">
+                      <Bot className="h-8 w-8 animate-bounce" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="font-bold text-slate-800 text-sm">Chưa có kết quả phân tích</h4>
+                      <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                        Nhập số ngày dự phòng hàng hóa mong muốn ở trên và nhấn nút Phân tích mới để bắt đầu.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Footer */}
+              <div className="bg-white border-t border-slate-100 p-4 flex justify-between items-center px-6">
+                <div className="text-xs text-slate-500 font-medium">
+                  Đã duyệt: <span className="font-bold text-emerald-700">{approvedItems.length}</span> đề xuất
+                </div>
+                <Button 
+                  onClick={handleCreatePurchaseFromApproved}
+                  disabled={approvedItems.length === 0}
+                  className={`font-bold flex items-center gap-1.5 shadow-md px-6 py-2.5 rounded-xl transition-all duration-200 ${approvedItems.length === 0 ? 'bg-slate-100 text-slate-400 border border-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
+                >
+                  <Plus className="h-4 w-4" />
+                  Tạo phiếu nhập từ đề xuất đã duyệt
+                </Button>
+              </div>
+
+            </div>
+          </div>
+        )}
       </div>
     </RoleGuard>
   );

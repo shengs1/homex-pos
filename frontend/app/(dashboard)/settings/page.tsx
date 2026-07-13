@@ -37,6 +37,7 @@ const emptyForm: SettingPayload = {
   bankAccountName: "",
   vietQrTemplate: "",
   transferContentTemplate: "",
+  enablePayOSPayment: false,
   defaultPaymentMethod: "CASH",
   productsPerPage: 24,
   autoLockMinutes: 30,
@@ -335,6 +336,7 @@ export default function SettingsPage() {
                 <ToggleField label={t("settings.enableBarcodeScanner")} checked={form.enableBarcodeScanner} onChange={(value) => updateField("enableBarcodeScanner", value)} />
                 <ToggleField label={t("settings.confirmBeforeCheckout")} checked={form.confirmBeforeCheckout} onChange={(value) => updateField("confirmBeforeCheckout", value)} />
                 <ToggleField label={t("settings.compactPOS")} checked={form.compactPosMode} onChange={(value) => updateField("compactPosMode", value)} />
+                <ToggleField label="Bật thanh toán payOS" checked={form.enablePayOSPayment} onChange={(value) => updateField("enablePayOSPayment", value)} />
               </div>
             </SectionCard>
 
@@ -375,35 +377,91 @@ export default function SettingsPage() {
           </div>
 
           {/* ROW 3: VIETQR & PERMISSIONS */}
-          <div className="grid grid-cols-1 gap-6 items-start xl:grid-cols-[minmax(300px,1fr)_minmax(0,2fr)]">
-            <div className="flex flex-col gap-6">
-              <SectionCard title={t("settings.vietqrTransfer")} icon={QrCode}>
-                <div className="space-y-4">
-                  <Field label={t("settings.beneficiaryBank")}>
-                    <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.bankName || ""} onChange={(event) => updateField("bankName", event.target.value)} placeholder="MB, VCB, ACB..." />
-                  </Field>
-                  <Field label={t("settings.beneficiaryAccount")}>
-                    <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.bankAccountNumber || ""} onChange={(event) => updateField("bankAccountNumber", event.target.value)} />
-                  </Field>
-                  <Field label={t("settings.beneficiaryName")}>
-                    <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.bankAccountName || ""} onChange={(event) => updateField("bankAccountName", event.target.value)} />
-                  </Field>
-                  <Field label={t("settings.vietQrTemplate")}>
-                    <Select value={["compact2", "compact", "qr_only", "print"].includes(form.vietQrTemplate || "") ? (form.vietQrTemplate as string) : "compact2"} onChange={(event) => updateField("vietQrTemplate", event.target.value)}>
-                      <option value="compact2">compact2</option>
-                      <option value="compact">compact</option>
-                      <option value="qr_only">qr_only</option>
-                      <option value="print">print</option>
-                    </Select>
-                    <p className="text-[10px] text-slate-500 mt-1">{t("settings.vietQrTemplateHelpCompact") || t("settings.vietQrTemplateHelp")}</p>
-                  </Field>
-                  <Field label={t("settings.transferContentDefault")}>
-                    <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.transferContentTemplate || "HOMEX {orderCodeLast6}"} onChange={(event) => updateField("transferContentTemplate", event.target.value)} placeholder={t("settings.transferContentPlaceholder")} />
-                    <p className="text-[10px] text-slate-500 mt-1">{t("settings.transferContentHelp")}</p>
-                  </Field>
+          <div className="grid grid-cols-1 gap-6 items-start xl:grid-cols-3">
+            {/* Column 1: VIETQR */}
+            <SectionCard title={t("settings.vietqrTransfer")} icon={QrCode}>
+              <div className="space-y-4">
+                <Field label={t("settings.beneficiaryBank")}>
+                  <Select
+                    value={form.bankName || ""}
+                    onChange={(event) => updateField("bankName", event.target.value)}
+                  >
+                    <option value="">-- Chọn ngân hàng --</option>
+                    <option value="VCB">Vietcombank - Ngân hàng TMCP Ngoại Thương Việt Nam (VCB)</option>
+                    <option value="CTG">VietinBank - Ngân hàng TMCP Công thương Việt Nam (CTG)</option>
+                    <option value="BIDV">BIDV - Ngân hàng TMCP Đầu tư và Phát triển Việt Nam</option>
+                    <option value="VBA">Agribank - Ngân hàng Nông nghiệp và Phát triển Nông thôn (VBA)</option>
+                    <option value="TCB">Techcombank - Ngân hàng TMCP Kỹ thương Việt Nam (TCB)</option>
+                    <option value="MB">MB Bank - Ngân hàng TMCP Quân đội</option>
+                    <option value="ACB">ACB - Ngân hàng TMCP Á Châu</option>
+                    <option value="STB">Sacombank - Ngân hàng TMCP Sài Gòn Thương Tín</option>
+                    <option value="VPB">VPBank - Ngân hàng TMCP Việt Nam Thịnh Vượng</option>
+                    <option value="HDB">HDBank - Ngân hàng TMCP Phát triển TP. Hồ Chí Minh</option>
+                    <option value="TPB">TPBank - Ngân hàng TMCP Tiên Phong</option>
+                    <option value="VIB">VIB - Ngân hàng TMCP Quốc tế Việt Nam</option>
+                    <option value="MSB">MSB - Ngân hàng TMCP Hàng Hải</option>
+                    <option value="SHB">SHB - Ngân hàng TMCP Sài Gòn - Hà Nội</option>
+                    <option value="OCB">OCB - Ngân hàng TMCP Phương Đông</option>
+                    <option value="EIB">Eximbank - Ngân hàng TMCP Xuất Nhập khẩu Việt Nam</option>
+                    <option value="SEAB">SeABank - Ngân hàng TMCP Đông Nam Á</option>
+                    <option value="BAB">Bac A Bank - Ngân hàng TMCP Bắc Á</option>
+                    <option value="PVC">PVcomBank - Ngân hàng TMCP Đại Chúng Việt Nam</option>
+                    <option value="ABB">ABBANK - Ngân hàng TMCP An Bình</option>
+                    <option value="DAB">DongA Bank - Ngân hàng TMCP Đông Á</option>
+                    <option value="BVB">BVBank - Ngân hàng TMCP Bản Việt</option>
+                    <option value="KLB">Kienlongbank - Ngân hàng TMCP Kiên Long</option>
+                    <option value="LPB">LPBank - Ngân hàng TMCP Bưu điện Liên Việt</option>
+                    <option value="NAB">Nam A Bank - Ngân hàng TMCP Nam Á</option>
+                    <option value="SGB">Saigonbank - Ngân hàng TMCP Sài Gòn Công Thương</option>
+                    <option value="VAB">Vietbank - Ngân hàng TMCP Việt Nam Thương Tín</option>
+                    <option value="NCB">NCB - Ngân hàng TMCP Quốc Dân</option>
+                    <option value="CBB">CB - Ngân hàng Thương mại TNHH MTV Xây dựng Việt Nam</option>
+                    <option value="OCEAN">OceanBank - Ngân hàng Thương mại TNHH MTV Đại Dương</option>
+                    <option value="GPB">GPBank - Ngân hàng Thương mại TNHH MTV Dầu Khí Toàn Cầu</option>
+                    <option value="SHBVN">Shinhan Bank - Ngân hàng Shinhan Việt Nam</option>
+                    <option value="HSBC">HSBC - Ngân hàng TNHH một thành viên HSBC Việt Nam</option>
+                    <option value="SCB">Standard Chartered - Ngân hàng TNHH MTV Standard Chartered Việt Nam</option>
+                    <option value="PBVN">Public Bank - Ngân hàng TNHH MTV Public Bank Việt Nam</option>
+                    <option value="UOB">UOB - Ngân hàng TNHH MTV United Overseas Bank Việt Nam</option>
+                    <option value="WOORI">Woori Bank - Ngân hàng TNHH MTV Woori Việt Nam</option>
+                    <option value="CIMB">CIMB - Ngân hàng TNHH MTV CIMB Việt Nam</option>
+                    <option value="CAKE">Cake by VPBank - Ngân hàng số Cake</option>
+                    <option value="TIMO">Timo - Ngân hàng số Timo</option>
+                  </Select>
+                </Field>
+                <Field label={t("settings.beneficiaryAccount")}>
+                  <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.bankAccountNumber || ""} onChange={(event) => updateField("bankAccountNumber", event.target.value)} />
+                </Field>
+                <Field label={t("settings.beneficiaryName")}>
+                  <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.bankAccountName || ""} onChange={(event) => updateField("bankAccountName", event.target.value)} />
+                </Field>
+                <Field label={t("settings.vietQrTemplate")}>
+                  <Select value={["compact2", "compact", "qr_only", "print"].includes(form.vietQrTemplate || "") ? (form.vietQrTemplate as string) : "compact2"} onChange={(event) => updateField("vietQrTemplate", event.target.value)}>
+                    <option value="compact2">compact2</option>
+                    <option value="compact">compact</option>
+                    <option value="qr_only">qr_only</option>
+                    <option value="print">print</option>
+                  </Select>
+                  <p className="text-[10px] text-slate-500 mt-1">{t("settings.vietQrTemplateHelpCompact") || t("settings.vietQrTemplateHelp")}</p>
+                </Field>
+                <Field label={t("settings.transferContentDefault")}>
+                  <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.transferContentTemplate || "HOMEX {orderCodeLast6}"} onChange={(event) => updateField("transferContentTemplate", event.target.value)} placeholder={t("settings.transferContentPlaceholder")} />
+                  <p className="text-[10px] text-slate-500 mt-1">{t("settings.transferContentHelp")}</p>
+                </Field>
+                <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-xs text-blue-800">
+                  <p className="font-bold">Cấu hình payOS đặt ở backend env, không nhập secret tại frontend.</p>
+                  <div className="mt-2 grid gap-1 font-mono text-[11px]">
+                    <span>PAYOS_CLIENT_ID</span>
+                    <span>PAYOS_API_KEY</span>
+                    <span>PAYOS_CHECKSUM_KEY</span>
+                    <span>PAYOS_WEBHOOK_URL</span>
+                  </div>
                 </div>
-              </SectionCard>
+              </div>
+            </SectionCard>
 
+            {/* Column 2: SHIFT CONFIG, VAT EMAIL, CONFIG DATA */}
+            <div className="flex flex-col gap-6">
               {/* SHIFT CONFIG */}
               <SectionCard title={t("settings.shiftConfig")} icon={Clock}>
                 <div className="space-y-4">
@@ -468,7 +526,7 @@ export default function SettingsPage() {
                 </div>
               </SectionCard>
 
-              {/* CONFIG DATA - Placed below VietQR */}
+              {/* CONFIG DATA */}
               <SectionCard title={t("settings.configData")}>
                 <div className="space-y-4">
                   <div className="flex flex-col gap-3">
@@ -488,6 +546,7 @@ export default function SettingsPage() {
               </SectionCard>
             </div>
 
+            {/* Column 3: PERMISSION MATRIX */}
             <SectionCard title={t("settings.permissionMatrix")} icon={Shield}>
               <div className="w-full overflow-x-auto">
                 <table className="w-full table-fixed text-left text-sm text-slate-700">
@@ -538,3 +597,7 @@ export default function SettingsPage() {
     </RoleGuard>
   );
 }
+
+
+
+

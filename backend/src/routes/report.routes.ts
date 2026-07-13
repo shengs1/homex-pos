@@ -112,7 +112,7 @@ function normalizeProductPrice(value: Prisma.Decimal | number | string | null | 
   const numberValue = Number(value || 0);
   if (!Number.isFinite(numberValue) || numberValue <= 0) return 0;
 
-  return numberValue >= 10000 ? Math.round(numberValue / 1000) : numberValue;
+  return Math.round(numberValue);
 }
 
 function getDateKey(date: Date, groupBy: "day" | "month") {
@@ -722,3 +722,4 @@ router.get(
 );
 
 export default router;
+
