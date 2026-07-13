@@ -202,4 +202,5 @@ NEXT_PUBLIC_API_URL=http://localhost:5000/api
 | ADMIN   | `admin@homex.com`   | `123456` |
 | CASHIER | `cashier@homex.com` | `123456` |
 
+
 ---
