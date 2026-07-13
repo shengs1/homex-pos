@@ -93,6 +93,8 @@ Frontend có xử lý ẩn/hiện sidebar theo vai trò và chặn truy cập UR
 | Report    | Tổng quan, doanh thu, lợi nhuận, top sản phẩm, tồn kho thấp     |
 | User      | Tạo, sửa, khóa, khôi phục và đổi mật khẩu tài khoản             |
 | Audit Log | Ghi nhận và lọc lịch sử thao tác hệ thống                       |
+| Sales Assistant | Gợi ý sản phẩm thông minh dựa trên nhu cầu, ngân sách và giỏ hàng hiện tại (Cross-sell, Up-sell) |
+| PayOS     | Tích hợp cổng thanh toán trực tuyến PayOS qua QR code, webhook tự động cập nhật trạng thái đơn hàng |
 
 ---
 
@@ -115,6 +117,7 @@ Frontend có xử lý ẩn/hiện sidebar theo vai trò và chặn truy cập UR
 | `/api/reports`      | Báo cáo thống kê      |
 | `/api/users`        | Quản lý người dùng    |
 | `/api/audit-logs`   | Nhật ký hệ thống      |
+| `/api/pos`          | Nhận quét mã vạch từ xa và trợ lý gợi ý bán hàng |
 
 ---
 
@@ -145,6 +148,8 @@ Frontend có xử lý ẩn/hiện sidebar theo vai trò và chặn truy cập UR
 | `/mobile-scan`       | Trang quét barcode bằng camera điện thoại cho POS                |
 | `/tra-cuu-bao-hanh`  | Trang public tra cứu bảo hành điện tử                            |
 | `/unauthorized`      | Trang thông báo không có quyền truy cập                          |
+| `/payment/payos/return` | Trang xử lý kết quả thanh toán thành công qua cổng PayOS        |
+| `/payment/payos/cancel` | Trang xử lý khi hủy giao dịch thanh toán qua cổng PayOS          |
 
 ---
 
@@ -164,6 +169,10 @@ Frontend có xử lý ẩn/hiện sidebar theo vai trò và chặn truy cập UR
 * Hỗ trợ chuyển đổi ngôn ngữ VI/EN, có script kiểm tra thiếu key và hardcoded tiếng Việt.
 * Chuẩn hóa định dạng ngày tháng theo `dd/mm/yyyy`.
 * Xử lý loading, error message, toast notification, modal/dialog xác nhận, logout và redirect.
+* Tích hợp cổng thanh toán trực tuyến PayOS, hỗ trợ tự động tạo link thanh toán bằng QR ngân hàng và nhận webhook kết quả giao dịch.
+* Trợ lý bán hàng thông minh (Sales Assistant) gợi ý chéo sản phẩm (Cross-sell/Up-sell) dựa trên giỏ hàng, ngân sách và nhu cầu khách hàng.
+* Xem trực tiếp mã vạch (Barcode) định dạng `CODE128` cho sản phẩm và in nhãn mã vạch.
+* Bố cục trang Cài đặt (Settings) và Lịch sử hệ thống (Audit Logs) được tối ưu hóa hiển thị, chống khoảng trắng dư thừa và hỗ trợ giao diện đáp ứng (responsive).
 
 ---
 
