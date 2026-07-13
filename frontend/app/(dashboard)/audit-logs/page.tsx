@@ -138,55 +138,65 @@ export default function AuditLogsPage() {
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSearchSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-12">
-                <Input
-                  placeholder={t("audit.searchPlaceholder")}
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className="h-12 xl:col-span-4"
-                />
+              {/* Row 1: Search, Action, Entity Type, User ID */}
+              <div className="flex w-full flex-wrap items-end gap-3">
+                <div className="w-full md:flex-[2] md:min-w-[220px]">
+                  <Input
+                    placeholder={t("audit.searchPlaceholder")}
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    className="h-10 w-full"
+                  />
+                </div>
 
-                <Input
-                  placeholder={t("audit.action")}
-                  value={action}
-                  onChange={(event) => setAction(event.target.value)}
-                  className="h-12 xl:col-span-2"
-                />
+                <div className="w-full md:flex-[1.2] md:min-w-[130px]">
+                  <Input
+                    placeholder={t("audit.action")}
+                    value={action}
+                    onChange={(event) => setAction(event.target.value)}
+                    className="h-10 w-full"
+                  />
+                </div>
 
-                <Input
-                  placeholder={t("audit.entityType")}
-                  value={entityType}
-                  onChange={(event) => setEntityType(event.target.value)}
-                  className="h-12 xl:col-span-2"
-                />
+                <div className="w-full md:flex-[1.2] md:min-w-[130px]">
+                  <Input
+                    placeholder={t("audit.entityType")}
+                    value={entityType}
+                    onChange={(event) => setEntityType(event.target.value)}
+                    className="h-10 w-full"
+                  />
+                </div>
 
-                <Input
-                  type="number"
-                  placeholder={t("audit.userIdFilter")}
-                  value={userId}
-                  onChange={(event) => setUserId(event.target.value)}
-                  className="h-12 xl:col-span-2"
-                />
+                <div className="w-full md:flex-[1] md:min-w-[100px]">
+                  <Input
+                    type="number"
+                    placeholder={t("audit.userIdFilter")}
+                    value={userId}
+                    onChange={(event) => setUserId(event.target.value)}
+                    className="h-10 w-full"
+                  />
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-end gap-4">
+              {/* Row 2: From Date, To Date, Filter Button */}
+              <div className="flex w-full flex-wrap items-end gap-3">
                 <DateFilterInput
                   label={t("reports.fromDate")}
                   value={fromDate}
                   onChange={setFromDate}
-                  className="w-full md:w-[220px]"
-                  inputClassName="h-12"
+                  className="w-full md:w-[180px]"
+                  inputClassName="h-10"
                 />
 
                 <DateFilterInput
                   label={t("reports.toDate")}
                   value={toDate}
                   onChange={setToDate}
-                  className="w-full md:w-[220px]"
-                  inputClassName="h-12"
+                  className="w-full md:w-[180px]"
+                  inputClassName="h-10"
                 />
 
-                <Button type="submit" className="h-12 w-full md:w-[220px]">
+                <Button type="submit" className="h-10 w-full md:w-[120px]">
                   {t("common.filter")}
                 </Button>
               </div>

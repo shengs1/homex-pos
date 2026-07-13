@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Banknote, Download, Minus, Plus, Printer, QrCode, ReceiptText, Search, ShoppingCart, Trash2, UserPlus, XCircle, Smartphone, Link, Copy, Check, ArrowLeft, Info, User, CreditCard, FileText, Coins } from "lucide-react";
+import { Banknote, Download, Minus, Plus, Printer, QrCode, ReceiptText, Search, ShoppingCart, Trash2, UserPlus, XCircle, Smartphone, Link, Copy, Check, ArrowLeft, Info, ShieldCheck, Scan, User, Wallet, X, FileText, Coins, CreditCard, Sparkles, Package } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { createPortal } from "react-dom";
 import { RoleGuard } from "@/components/auth/role-guard";
@@ -25,9 +25,9 @@ import { REAL_PRODUCT_FALLBACK_IMAGE } from "@/lib/demo-products";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { buildMobileScanUrl, getActiveRemoteBarcodeTarget, getOrCreateRemoteBarcodeSessionId, resetRemoteBarcodeSessionId, setActiveRemoteBarcodeTarget } from "@/lib/remote-barcode-session";
-import { categoryService, customerService, orderService, posService, productService, settingService, shiftService } from "@/services/homex.service";
+import { categoryService, customerService, orderService, paymentService, posService, productService, settingService, shiftService, type PayOSPayment } from "@/services/homex.service";
 import { promotionService } from "@/services/promotion.service";
-import type { Category, Customer, Order, PaymentMethod, Product, Setting, Shift } from "@/types/domain";
+import type { Category, Customer, Order, PaymentMethod, Product, Setting, Shift, SalesAssistantResponse, SalesAssistantRequest } from "@/types/domain";
 import type { Promotion } from "@/services/promotion.service";
 
 type CartItem = {
@@ -48,6 +48,27 @@ function sortByIdAsc<T extends { id: number }>(items: T[]) {
 function getProductImage(product: Product) {
   const extendedProduct = product as Product & { image?: string | null };
   return extendedProduct.image || product.imageUrl || REAL_PRODUCT_FALLBACK_IMAGE;
+}
+
+function resolveProductImage(product: any) {
+  const raw =
+    product?.imageUrl ||
+    product?.image ||
+    product?.thumbnail ||
+    product?.photoUrl ||
+    "";
+
+  if (!raw || typeof raw !== "string") return "";
+
+  const value = raw.trim();
+
+  if (!value) return "";
+  if (value.startsWith("http://") || value.startsWith("https://")) return value;
+  if (value.startsWith("/assets/real-products/")) return value;
+  if (value.startsWith("assets/real-products/")) return `/${value}`;
+  if (value.startsWith("/")) return value;
+
+  return `/assets/real-products/${value}`;
 }
 
 function getDigits(value: string) {
@@ -182,7 +203,107 @@ export default function PosPage() {
   const [isOnline, setIsOnline] = useState(true);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [isQrLoading, setIsQrLoading] = useState(true);
+  const [payOSPayment, setPayOSPayment] = useState<PayOSPayment | null>(null);
+  const [payOSStatusText, setPayOSStatusText] = useState("Đang chờ khách thanh toán...");
   const { t } = useLanguage();
+
+  const [salesAssistantOpen, setSalesAssistantOpen] = useState(false);
+  const [salesNeed, setSalesNeed] = useState("");
+  const [budgetMin, setBudgetMin] = useState<number | undefined>(undefined);
+  const [budgetMax, setBudgetMax] = useState<number | undefined>(undefined);
+  const [selectedQuickNeed, setSelectedQuickNeed] = useState("");
+  const [salesAssistantLoading, setSalesAssistantLoading] = useState(false);
+  const [salesAssistantResult, setSalesAssistantResult] = useState<SalesAssistantResponse | null>(null);
+  const [salesAssistantError, setSalesAssistantError] = useState("");
+  const [preferences, setPreferences] = useState({
+    preferPromotion: false,
+    preferWarranty: true,
+    preferHighStock: false,
+    crossSellFromCart: true,
+  });
+
+  function resetSalesAssistantState() {
+    setSalesNeed("");
+    setBudgetMin(undefined);
+    setBudgetMax(undefined);
+    setSelectedQuickNeed("");
+    setSalesAssistantResult(null);
+    setSalesAssistantError("");
+    setSalesAssistantLoading(false);
+    setPreferences({
+      preferPromotion: false,
+      preferWarranty: true,
+      preferHighStock: false,
+      crossSellFromCart: true,
+    });
+  }
+
+  async function handleRequestSalesSuggestion() {
+    let finalNeed = salesNeed.trim();
+    if (selectedQuickNeed) {
+      if (finalNeed) {
+        finalNeed = `${selectedQuickNeed}: ${finalNeed}`;
+      } else {
+        finalNeed = selectedQuickNeed;
+      }
+    }
+
+    if (!finalNeed) {
+      toast.error(t("salesAssistant.empty"));
+      return;
+    }
+
+    try {
+      setSalesAssistantLoading(true);
+      setSalesAssistantError("");
+      setSalesAssistantResult(null);
+
+      const payload: SalesAssistantRequest = {
+        need: finalNeed,
+        budgetMin,
+        budgetMax,
+        customerId: selectedCustomer?.id,
+        cartItems: cart.map(item => ({
+          productId: item.product.id,
+          name: item.product.name,
+          quantity: item.quantity
+        })),
+        preferences
+      };
+
+      const res = await posService.getSalesAssistantSuggestions(payload);
+      if (res && Array.isArray(res.recommendations)) {
+        setSalesAssistantResult(res);
+        if (res.source === "HEURISTIC") {
+          toast.info(t("salesAssistant.sourceFallback"));
+        }
+      } else {
+        setSalesAssistantError("Không thể tải gợi ý bán hàng.");
+      }
+    } catch (error) {
+      setSalesAssistantError(getApiErrorMessage(error));
+    } finally {
+      setSalesAssistantLoading(false);
+    }
+  }
+
+  async function handleAddSuggestionToCart(productId: number) {
+    try {
+      let product = products.find(p => p.id === productId);
+      if (!product) {
+        product = await productService.detail(productId);
+      }
+
+      if (product) {
+        addToCart(product);
+        toast.success(t("salesAssistant.addedToCart"));
+      } else {
+        toast.error("Không tìm thấy thông tin sản phẩm.");
+      }
+    } catch (err) {
+      toast.error("Không thể thêm sản phẩm gợi ý vào giỏ.");
+    }
+  }
   const cartScrollRef = useRef<HTMLDivElement | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
   const cashReceivedInputRef = useRef<HTMLInputElement | null>(null);
@@ -234,13 +355,17 @@ export default function PosPage() {
       .replaceAll("{customerPhone}", selectedCustomer?.phone || "");
     return sanitizeVietQrContent(raw);
   })();
+  const payOSPaymentCode = payOSPayment?.description || (() => {
+    const digits = String(draftOrder?.orderCode || "").replace(/\D/g, "");
+    return digits ? `HOMEX-${digits.slice(-5).padStart(5, "0")}` : "HOMEX-00000";
+  })();
   const isBankConfigured = Boolean(setting?.bankName && setting?.bankAccountNumber && setting?.bankAccountName);
   const generateVietQRUrl = useCallback(() => {
-    const bankId = "MB";
-    const accountNo = setting?.bankAccountNumber || "";
+    const bankId = setting?.bankName || "MB";
+    const accountNo = setting?.bankAccountNumber || "0877724374";
     const amount = totalPayable;
-    const memo = encodeURIComponent(transferContent);
-    const rawAccountName = setting?.bankAccountName || "";
+    const memo = encodeURIComponent(payOSPaymentCode);
+    const rawAccountName = setting?.bankAccountName || "MAI TRAN THIEN TAM";
     const cleanAccountName = encodeURIComponent(
       rawAccountName
         .normalize("NFD")
@@ -251,9 +376,11 @@ export default function PosPage() {
     );
 
     return `https://img.vietqr.io/image/${bankId}-${accountNo}-compact.png?amount=${amount}&addInfo=${memo}&accountName=${cleanAccountName}`;
-  }, [setting, totalPayable, transferContent]);
+  }, [setting, totalPayable, payOSPaymentCode]);
 
-  const transferQrValue = buildVietQrDemoValue(setting, totalPayable, transferContent);
+  const transferQrValue = buildVietQrDemoValue(setting, totalPayable, payOSPaymentCode);
+  const payOSQrValue = payOSPayment?.qrCode || payOSPayment?.checkoutUrl || generateVietQRUrl();
+  const isPayOSQrImage = Boolean(payOSPayment?.qrCode && /^(https?:|data:image\/)/i.test(payOSPayment.qrCode));
   const lastInvoicePublicUrl =
     lastCompletedOrder && typeof window !== "undefined"
       ? `${window.location.origin}/invoice/${lastCompletedOrder.orderCode}`
@@ -420,6 +547,46 @@ export default function PosPage() {
       setIsQrLoading(true);
     }
   }, [checkoutStep, transferContent]);
+
+  useEffect(() => {
+    if (!isCheckoutDialogOpen || checkoutStep !== "qr" || !payOSPayment?.paymentId) {
+      return;
+    }
+
+    let isMounted = true;
+    const poll = async () => {
+      try {
+        const status = await paymentService.getPaymentStatus(payOSPayment.paymentId);
+        if (!isMounted) return;
+
+        if (status.status === "PAID") {
+          setPayOSStatusText("Thanh toán chuyển khoản thành công.");
+          const completedOrder = await orderService.detail(status.orderId);
+          if (!isMounted) return;
+          setLastCompletedOrder(completedOrder);
+          resetPosState();
+          toast.success("Thanh toán chuyển khoản thành công.");
+          router.refresh();
+          await loadProducts();
+          if (setting?.autoOpenPrint) {
+            window.setTimeout(() => window.print(), 1000);
+          }
+        } else if (status.status === "FAILED") {
+          setPayOSStatusText("Giao dịch không khớp số tiền, cần kiểm tra thủ công.");
+        }
+      } catch (error) {
+        if (isMounted) setPayOSStatusText(getApiErrorMessage(error));
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(poll, 2000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(timer);
+    };
+  }, [checkoutStep, isCheckoutDialogOpen, payOSPayment?.paymentId, router, setting?.autoOpenPrint, toast]);
 
   useEffect(() => {
     function handleGlobalKeyDown(event: KeyboardEvent) {
@@ -812,10 +979,30 @@ export default function PosPage() {
 
     try {
       setIsSubmitting(true);
-            const orderToPay = draftOrder
+      setPayOSStatusText("Đang tạo link thanh toán payOS...");
+      
+      const orderToPay = draftOrder
         ? await orderService.updateDraft(draftOrder.id, buildOrderBody())
         : await orderService.createDraft(buildOrderBody());
       setDraftOrder(orderToPay);
+
+      try {
+        const payOSData = await paymentService.createPayOSPayment({
+          orderId: orderToPay.id,
+          discountAmount: discountAmount > 0 ? discountAmount : undefined,
+          promotionCode: appliedPromotionCode || undefined,
+        });
+        setPayOSPayment(payOSData);
+        setPayOSStatusText("Đang chờ khách thanh toán...");
+        if (payOSData?.qrCode && payOSData.qrCode.startsWith("000201")) {
+          setIsQrLoading(false);
+        }
+      } catch (payOSError) {
+        console.error("PayOS create error:", payOSError);
+        setPayOSPayment(null);
+        setPayOSStatusText("Không thể tạo link PayOS. Sử dụng VietQR dự phòng.");
+      }
+
       setCheckoutStep("qr");
       setIsCheckoutDialogOpen(true);
     } catch (error) {
@@ -1191,6 +1378,18 @@ export default function PosPage() {
                   />
                 </div>
               </form>
+
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="h-9 w-9 shrink-0 rounded-lg border-emerald-100 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 shadow-xs cursor-pointer flex items-center justify-center"
+                aria-label={t("salesAssistant.iconLabel")}
+                title={t("salesAssistant.iconLabel")}
+                onClick={() => setSalesAssistantOpen(true)}
+              >
+                <Sparkles className="h-4 w-4" />
+              </Button>
               
               <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                 {setting?.enableBarcodeScanner !== false ? (
@@ -1795,195 +1994,333 @@ export default function PosPage() {
               ) : null}
 
               {checkoutStep === "qr" ? (
-                <div className="flex flex-col min-h-0">
-                  {/* Body with 2 columns */}
-                  <div className="grid grid-cols-1 md:grid-cols-[40%_60%] lg:grid-cols-[45%_55%] min-h-[480px]">
-                    
-                    {/* Left Column: QR Area */}
-                    <div className="bg-slate-50/80 p-8 flex flex-col items-center justify-between border-r border-slate-100 min-h-[450px]">
-                      <div className="w-full text-center md:text-left space-y-2">
-                        {/* Title & Subtitle */}
-                        <div className="flex items-center gap-2 justify-center md:justify-start">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                            <QrCode className="h-4 w-4" />
+                (() => {
+                  const BANK_NAMES_MAP: Record<string, string> = {
+                    VCB: "Vietcombank - Ngân hàng TMCP Ngoại Thương Việt Nam (VCB)",
+                    CTG: "VietinBank - Ngân hàng TMCP Công thương Việt Nam (CTG)",
+                    BIDV: "BIDV - Ngân hàng TMCP Đầu tư và Phát triển Việt Nam",
+                    VBA: "Agribank - Ngân hàng Nông nghiệp và Phát triển Nông thôn (VBA)",
+                    TCB: "Techcombank - Ngân hàng TMCP Kỹ thương Việt Nam (TCB)",
+                    MB: "MB Bank - Ngân hàng TMCP Quân đội",
+                    ACB: "ACB - Ngân hàng TMCP Á Châu",
+                    STB: "Sacombank - Ngân hàng TMCP Sài Gòn Thương Tín",
+                    VPB: "VPBank - Ngân hàng TMCP Việt Nam Thịnh Vượng",
+                    HDB: "HDBank - Ngân hàng TMCP Phát triển TP. Hồ Chí Minh",
+                    TPB: "TPBank - Ngân hàng TMCP Tiên Phong",
+                    VIB: "VIB - Ngân hàng TMCP Quốc tế Việt Nam",
+                    MSB: "MSB - Ngân hàng TMCP Hàng Hải",
+                    SHB: "SHB - Ngân hàng TMCP Sài Gòn - Hà Nội",
+                    OCB: "OCB - Ngân hàng TMCP Phương Đông",
+                    EIB: "Eximbank - Ngân hàng TMCP Xuất Nhập khẩu Việt Nam",
+                    SEAB: "SeABank - Ngân hàng TMCP Đông Nam Á",
+                    BAB: "Bac A Bank - Ngân hàng TMCP Bắc Á",
+                    PVC: "PVcomBank - Ngân hàng TMCP Đại Chúng Việt Nam",
+                    ABB: "ABBANK - Ngân hàng TMCP An Bình",
+                    DAB: "DongA Bank - Ngân hàng TMCP Đông Á",
+                    BVB: "BVBank - Ngân hàng TMCP Bản Việt",
+                    KLB: "Kienlongbank - Ngân hàng TMCP Kiên Long",
+                    LPB: "LPBank - Ngân hàng TMCP Bưu điện Liên Việt",
+                    NAB: "Nam A Bank - Ngân hàng TMCP Nam Á",
+                    SGB: "Saigonbank - Ngân hàng TMCP Sài Gòn Công Thương",
+                    VAB: "Vietbank - Ngân hàng TMCP Việt Nam Thương Tín",
+                    NCB: "NCB - Ngân hàng TMCP Quốc Dân",
+                    CBB: "CB - Ngân hàng Thương mại TNHH MTV Xây dựng Việt Nam",
+                    OCEAN: "OceanBank - Ngân hàng Thương mại TNHH MTV Đại Dương",
+                    GPB: "GPBank - Ngân hàng Thương mại TNHH MTV Dầu Khí Toàn Cầu",
+                    SHBVN: "Shinhan Bank - Ngân hàng Shinhan Việt Nam",
+                    HSBC: "HSBC - Ngân hàng TNHH một thành viên HSBC Việt Nam",
+                    SCB: "Standard Chartered - Ngân hàng TNHH MTV Standard Chartered Việt Nam",
+                    PBVN: "Public Bank - Ngân hàng TNHH MTV Public Bank Việt Nam",
+                    UOB: "UOB - Ngân hàng TNHH MTV United Overseas Bank Việt Nam",
+                    WOORI: "Woori Bank - Ngân hàng TNHH MTV Woori Việt Nam",
+                    CIMB: "CIMB - Ngân hàng TNHH MTV CIMB Việt Nam",
+                    CAKE: "Cake by VPBank - Ngân hàng số Cake",
+                    TIMO: "Timo - Ngân hàng số Timo",
+                  };
+
+                  const isMBBank = !setting?.bankName || setting.bankName.toUpperCase().includes("MB") || setting.bankName.toUpperCase() === "MB";
+                  const qrCodeSrc = payOSPayment?.qrCode || generateVietQRUrl();
+                  const isPayOSQrCodeSVG = payOSPayment?.qrCode && payOSPayment.qrCode.startsWith("000201");
+                  
+                  return (
+                    <div className="min-h-0 bg-white rounded-b-2xl overflow-hidden flex flex-col">
+                      <div className="grid grid-cols-1 lg:grid-cols-[40%_60%] min-h-[500px]">
+                        
+                        {/* CỘT TRÁI: KHUNG QUÉT QR */}
+                        <div className="flex flex-col items-stretch justify-between gap-5 border-r border-slate-100 bg-[#f8fafc] px-8 py-7">
+                          {/* Title Block Left Aligned */}
+                          <div className="flex items-start gap-3 justify-start text-left">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600 shrink-0">
+                              <ShieldCheck className="h-5 w-5" />
+                            </div>
+                            <div>
+                              <h3 className="text-sm font-black tracking-tight text-slate-800 uppercase leading-none">
+                                Thanh toán chuyển khoản
+                              </h3>
+                              <p className="text-[11px] text-slate-400 font-semibold leading-relaxed mt-1">
+                                Quét mã QR để thanh toán. Hệ thống sẽ tự động xác nhận khi nhận được tiền.
+                              </p>
+                            </div>
                           </div>
-                          <h3 className="text-base font-black tracking-tight text-slate-800 uppercase">
-                            {t("pos.qrPaymentTitle")}
-                          </h3>
-                        </div>
-                        <p className="text-xs text-slate-500 font-medium pl-0 md:pl-9">
-                          {t("pos.qrPaymentDescriptionShort")}
-                        </p>
-                      </div>
 
-                      {/* QR Frame Container */}
-                      <div className="relative my-3 flex items-center justify-center bg-white p-2 rounded-2xl border border-slate-100 shadow-sm w-[280px] h-[280px]">
-                        {/* Scanner Corners [ ] */}
-                        <div className="absolute top-2 left-2 w-6 h-6 border-t-2 border-l-2 border-blue-600 rounded-tl z-10"></div>
-                        <div className="absolute top-2 right-2 w-6 h-6 border-t-2 border-r-2 border-blue-600 rounded-tr z-10"></div>
-                        <div className="absolute bottom-2 left-2 w-6 h-6 border-b-2 border-l-2 border-blue-600 rounded-bl z-10"></div>
-                        <div className="absolute bottom-2 right-2 w-6 h-6 border-b-2 border-r-2 border-blue-600 rounded-br z-10"></div>
-
-                        {/* Loading Skeleton / Spinner */}
-                        {isQrLoading ? (
-                          <div className="absolute inset-2 flex flex-col items-center justify-center bg-slate-50/50 rounded-xl animate-pulse space-y-2 z-0">
-                            <div className="h-8 w-8 rounded-full border-4 border-blue-600 border-t-transparent animate-spin"></div>
-                            <span className="text-[10px] font-bold text-slate-400">{t("pos.qrLoading")}</span>
+                          {/* Badge + PAYOS AUTO Centered above QR */}
+                          <div className="flex items-center justify-center">
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1 text-[9px] font-black uppercase text-white tracking-wider">
+                              + PAYOS AUTO
+                            </span>
                           </div>
-                        ) : null}
 
-                        {/* QR Code IMG */}
-                        <img
-                          src={generateVietQRUrl()}
-                          alt="VietQR Payment Code"
-                          className={cn("w-[264px] h-[264px] object-contain transition-opacity duration-300 z-0", isQrLoading ? "opacity-0" : "opacity-100")}
-                          onLoad={() => setIsQrLoading(false)}
-                        />
-                      </div>
+                          {/* Khung QR Scanner */}
+                          <div className="relative flex h-[270px] w-[270px] flex-col items-center justify-between rounded-2xl bg-white p-4 shadow-sm border border-slate-100 mx-auto">
+                            {/* Góc Scanner */}
+                            <div className="absolute top-2 left-2 h-5 w-5 border-t-2 border-l-2 border-blue-600 rounded-tl"></div>
+                            <div className="absolute top-2 right-2 h-5 w-5 border-t-2 border-r-2 border-blue-600 rounded-tr"></div>
+                            <div className="absolute bottom-2 left-2 h-5 w-5 border-b-2 border-l-2 border-blue-600 rounded-bl"></div>
+                            <div className="absolute bottom-2 right-2 h-5 w-5 border-b-2 border-r-2 border-blue-600 rounded-br"></div>
 
-                      {/* Bottom scan label */}
-                      <div className="text-center space-y-3">
-                        <p className="text-[11px] text-slate-400 font-bold tracking-wide flex items-center justify-center gap-1">
-                          <span className="inline-block animate-pulse w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-                          {t("pos.scanToPay")}
-                        </p>
-                        <span className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50/50 px-3 py-1 text-[10px] font-black uppercase text-blue-600 tracking-wider">
-                          <Check className="h-3 w-3" /> NAPAS 247
-                        </span>
-                      </div>
-                    </div>
+                            {/* Trạng thái Loading */}
+                            {isQrLoading && !isPayOSQrCodeSVG && (
+                              <div className="absolute inset-3 z-20 flex flex-col items-center justify-center bg-white rounded-lg space-y-2">
+                                <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+                                <span className="text-[10px] font-bold text-slate-400">Đang tải mã QR...</span>
+                              </div>
+                            )}
 
-                    {/* Right Column: Info Area */}
-                    <div className="p-8 flex flex-col justify-between space-y-6 bg-white min-h-[450px]">
-                      {/* Close button space placeholder */}
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-blue-600 font-black text-xs shrink-0">
-                            {setting?.bankName?.substring(0, 2).toUpperCase() || "NH"}
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t("pos.beneficiaryBank")}</p>
-                            <p className="text-xs font-black text-slate-700">
-                              {setting?.bankName || t("pos.bankNotConfiguredShort")}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Transfer info boxes */}
-                      <div className="space-y-3 flex-1 justify-center flex flex-col">
-                        {[
-                          {
-                            id: "bankAccountNumber",
-                            icon: CreditCard,
-                            title: t("pos.bankAccountNumber"),
-                            value: setting?.bankAccountNumber || "-",
-                            copyValue: setting?.bankAccountNumber || "",
-                          },
-                          {
-                            id: "bankAccountName",
-                            icon: User,
-                            title: t("pos.bankAccountName"),
-                            value: setting?.bankAccountName || "-",
-                            copyValue: setting?.bankAccountName || "",
-                          },
-                          {
-                            id: "amount",
-                            icon: Coins,
-                            title: t("pos.paymentAmount"),
-                            value: formatCurrency(totalPayable),
-                            copyValue: String(totalPayable),
-                          },
-                          {
-                            id: "content",
-                            icon: FileText,
-                            title: t("pos.transferMemo"),
-                            value: transferContent,
-                            copyValue: transferContent,
-                            highlight: true,
-                          },
-                        ].map((box) => {
-                          const BoxIcon = box.icon;
-                          return (
-                            <div
-                              key={box.id}
-                              className={cn(
-                                "flex items-center justify-between rounded-xl border p-3.5 transition-all",
-                                box.highlight
-                                  ? "bg-orange-50/80 border-orange-200 shadow-sm"
-                                  : "bg-slate-50/50 border-slate-100 hover:bg-slate-50 hover:border-slate-200"
+                            {/* Hiển thị QR Code */}
+                            <div className="flex-1 flex items-center justify-center w-full p-2">
+                              {isPayOSQrCodeSVG ? (
+                                <QRCodeSVG
+                                  value={payOSPayment?.qrCode || ""}
+                                  size={180}
+                                  level="L"
+                                  includeMargin={false}
+                                />
+                              ) : (
+                                <img
+                                  src={qrCodeSrc}
+                                  alt="Mã thanh toán chuyển khoản"
+                                  className={cn(
+                                    "max-h-[180px] max-w-[180px] object-contain transition-opacity duration-300",
+                                    isQrLoading ? "opacity-0" : "opacity-100"
+                                  )}
+                                  onLoad={() => setIsQrLoading(false)}
+                                />
                               )}
-                            >
-                              <div className="flex items-center gap-3 min-w-0">
-                                <div className={cn(
-                                  "flex h-9 w-9 items-center justify-center rounded-lg shrink-0",
-                                  box.highlight ? "bg-orange-100 text-orange-600" : "bg-blue-50 text-blue-600"
-                                )}>
-                                  <BoxIcon className="h-4 w-4" />
+                            </div>
+
+                            {/* Scan label inside frame at bottom */}
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
+                              <Scan className="h-3.5 w-3.5 text-slate-400" />
+                              <span>Quét mã để thanh toán</span>
+                            </div>
+                          </div>
+
+                          {/* Trạng thái - Đang chờ thanh toán */}
+                          <div className="flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-100 py-2.5 px-4">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            </span>
+                            <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700">
+                              ĐANG CHỜ THANH TOÁN — TỰ ĐỘNG XÁC NHẬN
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* CỘT PHẢI: THÔNG TIN CHI TIẾT */}
+                        <div className="relative flex flex-col justify-between p-8 bg-white text-left">
+                          {/* Nút X đóng góc trên bên phải */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setIsCheckoutDialogOpen(false);
+                              setPayOSPayment(null);
+                              setPayOSStatusText("Đang chờ khách thanh toán...");
+                            }}
+                            className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+
+                          {/* Bank Header Info */}
+                          <div className="flex items-center gap-3.5 border-b border-slate-100 pb-4">
+                            {/* Logo ngân hàng */}
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-slate-100 bg-white p-1 shadow-sm overflow-hidden relative">
+                              <img
+                                src={`https://api.vietqr.io/img/${(setting?.bankName || "MB").toUpperCase()}.png`}
+                                alt={setting?.bankName || "MB"}
+                                className="h-full w-full object-contain"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                  const fallbackEl = e.currentTarget.parentElement?.querySelector(".fallback-text");
+                                  if (fallbackEl) {
+                                    fallbackEl.classList.remove("hidden");
+                                  }
+                                }}
+                              />
+                              <span className="fallback-text hidden text-xs font-black text-blue-600">
+                                {(setting?.bankName || "MB").substring(0, 3).toUpperCase()}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none">Ngân hàng thụ hưởng</p>
+                              <p className="mt-1 text-sm font-extrabold text-slate-800">
+                                {BANK_NAMES_MAP[setting?.bankName || ""] || setting?.bankName || "MB Bank - Ngân hàng TMCP Quân đội"}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Danh sách thẻ thông tin - Dàn hàng dọc 1 cột */}
+                          <div className="my-5 flex flex-col gap-3">
+                            {/* 1. Số tài khoản */}
+                            <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-3.5 shadow-sm transition-all hover:border-slate-200">
+                              <div className="flex items-center gap-3.5 min-w-0">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                                  <User className="h-4.5 w-4.5" />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{box.title}</p>
-                                  <p className={cn(
-                                    "font-black tracking-tight truncate",
-                                    box.highlight ? "text-orange-700 text-sm" : "text-slate-800 text-xs"
-                                  )}>
-                                    {box.value}
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">Số tài khoản</p>
+                                  <p className="mt-1 font-mono font-bold text-slate-800 text-sm leading-none">
+                                    {setting?.bankAccountNumber || "0877724374"}
                                   </p>
                                 </div>
                               </div>
-                              
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
+                                className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer shrink-0"
                                 onClick={() => {
-                                  void navigator.clipboard.writeText(box.copyValue);
-                                  toast.success(t("pos.copiedField", { field: box.title.toLowerCase() }));
+                                  void navigator.clipboard.writeText(setting?.bankAccountNumber || "0877724374");
+                                  toast.success("Đã sao chép số tài khoản");
                                 }}
-                                className={cn(
-                                  "h-8 w-8 hover:bg-slate-100 rounded-lg cursor-pointer",
-                                  box.highlight ? "hover:bg-orange-100 text-orange-600" : "text-slate-400 hover:text-slate-600"
-                                )}
-                                title={t("common.copyField", { field: box.title })}
                               >
                                 <Copy className="h-4 w-4" />
                               </Button>
                             </div>
-                          );
-                        })}
+
+                            {/* 2. Chủ tài khoản */}
+                            <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-3.5 shadow-sm transition-all hover:border-slate-200">
+                              <div className="flex items-center gap-3.5 min-w-0">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                                  <User className="h-4.5 w-4.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">Chủ tài khoản</p>
+                                  <p className="mt-1 font-bold text-slate-800 text-xs leading-none uppercase truncate">
+                                    {setting?.bankAccountName || "MAI TRAN THIEN TAM"}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer shrink-0"
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(setting?.bankAccountName || "MAI TRAN THIEN TAM");
+                                  toast.success("Đã sao chép chủ tài khoản");
+                                }}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            {/* 3. Số tiền thanh toán */}
+                            <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-white p-3.5 shadow-sm transition-all hover:border-slate-200">
+                              <div className="flex items-center gap-3.5 min-w-0">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                                  <CreditCard className="h-4.5 w-4.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">Số tiền thanh toán</p>
+                                  <p className="mt-1 font-extrabold text-blue-600 text-sm leading-none">
+                                    {`${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(payOSPayment?.amount || totalPayable)}đ`}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer shrink-0"
+                                onClick={() => {
+                                  const amount = payOSPayment?.amount || totalPayable;
+                                  void navigator.clipboard.writeText(String(amount));
+                                  toast.success("Đã sao chép số tiền cần chuyển");
+                                }}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+
+                            {/* 4. Nội dung chuyển khoản */}
+                            <div className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50/10 p-3.5 shadow-sm transition-all hover:border-amber-300">
+                              <div className="flex items-center gap-3.5 min-w-0">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+                                  <FileText className="h-4.5 w-4.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider leading-none">Nội dung chuyển khoản (Memo)</p>
+                                  <p className="mt-1 font-mono font-bold text-slate-800 text-sm leading-none">
+                                    {payOSPaymentCode}
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-100/50 rounded-lg cursor-pointer shrink-0"
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(payOSPaymentCode);
+                                  toast.success("Đã sao chép nội dung");
+                                }}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          {/* Footer Message */}
+                          <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-[11px] font-semibold text-blue-700 leading-relaxed shadow-sm flex items-start gap-2.5">
+                            <ShieldCheck className="h-4.5 w-4.5 text-blue-500 shrink-0 mt-0.5" />
+                            <span>
+                              Hệ thống PayOS sẽ tự động xác nhận khi nhận được chuyển khoản. Không cần bấm thủ công.
+                            </span>
+                          </div>
+                        </div>
                       </div>
 
-                      {/* Warning/Alert */}
-                      <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-3 flex items-start gap-2.5">
-                        <Info className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
-                        <p className="text-[11px] font-semibold text-blue-700 leading-normal">
-                          {t("pos.transferMemoWarning")}
-                        </p>
+                      {/* Footer Action Row (Separated at the bottom) */}
+                      <div className="flex flex-col sm:flex-row gap-3 border-t border-slate-100 p-6 bg-slate-50/30 rounded-b-2xl justify-end">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-12 px-8 flex items-center justify-center gap-2 text-sm font-bold text-slate-700 bg-white border-slate-200 hover:bg-slate-50 rounded-xl sm:w-[160px]"
+                          onClick={() => {
+                            setCheckoutStep("confirm");
+                            setPayOSPayment(null);
+                            setPayOSStatusText("Đang chờ khách thanh toán...");
+                          }}
+                          disabled={isSubmitting}
+                        >
+                          <ArrowLeft className="h-4 w-4" /> Quay lại
+                        </Button>
+                        <Button
+                          type="submit"
+                          className="h-12 flex-1 bg-primary hover:bg-primary/90 text-white rounded-xl shadow-md transition duration-200 flex flex-col items-center justify-center py-1 cursor-pointer"
+                          disabled={isSubmitting}
+                        >
+                          <div className="flex items-center gap-1.5 font-bold text-sm">
+                            <Check className="h-4 w-4" /> Tôi đã chuyển khoản
+                          </div>
+                          <span className="text-[9px] font-medium opacity-80 mt-0.5">Nhấn F9 để xác nhận nhanh</span>
+                        </Button>
                       </div>
                     </div>
-                  </div>
-
-                  {/* Footer (Action buttons) */}
-                  <div className="border-t border-slate-100 p-4 bg-white flex flex-col sm:flex-row gap-3 rounded-b-2xl">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-12 px-6 flex items-center justify-center gap-2 text-xs font-bold text-slate-600 border-slate-200 hover:bg-slate-50 rounded-xl"
-                      onClick={() => setCheckoutStep("confirm")}
-                      disabled={isSubmitting}
-                    >
-                      <ArrowLeft className="h-4 w-4" /> {t("common.back")}
-                    </Button>
-                    <Button
-                      type="submit"
-                      className="h-12 flex-1 bg-teal-700 hover:bg-teal-800 text-white rounded-xl shadow-md transition duration-200 cursor-pointer flex flex-col items-center justify-center relative py-1"
-                      disabled={isSubmitting}
-                    >
-                      <span className="font-bold text-sm">{t("pos.confirmReceivedTransfer")}</span>
-                      <span className="text-[9px] font-medium opacity-80 mt-0.5">{t("pos.f9ConfirmHint")}</span>
-                    </Button>
-                  </div>
-                </div>
+                  );
+                })()
               ) : null}
 
               {checkoutStep !== "qr" ? (
@@ -2149,10 +2486,324 @@ export default function PosPage() {
             </div>
           </DialogContent>
         </Dialog>
+
+        <Dialog
+          open={salesAssistantOpen}
+          onOpenChange={(open) => {
+            setSalesAssistantOpen(open);
+            if (!open) {
+              resetSalesAssistantState();
+            }
+          }}
+        >
+          <DialogContent className="w-[95vw] max-w-6xl max-h-[90vh] flex flex-col overflow-hidden p-0 border-slate-200">
+            <DialogHeader className="px-6 py-4 border-b shrink-0 bg-emerald-50/50">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-emerald-600 animate-pulse" />
+                <DialogTitle className="text-emerald-900 font-extrabold">{t("salesAssistant.title")}</DialogTitle>
+              </div>
+              <DialogDescription className="text-slate-500 font-medium">
+                Nhập nhu cầu khách hàng để AI gợi ý sản phẩm và cách tư vấn bán hàng.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 flex-1 overflow-hidden p-6 bg-slate-50/50">
+              {/* Left Panel: Inputs & Filters (md:col-span-4) */}
+              <div className="md:col-span-4 flex flex-col overflow-y-auto pl-3 pr-2 custom-scrollbar space-y-4">
+                <div>
+                  <Label className="text-xs font-bold text-slate-700">{t("salesAssistant.needLabel")}</Label>
+                  <Textarea
+                    className="mt-1 h-24 text-xs resize-none border-slate-200 focus:border-emerald-500 focus:ring-emerald-500 rounded-lg"
+                    placeholder={t("salesAssistant.needPlaceholder")}
+                    value={salesNeed}
+                    onChange={(e) => setSalesNeed(e.target.value)}
+                    onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+                        e.preventDefault();
+                        void handleRequestSalesSuggestion();
+                      }
+                    }}
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1 font-medium">Nhấn Ctrl + Enter để gợi ý nhanh</p>
+                </div>
+
+                {/* Quick needs selection */}
+                <div>
+                  <Label className="text-xs font-bold text-slate-700">{t("salesAssistant.quickNeeds")}</Label>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {[
+                      "Quà tân gia",
+                      "Đồ nhà bếp",
+                      "Dọn dẹp nhà cửa",
+                      "Tiết kiệm điện",
+                      "Đồ phòng tắm",
+                      "Lọc không khí",
+                      "Đang khuyến mãi"
+                    ].map((need) => (
+                      <button
+                        key={need}
+                        type="button"
+                        onClick={() => setSelectedQuickNeed(selectedQuickNeed === need ? "" : need)}
+                        className={cn(
+                          "px-2 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer",
+                          selectedQuickNeed === need
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                            : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                        )}
+                      >
+                        {need}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Budget Ranges */}
+                <div>
+                  <Label className="text-xs font-bold text-slate-700">{t("salesAssistant.budget")}</Label>
+                  <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+                    {[
+                      { label: t("salesAssistant.under10k"), min: 0, max: 10000 },
+                      { label: t("salesAssistant.from10kTo30k"), min: 10000, max: 30000 },
+                      { label: t("salesAssistant.from30kTo50k"), min: 30000, max: 50000 },
+                      { label: t("salesAssistant.over50k"), min: 50000, max: 999999999 }
+                    ].map((b) => {
+                      const isSelected = budgetMin === b.min && budgetMax === b.max;
+                      return (
+                        <button
+                          key={b.label}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setBudgetMin(undefined);
+                              setBudgetMax(undefined);
+                            } else {
+                              setBudgetMin(b.min);
+                              setBudgetMax(b.max);
+                            }
+                          }}
+                          className={cn(
+                            "px-2 py-1.5 text-[10px] font-bold rounded-lg border transition-all text-center cursor-pointer",
+                            isSelected
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                          )}
+                        >
+                          {b.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Custom Budget Inputs */}
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type="number"
+                      className="h-8 text-[11px] px-2 border-slate-200 focus:border-emerald-500 rounded-lg text-slate-700"
+                      placeholder="Min (đ)"
+                      value={budgetMin !== undefined ? budgetMin : ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBudgetMin(val ? Number(val) : undefined);
+                      }}
+                    />
+                  </div>
+                  <span className="text-slate-400 text-xs font-semibold">→</span>
+                  <div className="relative flex-1">
+                    <Input
+                      type="number"
+                      className="h-8 text-[11px] px-2 border-slate-200 focus:border-emerald-500 rounded-lg text-slate-700"
+                      placeholder="Max (đ)"
+                      value={budgetMax !== undefined && budgetMax !== 999999999 ? budgetMax : ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBudgetMax(val ? Number(val) : undefined);
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Toggles Preferences - Formatted as 2-column Grid */}
+                <div className="grid grid-cols-2 gap-2 border-t border-slate-100 pt-3">
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={preferences.preferPromotion}
+                      onChange={(e) => setPreferences({ ...preferences, preferPromotion: e.target.checked })}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer shrink-0"
+                    />
+                    <span className="truncate">{t("salesAssistant.preferPromotion")}</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={preferences.preferWarranty}
+                      onChange={(e) => setPreferences({ ...preferences, preferWarranty: e.target.checked })}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer shrink-0"
+                    />
+                    <span className="truncate">{t("salesAssistant.preferWarranty")}</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={preferences.preferHighStock}
+                      onChange={(e) => setPreferences({ ...preferences, preferHighStock: e.target.checked })}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer shrink-0"
+                    />
+                    <span className="truncate">{t("salesAssistant.preferHighStock")}</span>
+                  </label>
+                  <label className="flex items-center gap-2 text-[11px] font-bold text-slate-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={preferences.crossSellFromCart}
+                      onChange={(e) => setPreferences({ ...preferences, crossSellFromCart: e.target.checked })}
+                      className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-3.5 w-3.5 cursor-pointer shrink-0"
+                    />
+                    <span className="truncate">{t("salesAssistant.crossSellFromCart")}</span>
+                  </label>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={handleRequestSalesSuggestion}
+                  disabled={salesAssistantLoading}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs h-10 mt-2 cursor-pointer shadow-sm flex items-center justify-center gap-2 shrink-0"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  {t("salesAssistant.suggest")}
+                </Button>
+              </div>
+
+              {/* Right Panel: Results (md:col-span-8) */}
+              <div className="md:col-span-8 flex flex-col overflow-y-auto pl-2 custom-scrollbar overflow-x-hidden bg-white border border-slate-100 rounded-2xl p-5 shadow-xs h-full min-h-[350px] justify-between">
+                {salesAssistantLoading ? (
+                  <div className="flex flex-col items-center justify-center flex-1 space-y-3 py-16">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent"></div>
+                    <p className="text-xs font-bold text-slate-400 animate-pulse">{t("salesAssistant.loading")}</p>
+                  </div>
+                ) : salesAssistantError ? (
+                  <div className="flex flex-col items-center justify-center flex-1 text-center py-16">
+                    <p className="text-sm font-extrabold text-rose-500">Đã xảy ra lỗi</p>
+                    <p className="text-xs text-slate-400 mt-1 font-semibold">{salesAssistantError}</p>
+                  </div>
+                ) : salesAssistantResult ? (
+                  <div className="space-y-5 flex-1">
+                    {/* Summary text */}
+                    <div className="bg-emerald-50/50 border border-emerald-100/50 rounded-xl p-3.5 text-xs text-slate-700 leading-relaxed font-semibold">
+                      {salesAssistantResult.summary}
+                    </div>
+
+                    {/* Suggestions list */}
+                    <div className="space-y-3">
+                      {salesAssistantResult.recommendations.length === 0 ? (
+                        <p className="text-xs text-slate-400 text-center py-8 font-semibold">{t("salesAssistant.noResult")}</p>
+                      ) : (
+                        salesAssistantResult.recommendations.map((rec) => {
+                          const badgeColors = {
+                            NEED_MATCH: "bg-blue-50 text-blue-600 border-blue-100",
+                            CROSS_SELL: "bg-indigo-50 text-indigo-600 border-indigo-100",
+                            BUDGET_MATCH: "bg-slate-50 text-slate-600 border-slate-100",
+                            PROMOTION: "bg-amber-50 text-amber-600 border-amber-100"
+                          };
+
+                          const badgeLabels = {
+                            NEED_MATCH: t("salesAssistant.needMatch"),
+                            CROSS_SELL: t("salesAssistant.crossSell"),
+                            BUDGET_MATCH: t("salesAssistant.budgetMatch"),
+                            PROMOTION: t("salesAssistant.promotion")
+                          };
+
+                          return (
+                            <div key={rec.productId} className="flex items-center gap-4 p-4 border border-slate-100 rounded-xl w-full bg-white hover:border-slate-200 transition-all">
+                              {/* Image resolve */}
+                              <div className="h-14 w-14 shrink-0 rounded-lg bg-slate-50 border border-slate-100 overflow-hidden flex items-center justify-center">
+                                {rec.imageUrl ? (
+                                  <img
+                                    src={resolveProductImage(rec)}
+                                    alt={rec.name}
+                                    className="h-full w-full object-contain"
+                                  />
+                                ) : (
+                                  <Package className="h-6 w-6 text-slate-300" />
+                                )}
+                              </div>
+
+                              {/* Info Column (flex-1 min-w-0 to prevent overflow) */}
+                              <div className="flex-1 min-w-0 text-xs">
+                                <h4 className="font-extrabold text-slate-800 truncate line-clamp-1" title={rec.name}>{rec.name}</h4>
+                                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                                  <span className="text-[10px] text-slate-400 font-bold">Tồn kho: {rec.stockQuantity}</span>
+                                  <span className={cn(
+                                    "px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0",
+                                    badgeColors[rec.type] || badgeColors.NEED_MATCH
+                                  )}>
+                                    {badgeLabels[rec.type] || badgeLabels.NEED_MATCH}
+                                  </span>
+                                </div>
+                                <p className="mt-2 text-[11px] text-slate-500 leading-normal bg-slate-50/50 rounded-lg p-2 border border-slate-100/50 font-medium truncate" title={rec.reason}>
+                                  {rec.reason}
+                                </p>
+                              </div>
+
+                              {/* Price & Add to Cart Column (shrink-0 flex flex-col items-end gap-2) */}
+                              <div className="shrink-0 flex flex-col items-end gap-2">
+                                <span className="font-extrabold text-slate-800 text-sm">
+                                  {new Intl.NumberFormat("vi-VN").format(rec.price)}đ
+                                </span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  onClick={() => handleAddSuggestionToCart(rec.productId)}
+                                  className="h-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[10px] font-bold shadow-xs cursor-pointer px-3 flex items-center gap-1 shrink-0"
+                                >
+                                  <span>+</span>
+                                  <span>{t("salesAssistant.addToCart")}</span>
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Bundle suggestions */}
+                    {salesAssistantResult.bundleSuggestion && (
+                      <div className="border-t border-slate-100 pt-3">
+                        <Label className="text-xs font-bold text-slate-700">{t("salesAssistant.bundleSuggestion")}</Label>
+                        <p className="mt-1 text-xs text-slate-600 font-semibold leading-relaxed bg-amber-50/30 border border-amber-100/50 rounded-xl p-3">
+                          {salesAssistantResult.bundleSuggestion}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Cashier Tips */}
+                    {salesAssistantResult.cashierTips && salesAssistantResult.cashierTips.length > 0 && (
+                      <div className="border-t border-slate-100 pt-3">
+                        <Label className="text-xs font-bold text-slate-700">{t("salesAssistant.cashierTips")}</Label>
+                        <ul className="mt-1.5 space-y-1 text-xs text-slate-500 list-disc list-inside leading-relaxed font-bold">
+                          {salesAssistantResult.cashierTips.map((tip, idx) => (
+                            <li key={idx}>{tip}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center flex-1 text-center py-16 space-y-2">
+                    <Sparkles className="h-10 w-10 text-slate-200" />
+                    <p className="text-xs font-bold text-slate-400">{t("salesAssistant.empty")}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
       {lastCompletedOrder ? (
         <PrintableInvoice
           order={lastCompletedOrder}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           setting={setting as any}
           publicUrl={lastInvoicePublicUrl}
           className="hidden print:block"

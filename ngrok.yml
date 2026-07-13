@@ -1,0 +1,18 @@
+# ngrok configuration file
+# To start both tunnels, run:
+# ngrok start --all --config ./ngrok.yml
+#
+# Note: You need to replace <YOUR_NGROK_AUTHTOKEN> with your actual token from https://dashboard.ngrok.com/get-started/your-authtoken
+
+version: "3"
+agent:
+  authtoken: 3Fj2uq9MiOum3yvLI2szad06aVC_6nVN2nUpEu6YA5gbqzggM
+
+tunnels:
+  frontend:
+    proto: http
+    addr: 3000
+    domain: disparate-sizable-brick.ngrok-free.dev
+  backend:
+    proto: http
+    addr: 5000

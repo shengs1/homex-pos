@@ -259,6 +259,7 @@ export type Setting = {
   bankAccountName: string | null;
   vietQrTemplate: string | null;
   transferContentTemplate: string | null;
+  enablePayOSPayment: boolean;
   defaultPaymentMethod: string;
   productsPerPage: number;
   autoLockMinutes: number;
@@ -414,3 +415,44 @@ export type Promotion = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type SalesAssistantRecommendation = {
+  productId: number;
+  name: string;
+  price: number;
+  stockQuantity: number;
+  imageUrl?: string;
+  reason: string;
+  type: "NEED_MATCH" | "CROSS_SELL" | "BUDGET_MATCH" | "PROMOTION";
+  confidence?: number;
+};
+
+export type SalesAssistantResponse = {
+  summary: string;
+  recommendations: SalesAssistantRecommendation[];
+  bundleSuggestion?: string;
+  cashierTips?: string[];
+  source?: "AI" | "HEURISTIC";
+};
+
+export interface SalesAssistantRequest {
+  need?: string;
+  budgetMin?: number;
+  budgetMax?: number;
+  customerId?: number;
+  cartItems?: Array<{
+    productId: number;
+    name: string;
+    quantity: number;
+  }>;
+  preferences?: {
+    preferPromotion?: boolean;
+    preferWarranty?: boolean;
+    preferHighStock?: boolean;
+    crossSellFromCart?: boolean;
+  };
+}
+
+
+
+
