@@ -2,6 +2,7 @@ import { Router } from "express";
 import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import prisma from "../lib/prisma";
+import { inventoryAiService } from "../services/inventory-ai.service";
 import {
   authenticateToken,
   authorizeRoles,
@@ -14,8 +15,16 @@ import {
 } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
+
+function normalizeProductPrice(value: Prisma.Decimal | number | string | null | undefined) {
+  const numberValue = Number(value || 0);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return 0;
+
+  return numberValue >= 10000 ? Math.round(numberValue / 1000) : numberValue;
+}
 
 const stockTransactionInclude = {
   product: {
@@ -203,8 +212,8 @@ function formatLowStockProduct(product: LowStockProduct) {
     supplierId: product.supplierId,
     category: product.category,
     supplier: product.supplier,
-    costPrice: Number(product.costPrice),
-    salePrice: Number(product.salePrice),
+    costPrice: normalizeProductPrice(product.costPrice),
+    salePrice: normalizeProductPrice(product.salePrice),
     stockQuantity: product.stockQuantity,
     minStock: product.minStock,
     warrantyMonths: product.warrantyMonths,
@@ -308,6 +317,23 @@ router.get(
   })
 );
 
+// GET /api/inventory/ai-forecast?days=15
+router.get(
+  "/ai-forecast",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN),
+  catchAsync(async (req, res) => {
+    const days = Math.max(1, Number(req.query.days || 15));
+    const language = req.query.language === "en" ? "en" : "vi";
+    const result = await inventoryAiService.forecast(days, language);
+
+    return res.json({
+      success: true,
+      message: "Phân tích kho hàng và đề xuất nhập hàng thành công.",
+      data: result,
+    });
+  })
+);
 // GET /api/inventory/transactions?page=1&limit=10&type=IMPORT&productId=1&search=&fromDate=2026-01-01&toDate=2026-12-31
 router.get(
   "/transactions",
@@ -470,6 +496,14 @@ router.post(
       };
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "STOCK_IN",
+      entityType: "PRODUCT",
+      entityId: productId,
+      metadata: { quantity, note },
+    });
+
     return res.status(201).json({
       success: true,
       message: "Nhập kho thành công",
@@ -532,6 +566,14 @@ router.post(
         product: updatedProduct,
         transaction: stockTransaction,
       };
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "STOCK_ADJUST",
+      entityType: "PRODUCT",
+      entityId: productId,
+      metadata: { difference, newQuantity, note: finalNote },
     });
 
     return res.status(201).json({

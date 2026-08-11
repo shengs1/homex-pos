@@ -22,8 +22,20 @@ function useDropdownContext() {
   return context;
 }
 
-export function DropdownMenu({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = React.useState(false);
+export function DropdownMenu({ children, open: controlledOpen, onOpenChange }: { children: React.ReactNode; open?: boolean; onOpenChange?: (open: boolean) => void }) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  
+  const open = controlledOpen !== undefined ? controlledOpen : uncontrolledOpen;
+  const setOpen = React.useCallback((value: boolean | ((prevState: boolean) => boolean)) => {
+    const nextValue = typeof value === "function" ? value(open) : value;
+    if (onOpenChange) {
+      onOpenChange(nextValue);
+    }
+    if (controlledOpen === undefined) {
+      setUncontrolledOpen(nextValue);
+    }
+  }, [controlledOpen, onOpenChange, open]);
+
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   const triggerRef = React.useRef<HTMLElement | null>(null);
   const contentRef = React.useRef<HTMLDivElement | null>(null);
@@ -51,7 +63,7 @@ export function DropdownMenu({ children }: { children: React.ReactNode }) {
       document.removeEventListener("mousedown", handlePointerDown);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, []);
+  }, [setOpen]);
 
   return (
     <DropdownContext.Provider value={{ open, setOpen, triggerRef, contentRef, rootRef }}>

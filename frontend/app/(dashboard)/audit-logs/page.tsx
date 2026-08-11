@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Eye } from "lucide-react";
+import { useToast } from "@/contexts/toast-context";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { ActionMenu } from "@/components/shared/action-menu";
 import { DataTable, Td, Th } from "@/components/shared/data-table";
@@ -15,6 +16,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { PaginationControls } from "@/components/shared/pagination-controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useLanguage } from "@/contexts/language-context";
 import { getApiErrorMessage } from "@/lib/api";
@@ -38,10 +40,10 @@ function DateTimeCell({ value }: { value: string | Date | null | undefined }) {
 
 export default function AuditLogsPage() {
   const { t } = useLanguage();
-  const detailRef = useRef<HTMLDivElement | null>(null);
-
+  const { toast } = useToast();
   const [items, setItems] = useState<AuditLog[]>([]);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [pagination, setPagination] = useState<Pagination | null>(null);
 
   const [page, setPage] = useState(1);
@@ -55,10 +57,26 @@ export default function AuditLogsPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
-  function scrollToDetail() {
-    window.setTimeout(() => {
-      detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 80);
+  function parseDescription(desc?: string) {
+    let displayDesc = desc || "-";
+    let metadataObj = null;
+    let ipAddress = null;
+
+    if (desc) {
+      const parts = desc.split(" | ");
+      displayDesc = parts[0];
+      
+      parts.slice(1).forEach(part => {
+        if (part.startsWith("IP: ")) ipAddress = part.replace("IP: ", "");
+        if (part.startsWith("Meta: ")) {
+          try {
+            metadataObj = JSON.parse(part.replace("Meta: ", ""));
+          } catch(e) {}
+        }
+      });
+    }
+
+    return { displayDesc, metadataObj, ipAddress };
   }
 
   async function loadData(currentPage = page) {
@@ -88,12 +106,11 @@ export default function AuditLogsPage() {
 
   async function loadDetail(id: number) {
     try {
-      setErrorMessage("");
       const data = await auditLogService.detail(id);
       setSelectedLog(data);
-      scrollToDetail();
+      setIsDetailOpen(true);
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error) || t("message.error"));
     }
   }
 
@@ -121,55 +138,65 @@ export default function AuditLogsPage() {
         <Card>
           <CardContent className="pt-6">
             <form onSubmit={handleSearchSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-12">
-                <Input
-                  placeholder={t("audit.searchPlaceholder")}
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  className="h-12 xl:col-span-4"
-                />
+              {/* Row 1: Search, Action, Entity Type, User ID */}
+              <div className="flex w-full flex-wrap items-end gap-3">
+                <div className="w-full md:flex-[2] md:min-w-[220px]">
+                  <Input
+                    placeholder={t("audit.searchPlaceholder")}
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                    className="h-10 w-full"
+                  />
+                </div>
 
-                <Input
-                  placeholder={t("audit.action")}
-                  value={action}
-                  onChange={(event) => setAction(event.target.value)}
-                  className="h-12 xl:col-span-2"
-                />
+                <div className="w-full md:flex-[1.2] md:min-w-[130px]">
+                  <Input
+                    placeholder={t("audit.action")}
+                    value={action}
+                    onChange={(event) => setAction(event.target.value)}
+                    className="h-10 w-full"
+                  />
+                </div>
 
-                <Input
-                  placeholder={t("audit.entityType")}
-                  value={entityType}
-                  onChange={(event) => setEntityType(event.target.value)}
-                  className="h-12 xl:col-span-2"
-                />
+                <div className="w-full md:flex-[1.2] md:min-w-[130px]">
+                  <Input
+                    placeholder={t("audit.entityType")}
+                    value={entityType}
+                    onChange={(event) => setEntityType(event.target.value)}
+                    className="h-10 w-full"
+                  />
+                </div>
 
-                <Input
-                  type="number"
-                  placeholder={t("audit.userIdFilter")}
-                  value={userId}
-                  onChange={(event) => setUserId(event.target.value)}
-                  className="h-12 xl:col-span-2"
-                />
+                <div className="w-full md:flex-[1] md:min-w-[100px]">
+                  <Input
+                    type="number"
+                    placeholder={t("audit.userIdFilter")}
+                    value={userId}
+                    onChange={(event) => setUserId(event.target.value)}
+                    className="h-10 w-full"
+                  />
+                </div>
               </div>
 
-              <div className="flex flex-wrap items-end gap-4">
+              {/* Row 2: From Date, To Date, Filter Button */}
+              <div className="flex w-full flex-wrap items-end gap-3">
                 <DateFilterInput
                   label={t("reports.fromDate")}
                   value={fromDate}
                   onChange={setFromDate}
-                  className="w-full md:w-[220px]"
-                  inputClassName="h-12"
+                  className="w-full md:w-[180px]"
+                  inputClassName="h-10"
                 />
 
                 <DateFilterInput
                   label={t("reports.toDate")}
                   value={toDate}
                   onChange={setToDate}
-                  className="w-full md:w-[220px]"
-                  inputClassName="h-12"
+                  className="w-full md:w-[180px]"
+                  inputClassName="h-10"
                 />
 
-                <Button type="submit" className="h-12 w-full md:w-[220px]">
+                <Button type="submit" className="h-10 w-full md:w-[120px]">
                   {t("common.filter")}
                 </Button>
               </div>
@@ -203,7 +230,11 @@ export default function AuditLogsPage() {
                   <Td className="font-medium">{item.action}</Td>
                   <Td>{item.entityType}</Td>
                   <Td>{item.entityId}</Td>
-                  <Td>{item.description || "-"}</Td>
+                  <Td>
+                    <div className="max-w-[300px] truncate font-medium text-slate-600" title={item.description || undefined}>
+                      {parseDescription(item.description || undefined).displayDesc}
+                    </div>
+                  </Td>
                   <Td><DateTimeCell value={item.createdAt} /></Td>
                   <Td className="text-right">
                     <ActionMenu
@@ -225,52 +256,80 @@ export default function AuditLogsPage() {
 
         <PaginationControls pagination={pagination} onPageChange={setPage} />
 
-        <div ref={detailRef}>
-          {selectedLog ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>
+        <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+          {selectedLog && (
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>
                   {t("audit.detailTitle", { id: selectedLog.id })}
-                </CardTitle>
-              </CardHeader>
+                </DialogTitle>
+                <DialogDescription className="sr-only">
+                  {t("audit.detailDescription")}
+                </DialogDescription>
+              </DialogHeader>
 
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <p className="text-sm font-semibold">{t("audit.user")}</p>
-                  <p>{selectedLog.user?.fullName || selectedLog.userId}</p>
-                </div>
+              {(() => {
+                const { displayDesc, metadataObj, ipAddress } = parseDescription(selectedLog.description || undefined);
+                return (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-500 mb-1">{t("audit.user")}</p>
+                      <p className="font-medium">{selectedLog.user?.fullName || selectedLog.userId}</p>
+                    </div>
 
-                <div>
-                  <p className="text-sm font-semibold">{t("audit.action")}</p>
-                  <p>{selectedLog.action}</p>
-                </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-500 mb-1">{t("audit.action")}</p>
+                      <p className="font-medium">{selectedLog.action}</p>
+                    </div>
 
-                <div>
-                  <p className="text-sm font-semibold">{t("audit.entityType")}</p>
-                  <p>{selectedLog.entityType}</p>
-                </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-500 mb-1">{t("audit.entityType")}</p>
+                      <p className="font-medium">{selectedLog.entityType}</p>
+                    </div>
 
-                <div>
-                  <p className="text-sm font-semibold">{t("audit.entityId")}</p>
-                  <p>{selectedLog.entityId}</p>
-                </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-500 mb-1">{t("audit.entityId")}</p>
+                      <p className="font-medium">{selectedLog.entityId}</p>
+                    </div>
 
-                <div className="md:col-span-2">
-                  <p className="text-sm font-semibold">
-                    {t("audit.descriptionField")}
-                  </p>
-                  <p>{selectedLog.description || "-"}</p>
-                </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-500 mb-1">{t("common.createdAt")}</p>
+                      <div className="font-medium">
+                        <DateTimeCell value={selectedLog.createdAt} />
+                      </div>
+                    </div>
 
-                <div>
-                  <p className="text-sm font-semibold">{t("common.createdAt")}</p>
-                  <DateTimeCell value={selectedLog.createdAt} />
-                </div>
-              </CardContent>
-            </Card>
-          ) : null}
-        </div>
+                    {ipAddress && (
+                      <div>
+                        <p className="text-sm font-semibold text-slate-500 mb-1">{t("audit.ipAddress")}</p>
+                        <p className="font-medium">{ipAddress}</p>
+                      </div>
+                    )}
+
+                    <div className="md:col-span-2">
+                      <p className="text-sm font-semibold text-slate-500 mb-1">
+                        {t("audit.descriptionField")}
+                      </p>
+                      <p className="font-medium">{displayDesc}</p>
+                    </div>
+
+                    {metadataObj && (
+                      <div className="md:col-span-2">
+                        <p className="text-sm font-semibold text-slate-500 mb-1">{t("audit.metadata")}</p>
+                        <pre className="bg-slate-100 dark:bg-slate-900 p-4 rounded-md overflow-auto max-h-[300px] text-xs font-mono border">
+                          {JSON.stringify(metadataObj, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </DialogContent>
+          )}
+        </Dialog>
       </div>
     </RoleGuard>
   );
 }
+
+

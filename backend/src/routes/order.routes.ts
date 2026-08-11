@@ -18,9 +18,18 @@ import {
 } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
-import { createAuditLog } from "../utils/auditLog";
+import { createAuditLog } from "../utils/audit";
+import { autoCloseExpiredShifts } from "../services/shift.service";
+import { getCustomerTier } from "../utils/tier";
 
 const router = Router();
+
+function normalizeProductPrice(value: Prisma.Decimal | number | string | null | undefined) {
+  const numberValue = Number(value || 0);
+  if (!Number.isFinite(numberValue) || numberValue <= 0) return 0;
+
+  return Math.round(numberValue);
+}
 
 const orderInclude = {
   user: {
@@ -38,6 +47,7 @@ const orderInclude = {
       email: true,
       address: true,
       points: true,
+      tier: true,
       status: true,
     },
   },
@@ -52,6 +62,8 @@ const orderInclude = {
           sku: true,
           name: true,
           salePrice: true,
+          originalPrice: true,
+          imageUrl: true,
           warrantyMonths: true,
           status: true,
         },
@@ -119,6 +131,11 @@ const draftOrderSchema = z.object({
 const checkoutOrderSchema = z.object({
   paymentMethod: paymentMethodSchema,
 
+  cashReceived: z.coerce
+    .number()
+    .min(0, "Tiền khách đưa không hợp lệ")
+    .optional(),
+
   discountAmount: z.coerce
     .number()
     .min(0, "Số tiền giảm giá không hợp lệ")
@@ -177,22 +194,35 @@ function formatMoney(value: Prisma.Decimal | number) {
 }
 
 function calculatePromotionDiscount(
-  promotion: { discountType: string; discountValue: Prisma.Decimal | number },
+  promotion: { discountType: string; discountValue: Prisma.Decimal | number; maxDiscountAmount?: Prisma.Decimal | number | null },
   subtotal: number
 ) {
   const discountValue = Number(promotion.discountValue);
 
   if (promotion.discountType === "PERCENT") {
-    return Math.floor((subtotal * discountValue) / 100);
+    let discount = Math.floor((subtotal * discountValue) / 100);
+    if (promotion.maxDiscountAmount && Number(promotion.maxDiscountAmount) > 0) {
+      discount = Math.min(discount, Number(promotion.maxDiscountAmount));
+    }
+    return discount;
   }
 
   return Math.floor(discountValue);
 }
 
+function isTierEligible(customerTier: string | null | undefined, eligibleTiers: string | null | undefined) {
+  if (!eligibleTiers || eligibleTiers === "ALL" || eligibleTiers === "ALL_TIERS") return true;
+  const tiers = eligibleTiers.split(",").map((item) => item.trim()).filter(Boolean);
+  if (tiers.includes("ALL") || tiers.includes("ALL_TIERS")) return true;
+  return tiers.includes(customerTier || "NONE");
+}
+
 async function validateAndUsePromotion(
   tx: Prisma.TransactionClient,
   promotionCode: string | undefined,
-  subtotal: number
+  subtotal: number,
+  customerId?: number | null,
+  customerTier?: string | null
 ) {
   const normalizedCode = String(promotionCode || "").trim().toUpperCase();
 
@@ -210,6 +240,10 @@ async function validateAndUsePromotion(
     throw new AppError("Mã giảm giá không hợp lệ", 400);
   }
 
+  if (new Date(promotion.startDate).getTime() > Date.now()) {
+    throw new AppError("Mã giảm giá chưa đến thời gian áp dụng", 400);
+  }
+
   if (new Date(promotion.expiredAt).getTime() < Date.now()) {
     throw new AppError("Mã giảm giá đã hết hạn", 400);
   }
@@ -219,6 +253,29 @@ async function validateAndUsePromotion(
 
   if (usageLimit > 0 && usedCount >= usageLimit) {
     throw new AppError("Mã giảm giá đã hết lượt sử dụng", 400);
+  }
+
+  if (!isTierEligible(customerTier, promotion.eligibleTiers)) {
+    throw new AppError("Voucher không áp dụng cho hạng thành viên của khách hàng này", 400);
+  }
+
+  if (promotion.customerLimit && promotion.customerLimit > 0) {
+    const isPublicVoucher = !promotion.eligibleTiers || 
+                            promotion.eligibleTiers === "ALL" || 
+                            promotion.eligibleTiers === "ALL_TIERS";
+                            
+    if (!customerId) {
+      if (!isPublicVoucher) {
+        throw new AppError("Voucher này yêu cầu chọn khách hàng để áp dụng", 400);
+      }
+    } else {
+      const userUsageCount = await tx.order.count({
+        where: { customerId, promotionCode: promotion.code, status: "COMPLETED" },
+      });
+      if (userUsageCount >= promotion.customerLimit) {
+        throw new AppError("Bạn đã hết lượt dùng mã giảm giá này", 400);
+      }
+    }
   }
 
   if (subtotal < Number(promotion.minOrderAmount || 0)) {
@@ -250,8 +307,12 @@ function formatOrder(order: OrderWithRelations) {
     orderCode: order.orderCode,
     userId: order.userId,
     customerId: order.customerId,
+    shiftId: order.shiftId,
     totalAmount: formatMoney(order.totalAmount),
+    promotionCode: order.promotionCode,
+    discountAmount: order.discountAmount ? formatMoney(order.discountAmount) : null,
     status: order.status,
+    earnedPoints: order.earnedPoints || 0,
     createdAt: order.createdAt,
     updatedAt: order.updatedAt,
     user: order.user,
@@ -268,7 +329,8 @@ function formatOrder(order: OrderWithRelations) {
       updatedAt: detail.updatedAt,
       product: {
         ...detail.product,
-        salePrice: formatMoney(detail.product.salePrice),
+        salePrice: normalizeProductPrice(detail.product.salePrice),
+        originalPrice: detail.product.originalPrice ? normalizeProductPrice(detail.product.originalPrice) : null,
       },
       warranty: detail.warranty,
     })),
@@ -278,6 +340,8 @@ function formatOrder(order: OrderWithRelations) {
           orderId: order.payment.orderId,
           method: order.payment.method,
           amount: formatMoney(order.payment.amount),
+          cashReceived: order.payment.cashReceived ? formatMoney(order.payment.cashReceived) : null,
+          changeAmount: order.payment.changeAmount ? formatMoney(order.payment.changeAmount) : null,
           status: order.payment.status,
           paidAt: order.payment.paidAt,
           createdAt: order.payment.createdAt,
@@ -320,6 +384,8 @@ function addMonths(date: Date, months: number) {
   result.setMonth(result.getMonth() + months);
   return result;
 }
+
+
 
 async function getUniqueOrderCode(tx: Prisma.TransactionClient) {
   let orderCode = generateOrderCode();
@@ -451,7 +517,7 @@ async function buildOrderDetailsFromItems(
       );
     }
 
-    const unitPrice = Number(product.salePrice);
+    const unitPrice = normalizeProductPrice(product.salePrice);
     const lineTotal = unitPrice * item.quantity;
 
     totalAmount += lineTotal;
@@ -572,6 +638,41 @@ router.get(
   })
 );
 
+// GET /api/orders/code/:orderCode
+router.get(
+  "/code/:orderCode",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const orderCode = String(req.params.orderCode || "").trim();
+
+    if (!orderCode) {
+      throw new AppError("Mã đơn hàng không hợp lệ", 400);
+    }
+
+    const order = await prisma.order.findUnique({
+      where: { orderCode },
+      include: {
+        ...orderInclude,
+        vatInvoiceRequest: true,
+      },
+    });
+
+    if (!order) {
+      throw new AppError("Không tìm thấy đơn hàng", 404);
+    }
+
+    return res.json({
+      success: true,
+      message: "Lấy thông tin đơn hàng thành công",
+      data: {
+        ...formatOrder(order as unknown as OrderWithRelations),
+        vatInvoiceRequest: order.vatInvoiceRequest || null,
+      },
+    });
+  })
+);
+
 // GET /api/orders/:id
 router.get(
   "/:id",
@@ -605,6 +706,7 @@ router.post(
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
   catchAsync(async (req, res) => {
+    await autoCloseExpiredShifts();
     const authReq = req as AuthRequest;
     const userId = getAuthenticatedUserId(authReq);
 
@@ -664,6 +766,7 @@ router.put(
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
   catchAsync(async (req, res) => {
+    await autoCloseExpiredShifts();
     const authReq = req as AuthRequest;
     const userId = getAuthenticatedUserId(authReq);
     const orderId = getOrderId(String(req.params.id));
@@ -747,6 +850,7 @@ router.patch(
   authenticateToken,
   authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
   catchAsync(async (req, res) => {
+    await autoCloseExpiredShifts();
     const authReq = req as AuthRequest;
     const userId = getAuthenticatedUserId(authReq);
     const orderId = getOrderId(String(req.params.id));
@@ -787,6 +891,14 @@ router.patch(
         throw new AppError("Đơn hàng chưa có sản phẩm", 400);
       }
 
+      const setting = await tx.setting.findFirst();
+
+      if (setting?.requireCustomerPhone) {
+        if (!order.customerId) {
+          throw new AppError("Vui lòng nhập số điện thoại khách hàng trước khi thanh toán.", 400);
+        }
+      }
+
       if (order.customerId) {
         if (!order.customer) {
           throw new AppError("Không tìm thấy khách hàng", 404);
@@ -795,13 +907,19 @@ router.patch(
         if (order.customer.status !== RECORD_STATUS.ACTIVE) {
           throw new AppError("Khách hàng đang ngừng hoạt động", 400);
         }
+
+        if (setting?.requireCustomerPhone && !order.customer.phone) {
+          throw new AppError("Vui lòng nhập số điện thoại khách hàng trước khi thanh toán.", 400);
+        }
       }
 
-      const orderSubtotal = Number(order.totalAmount);
+      const orderSubtotal = order.orderDetails.reduce((acc, item) => acc + Number(item.lineTotal), 0);
       const promotionResult = await validateAndUsePromotion(
         tx,
         checkoutData.promotionCode,
-        orderSubtotal
+        orderSubtotal,
+        order.customerId,
+        order.customer?.tier
       );
 
       const manualDiscountAmount = checkoutData.promotionCode
@@ -812,7 +930,39 @@ router.patch(
         ? promotionResult.discountAmount
         : manualDiscountAmount;
 
+      const maxDiscountSetting = Number(setting?.maxDiscount || 0);
+      if (maxDiscountSetting > 0 && finalDiscountAmount > maxDiscountSetting) {
+        throw new AppError("Tổng giảm giá vượt quá giới hạn cho phép.", 400);
+      }
+
       const finalAmount = Math.max(orderSubtotal - finalDiscountAmount, 0);
+      const isCashPayment = checkoutData.paymentMethod === PAYMENT_METHOD.CASH;
+      const cashReceived =
+        isCashPayment
+          ? Number(checkoutData.cashReceived || 0)
+          : null;
+      const changeAmount =
+        isCashPayment
+          ? Math.max((cashReceived || 0) - finalAmount, 0)
+          : null;
+
+      if (isCashPayment && (cashReceived || 0) < finalAmount) {
+        throw new AppError("Tiền khách đưa chưa đủ để thanh toán", 400);
+      }
+
+      const activeShift = await tx.shift.findFirst({
+        where: {
+          userId,
+          status: "OPEN",
+        },
+        orderBy: {
+          openedAt: "desc",
+        },
+      });
+
+      if (authReq.user?.role === USER_ROLES.CASHIER && !activeShift) {
+        throw new AppError("Vui lòng mở ca trước khi thanh toán", 400);
+      }
 
       const productIds = order.orderDetails.map((detail) => detail.productId);
 
@@ -827,6 +977,8 @@ router.patch(
       if (products.length !== productIds.length) {
         throw new AppError("Có sản phẩm trong đơn không tồn tại", 404);
       }
+
+      const allowOversell = setting?.allowOversell === true;
 
       for (const detail of order.orderDetails) {
         const product = products.find(
@@ -844,7 +996,7 @@ router.patch(
           );
         }
 
-        if (product.stockQuantity < detail.quantity) {
+        if (!allowOversell && product.stockQuantity < detail.quantity) {
           throw new AppError(
             `Sản phẩm "${product.name}" không đủ tồn kho. Hiện còn ${product.stockQuantity}`,
             400
@@ -853,6 +1005,13 @@ router.patch(
       }
 
       for (const detail of order.orderDetails) {
+        const product = products.find((p) => p.id === detail.productId);
+
+        await tx.orderDetail.update({
+          where: { id: detail.id },
+          data: { unitCost: product?.costPrice || 0 },
+        });
+
         await tx.product.update({
           where: {
             id: detail.productId,
@@ -881,55 +1040,68 @@ router.patch(
           orderId: order.id,
           method: checkoutData.paymentMethod,
           amount: finalAmount,
+          cashReceived,
+          changeAmount,
           status: PAYMENT_STATUS.PAID,
           paidAt: new Date(),
         },
       });
 
+      let earnedPoints = 0;
       if (order.customerId) {
-        const earnedPoints = Math.floor(finalAmount / 100000);
+        const POINT_CONVERSION_RATE = 10;
+        earnedPoints = Math.floor(Number(finalAmount) / POINT_CONVERSION_RATE);
 
         if (earnedPoints > 0) {
+          const customer = await tx.customer.findUnique({
+            where: {
+              id: order.customerId,
+            },
+            select: {
+              points: true,
+            },
+          });
+          const newPoints = (customer?.points || 0) + earnedPoints;
+
           await tx.customer.update({
             where: {
               id: order.customerId,
             },
             data: {
-              points: {
-                increment: earnedPoints,
-              },
+              points: newPoints,
+              tier: getCustomerTier(newPoints),
             },
           });
         }
+      }
 
-        for (const detail of order.orderDetails) {
-          const product = products.find(
-            (productItem) => productItem.id === detail.productId
-          );
+      for (const detail of order.orderDetails) {
+        const product = products.find(
+          (productItem) => productItem.id === detail.productId
+        );
 
-          if (product && product.warrantyMonths > 0) {
-            const existingWarranty = await tx.warranty.findUnique({
-              where: {
+        if (product && product.warrantyMonths > 0) {
+          const existingWarranty = await tx.warranty.findUnique({
+            where: {
+              orderDetailId: detail.id,
+            },
+          });
+
+          if (!existingWarranty) {
+            const startDate = new Date();
+            const endDate = addMonths(startDate, product.warrantyMonths);
+            const warrantyCode = await getUniqueWarrantyCode(tx);
+
+            await tx.warranty.create({
+              data: {
+                warrantyCode,
                 orderDetailId: detail.id,
+                customerId: order.customerId,
+                startDate,
+                endDate,
+                status: WARRANTY_STATUS.ACTIVE,
               },
             });
-
-            if (!existingWarranty) {
-              const startDate = new Date();
-              const endDate = addMonths(startDate, product.warrantyMonths);
-              const warrantyCode = await getUniqueWarrantyCode(tx);
-
-              await tx.warranty.create({
-                data: {
-                  warrantyCode,
-                  orderDetailId: detail.id,
-                  customerId: order.customerId,
-                  startDate,
-                  endDate,
-                  status: WARRANTY_STATUS.ACTIVE,
-                },
-              });
-            }
           }
         }
       }
@@ -940,7 +1112,11 @@ router.patch(
         },
         data: {
           totalAmount: finalAmount,
+          promotionCode: checkoutData.promotionCode || null,
+          discountAmount: finalDiscountAmount > 0 ? finalDiscountAmount : null,
+          shiftId: activeShift?.id || null,
           status: ORDER_STATUS.COMPLETED,
+          earnedPoints,
         },
       });
 
@@ -1050,7 +1226,7 @@ router.patch(
       }
 
       if (order.customerId) {
-        const pointsToRemove = Math.floor(Number(order.totalAmount) / 100000);
+        const pointsToRemove = order.earnedPoints;
 
         if (pointsToRemove > 0) {
           const customer = await tx.customer.findUnique({
@@ -1068,6 +1244,7 @@ router.patch(
               },
               data: {
                 points: newPoints,
+                tier: getCustomerTier(newPoints),
               },
             });
           }
@@ -1126,3 +1303,4 @@ router.patch(
 );
 
 export default router;
+

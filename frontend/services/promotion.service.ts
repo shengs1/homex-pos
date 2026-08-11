@@ -1,22 +1,17 @@
 import { api } from "@/lib/api";
-import type { PaginatedResponse } from "@/types/api";
+import { type Promotion, type PromotionDiscountType, type PromotionStatus } from "@/types/domain";
 
-export type PromotionDiscountType = "AMOUNT" | "PERCENT";
-export type PromotionStatus = "ACTIVE" | "EXPIRED" | "USED_UP" | "INACTIVE";
-
-export type Promotion = {
-  id: number;
-  code: string;
-  discountType: PromotionDiscountType;
-  discountValue: number;
-  minOrderAmount: number;
-  usageLimit?: number | null;
-  usedCount?: number | null;
-  expiredAt: string;
-  status: PromotionStatus;
-  createdAt: string;
-  updatedAt: string;
+type PaginatedResponse<T> = {
+  items: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalItems: number;
+    totalPages: number;
+  };
 };
+
+export { type Promotion, type PromotionDiscountType, type PromotionStatus };
 
 export type PromotionListParams = {
   page?: number;
@@ -27,10 +22,15 @@ export type PromotionListParams = {
 
 export type PromotionPayload = {
   code: string;
+  name?: string | null;
   discountType: PromotionDiscountType;
   discountValue: number;
+  maxDiscountAmount?: number | null;
   minOrderAmount: number;
   usageLimit?: number | null;
+  customerLimit?: number | null;
+  eligibleTiers: string;
+  startDate?: string;
   expiredAt: string;
   status?: PromotionStatus;
 };
@@ -38,6 +38,8 @@ export type PromotionPayload = {
 export type PromotionValidateBody = {
   code: string;
   subtotal: number;
+  customerTier?: string | null;
+  customerId?: number | null;
 };
 
 export type PromotionValidateResult = {

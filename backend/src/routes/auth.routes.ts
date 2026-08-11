@@ -3,12 +3,13 @@ import * as bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { z } from "zod";
 import prisma from "../lib/prisma";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
 
 const loginSchema = z.object({
-  email: z.string().email("Email không hợp lệ"),
-  password: z.string().min(1, "Mật khẩu không được để trống"),
+  email: z.string().trim().min(1, "Employee code or email is required"),
+  password: z.string().min(1, "Password is required"),
 });
 
 router.post("/login", async (req, res) => {
@@ -18,14 +19,30 @@ router.post("/login", async (req, res) => {
     if (!result.success) {
       return res.status(400).json({
         success: false,
-        message: result.error.issues[0]?.message || "Dữ liệu không hợp lệ",
+        message: result.error.issues[0]?.message || "Invalid data",
       });
     }
 
     const { email, password } = result.data;
+    const identifier = email.trim();
 
-    const user = await prisma.user.findUnique({
-      where: { email },
+    const user = await prisma.user.findFirst({
+      where: {
+        OR: [
+          {
+            email: {
+              equals: identifier,
+              mode: "insensitive",
+            },
+          },
+          {
+            employeeCode: {
+              equals: identifier.toUpperCase(),
+              mode: "insensitive",
+            },
+          },
+        ],
+      },
       include: {
         role: true,
       },
@@ -34,14 +51,14 @@ router.post("/login", async (req, res) => {
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: "Email hoặc mật khẩu không đúng",
+        message: "Employee code/email or password is incorrect",
       });
     }
 
     if (user.status !== "ACTIVE") {
       return res.status(403).json({
         success: false,
-        message: "Tài khoản đã bị khóa",
+        message: "Account is locked",
       });
     }
 
@@ -50,7 +67,7 @@ router.post("/login", async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
-        message: "Email hoặc mật khẩu không đúng",
+        message: "Employee code/email or password is incorrect",
       });
     }
 
@@ -59,7 +76,7 @@ router.post("/login", async (req, res) => {
     if (!jwtSecret) {
       return res.status(500).json({
         success: false,
-        message: "Server chưa cấu hình JWT_SECRET",
+        message: "Server is missing JWT_SECRET",
       });
     }
 
@@ -67,6 +84,7 @@ router.post("/login", async (req, res) => {
       {
         userId: user.id,
         email: user.email,
+        employeeCode: user.employeeCode,
         role: user.role.name,
       },
       jwtSecret,
@@ -75,13 +93,34 @@ router.post("/login", async (req, res) => {
       }
     );
 
+    await prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        lastLoginAt: new Date(),
+      },
+    });
+
+    await createAuditLog({
+      req: req as any,
+      userId: user.id,
+      userName: user.email,
+      role: user.role.name,
+      action: "LOGIN",
+      entityType: "AUTH",
+      entityId: user.id,
+      metadata: { employeeCode: user.employeeCode },
+    });
+
     return res.json({
       success: true,
-      message: "Đăng nhập thành công",
+      message: "Login successful",
       data: {
         token,
         user: {
           id: user.id,
+          employeeCode: user.employeeCode,
           fullName: user.fullName,
           email: user.email,
           role: user.role.name,
@@ -89,11 +128,11 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Lỗi đăng nhập:", error);
+    console.error("Login error:", error);
 
     return res.status(500).json({
       success: false,
-      message: "Lỗi server khi đăng nhập",
+      message: "Server error while logging in",
     });
   }
 });

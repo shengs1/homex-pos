@@ -9,6 +9,7 @@ import {
 import { USER_ROLES, RECORD_STATUS } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
+import { createAuditLog } from "../utils/audit";
 
 const router = Router();
 
@@ -58,6 +59,8 @@ const createSupplierSchema = z.object({
     .regex(/^[0-9]+$/, "Số điện thoại chỉ được chứa chữ số"),
 
   email: optionalEmailSchema,
+
+  taxCode: z.string().trim().max(20, "Mã số thuế không được vượt quá 20 ký tự").optional().or(z.literal("")),
 
   address: optionalAddressSchema,
 });
@@ -264,7 +267,7 @@ router.post(
       createSupplierSchema.safeParse(req.body)
     );
 
-    const { name, phone, email, address } = supplierData;
+    const { name, phone, email, taxCode, address } = supplierData;
 
     await checkDuplicateSupplierPhone(phone);
     await checkDuplicateSupplierEmail(email);
@@ -274,9 +277,18 @@ router.post(
         name,
         phone,
         email: email || null,
+        taxCode: taxCode || null,
         address: address || null,
         status: RECORD_STATUS.ACTIVE,
       },
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "CREATE",
+      entityType: "SUPPLIER",
+      entityId: supplier.id,
+      metadata: { name: supplier.name, phone: supplier.phone },
     });
 
     return res.status(201).json({
@@ -309,7 +321,7 @@ router.put(
       throw new AppError("Không tìm thấy nhà cung cấp", 404);
     }
 
-    const { name, phone, email, address } = supplierData;
+    const { name, phone, email, taxCode, address } = supplierData;
 
     await checkDuplicateSupplierPhone(phone, supplierId);
     await checkDuplicateSupplierEmail(email, supplierId);
@@ -322,8 +334,17 @@ router.put(
         name,
         phone,
         email: email || null,
+        taxCode: taxCode || null,
         address: address || null,
       },
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "UPDATE",
+      entityType: "SUPPLIER",
+      entityId: updatedSupplier.id,
+      metadata: { name: updatedSupplier.name, phone: updatedSupplier.phone },
     });
 
     return res.json({
@@ -365,6 +386,14 @@ router.delete(
       },
     });
 
+    await createAuditLog({
+      req: req as any,
+      action: "DELETE",
+      entityType: "SUPPLIER",
+      entityId: deletedSupplier.id,
+      metadata: { name: deletedSupplier.name },
+    });
+
     return res.json({
       success: true,
       message: "Xóa nhà cung cấp thành công",
@@ -402,6 +431,14 @@ router.patch(
       data: {
         status: RECORD_STATUS.ACTIVE,
       },
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "RESTORE",
+      entityType: "SUPPLIER",
+      entityId: restoredSupplier.id,
+      metadata: { name: restoredSupplier.name },
     });
 
     return res.json({

@@ -21,4 +21,5 @@ export type Pagination = {
 export type PaginatedData<T> = {
   items: T[];
   pagination: Pagination;
+  summary?: any;
 };

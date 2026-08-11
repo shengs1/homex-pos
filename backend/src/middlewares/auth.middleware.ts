@@ -63,7 +63,7 @@ export function authorizeRoles(...allowedRoles: string[]) {
     if (!allowedRoles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
-        message: "Bạn không có quyền truy cập chức năng này",
+        message: "Bạn không có quyền thực hiện thao tác này.",
       });
     }
 

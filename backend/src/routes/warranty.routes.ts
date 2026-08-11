@@ -14,6 +14,8 @@ import {
 } from "../constants/app.constants";
 import { AppError } from "../utils/AppError";
 import { catchAsync } from "../utils/catchAsync";
+import { createAuditLog } from "../utils/audit";
+import { sendWarrantyEmail } from "../services/email.service";
 
 const router = Router();
 
@@ -60,6 +62,9 @@ type WarrantyWithRelations = Prisma.WarrantyGetPayload<{
 
 const warrantyStatusSchema = z.enum([
   WARRANTY_STATUS.ACTIVE,
+  WARRANTY_STATUS.CLAIMED,
+  WARRANTY_STATUS.COMPLETED,
+  WARRANTY_STATUS.REJECTED,
   WARRANTY_STATUS.EXPIRED,
   WARRANTY_STATUS.CANCELLED,
 ]);
@@ -197,6 +202,253 @@ function formatWarranty(warranty: WarrantyWithRelations) {
     },
   };
 }
+// GET /api/warranties/stats
+router.get(
+  "/stats",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const thirtyDaysFromNow = new Date(today);
+    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+    const [total, active, expiringSoon, expired] = await Promise.all([
+      prisma.warranty.count(),
+      prisma.warranty.count({
+        where: {
+          status: { in: ["ACTIVE", "CLAIMED"] },
+          endDate: { gte: today },
+        },
+      }),
+      prisma.warranty.count({
+        where: {
+          status: { in: ["ACTIVE", "CLAIMED"] },
+          endDate: { gte: today, lte: thirtyDaysFromNow },
+        },
+      }),
+      prisma.warranty.count({
+        where: {
+          OR: [
+            { status: "EXPIRED" },
+            { endDate: { lt: today }, status: { notIn: ["CANCELLED", "REJECTED", "COMPLETED"] } },
+          ],
+        },
+      }),
+    ]);
+
+    return res.json({
+      success: true,
+      message: "Lấy thống kê bảo hành thành công",
+      data: { total, active, expiringSoon, expired },
+    });
+  })
+);
+
+// GET /api/warranties/lookup-order
+router.get(
+  "/lookup-order",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const code = String(req.query.code || "").trim();
+    if (!code) throw new AppError("Vui lòng nhập mã hóa đơn", 400);
+
+    const order = await prisma.order.findUnique({
+      where: { orderCode: code },
+      include: {
+        customer: true,
+        orderDetails: {
+          where: { status: RECORD_STATUS.ACTIVE },
+          include: { product: true, warranty: true },
+        },
+      },
+    });
+
+    if (!order) throw new AppError("Không tìm thấy hóa đơn", 404);
+
+    const items = order.orderDetails
+      .filter((d) => d.product.warrantyMonths > 0)
+      .map((d) => {
+        const baseDate = order.status === ORDER_STATUS.COMPLETED ? order.updatedAt : order.createdAt;
+        const warrantyEndDate = addMonths(baseDate, d.product.warrantyMonths);
+        return {
+          orderDetailId: d.id,
+          productId: d.productId,
+          productName: d.product.name,
+          sku: d.product.sku,
+          warrantyMonths: d.product.warrantyMonths,
+          quantity: d.quantity,
+          existingWarrantyId: d.warranty?.id || null,
+          warrantyEndDate: warrantyEndDate.toISOString(),
+        };
+      });
+
+    return res.json({
+      success: true,
+      message: "Tra cứu đơn hàng thành công",
+      data: {
+        orderId: order.id,
+        orderCode: order.orderCode,
+        status: order.status,
+        paidAt: order.updatedAt,
+        completedAt: order.updatedAt,
+        createdAt: order.createdAt,
+        customerId: order.customerId,
+        customerName: order.customer?.fullName || null,
+        customerPhone: order.customer?.phone || null,
+        items,
+      },
+    });
+  })
+);
+
+// GET /api/warranties/lookup (Public lookup endpoint)
+router.get(
+  "/lookup",
+  catchAsync(async (req, res) => {
+    const code = String(req.query.code || "").trim();
+    const phone = String(req.query.phone || "").trim();
+
+    if (!code && !phone) {
+      throw new AppError("Vui lòng nhập mã bảo hành hoặc số điện thoại", 400);
+    }
+
+    let warranties: any[] = [];
+
+    if (code) {
+      warranties = await prisma.warranty.findMany({
+        where: {
+          OR: [
+            {
+              warrantyCode: {
+                equals: code,
+                mode: "insensitive",
+              },
+            },
+            {
+              orderDetail: {
+                order: {
+                  orderCode: {
+                    equals: code,
+                    mode: "insensitive",
+                  },
+                },
+              },
+            },
+          ],
+        },
+        include: warrantyInclude,
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      // Fallback: If no explicit Warranty rows exist for this code, find Order by orderCode and construct warranty details for all products
+      if (warranties.length === 0) {
+        const order = await prisma.order.findFirst({
+          where: {
+            orderCode: {
+              equals: code,
+              mode: "insensitive",
+            },
+          },
+          include: {
+            customer: {
+              select: {
+                id: true,
+                fullName: true,
+                phone: true,
+                email: true,
+                address: true,
+                points: true,
+                status: true,
+              },
+            },
+            orderDetails: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    sku: true,
+                    name: true,
+                    salePrice: true,
+                    warrantyMonths: true,
+                    status: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (order) {
+          warranties = order.orderDetails.map((detail, idx) => {
+            const months = detail.product?.warrantyMonths || 12;
+            const startDate = order.createdAt;
+            const endDate = new Date(startDate);
+            endDate.setMonth(endDate.getMonth() + months);
+
+            const isExpired = new Date() > endDate;
+
+            return {
+              id: detail.id,
+              warrantyCode: `BH-${order.orderCode}-${idx + 1}`,
+              status: isExpired ? WARRANTY_STATUS.EXPIRED : WARRANTY_STATUS.ACTIVE,
+              startDate,
+              endDate,
+              notes: `Bảo hành điện tử theo hóa đơn ${order.orderCode}`,
+              createdAt: order.createdAt,
+              updatedAt: order.createdAt,
+              customer: order.customer,
+              orderDetail: {
+                ...detail,
+                order: {
+                  id: order.id,
+                  orderCode: order.orderCode,
+                  totalAmount: order.totalAmount,
+                  status: order.status,
+                  createdAt: order.createdAt,
+                },
+              },
+            };
+          });
+        }
+      }
+    } else if (phone) {
+      const customer = await prisma.customer.findFirst({
+        where: {
+          phone: {
+            equals: phone,
+          },
+        },
+      });
+
+      if (customer) {
+        warranties = await prisma.warranty.findMany({
+          where: {
+            customerId: customer.id,
+          },
+          include: warrantyInclude,
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
+      }
+    }
+
+    if (warranties.length === 0) {
+      throw new AppError("Không tìm thấy thông tin bảo hành khớp với dữ liệu tra cứu", 404);
+    }
+
+    return res.json({
+      success: true,
+      message: "Tra cứu bảo hành thành công",
+      data: warranties.map(formatWarranty),
+    });
+  })
+);
 
 // GET /api/warranties?page=1&limit=10&search=&status=ACTIVE&fromDate=2026-01-01&toDate=2026-12-31
 router.get(
@@ -419,16 +671,19 @@ router.post(
         throw new AppError("Chỉ tạo bảo hành cho đơn hàng đã hoàn thành", 400);
       }
 
-      if (!orderDetail.order.customerId) {
-        throw new AppError("Đơn hàng chưa có khách hàng nên không thể tạo bảo hành", 400);
-      }
-
       if (orderDetail.product.status !== RECORD_STATUS.ACTIVE) {
         throw new AppError("Sản phẩm đang ngừng hoạt động", 400);
       }
 
       if (orderDetail.product.warrantyMonths <= 0) {
         throw new AppError("Sản phẩm này không có thời hạn bảo hành", 400);
+      }
+
+      const baseDate = orderDetail.order.status === ORDER_STATUS.COMPLETED ? orderDetail.order.updatedAt : orderDetail.order.createdAt;
+      const originalWarrantyEndDate = addMonths(baseDate, orderDetail.product.warrantyMonths);
+      
+      if (new Date() > originalWarrantyEndDate) {
+        throw new AppError("Sản phẩm này đã quá thời hạn bảo hành, không thể tạo bảo hành thủ công.", 400);
       }
 
       const existingWarranty = await tx.warranty.findUnique({
@@ -465,6 +720,14 @@ router.post(
       });
 
       return warranty;
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "WARRANTY_CREATE",
+      entityType: "WARRANTY",
+      entityId: result.id,
+      metadata: { code: result.warrantyCode },
     });
 
     return res.status(201).json({
@@ -595,6 +858,210 @@ router.patch(
       success: true,
       message: "Chuyển phiếu bảo hành sang hết hạn thành công",
       data: formatWarranty(warranty),
+    });
+  })
+);
+
+// PATCH /api/warranties/:id/claim
+router.patch(
+  "/:id/claim",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const warrantyId = getWarrantyId(String(req.params.id));
+    const { note } = req.body;
+
+    const existingWarranty = await prisma.warranty.findUnique({ where: { id: warrantyId } });
+    if (!existingWarranty) throw new AppError("Không tìm thấy phiếu bảo hành", 404);
+    
+    if (existingWarranty.status !== "ACTIVE") {
+      throw new AppError("Chỉ có thể tiếp nhận bảo hành đang ở trạng thái ACTIVE", 400);
+    }
+
+    const warranty = await prisma.warranty.update({
+      where: { id: warrantyId },
+      data: { status: "CLAIMED", note: note !== undefined ? note : existingWarranty.note },
+      include: warrantyInclude,
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "WARRANTY_CLAIM",
+      entityType: "WARRANTY",
+      entityId: warranty.id,
+      metadata: { code: warranty.warrantyCode, note },
+    });
+
+    return res.json({
+      success: true,
+      message: "Tiếp nhận bảo hành thành công",
+      data: formatWarranty(warranty),
+    });
+  })
+);
+
+// PATCH /api/warranties/:id/complete
+router.patch(
+  "/:id/complete",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const warrantyId = getWarrantyId(String(req.params.id));
+    const { note } = req.body;
+
+    const existingWarranty = await prisma.warranty.findUnique({ where: { id: warrantyId } });
+    if (!existingWarranty) throw new AppError("Không tìm thấy phiếu bảo hành", 404);
+    
+    if (existingWarranty.status !== "CLAIMED") {
+      throw new AppError("Chỉ có thể hoàn tất bảo hành đang ở trạng thái CLAIMED", 400);
+    }
+
+    const warranty = await prisma.warranty.update({
+      where: { id: warrantyId },
+      data: { status: "COMPLETED", note: note !== undefined ? note : existingWarranty.note },
+      include: warrantyInclude,
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "WARRANTY_COMPLETE",
+      entityType: "WARRANTY",
+      entityId: warranty.id,
+      metadata: { code: warranty.warrantyCode, note },
+    });
+
+    return res.json({
+      success: true,
+      message: "Hoàn tất xử lý bảo hành thành công",
+      data: formatWarranty(warranty),
+    });
+  })
+);
+
+// PATCH /api/warranties/:id/reject
+router.patch(
+  "/:id/reject",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const warrantyId = getWarrantyId(String(req.params.id));
+    const { note } = req.body;
+
+    const existingWarranty = await prisma.warranty.findUnique({ where: { id: warrantyId } });
+    if (!existingWarranty) throw new AppError("Không tìm thấy phiếu bảo hành", 404);
+    
+    if (["CANCELLED", "EXPIRED", "COMPLETED", "REJECTED"].includes(existingWarranty.status)) {
+      throw new AppError(`Không thể từ chối bảo hành đang ở trạng thái ${existingWarranty.status}`, 400);
+    }
+
+    const warranty = await prisma.warranty.update({
+      where: { id: warrantyId },
+      data: { status: "REJECTED", note: note !== undefined ? note : existingWarranty.note },
+      include: warrantyInclude,
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "WARRANTY_REJECT",
+      entityType: "WARRANTY",
+      entityId: warranty.id,
+      metadata: { code: warranty.warrantyCode, note },
+    });
+
+    return res.json({
+      success: true,
+      message: "Từ chối bảo hành thành công",
+      data: formatWarranty(warranty),
+    });
+  })
+);
+
+// PATCH /api/warranties/:id/note
+router.patch(
+  "/:id/note",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const warrantyId = getWarrantyId(String(req.params.id));
+    const { note } = req.body;
+
+    const existingWarranty = await prisma.warranty.findUnique({ where: { id: warrantyId } });
+    if (!existingWarranty) throw new AppError("Không tìm thấy phiếu bảo hành", 404);
+
+    const warranty = await prisma.warranty.update({
+      where: { id: warrantyId },
+      data: { note },
+      include: warrantyInclude,
+    });
+
+    return res.json({
+      success: true,
+      message: "Cập nhật ghi chú bảo hành thành công",
+      data: formatWarranty(warranty),
+    });
+  })
+);
+
+// POST /api/warranties/:id/send-email
+router.post(
+  "/:id/send-email",
+  authenticateToken,
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
+  catchAsync(async (req, res) => {
+    const warrantyId = getWarrantyId(String(req.params.id));
+
+    const warranty = await prisma.warranty.findUnique({
+      where: { id: warrantyId },
+      include: warrantyInclude,
+    });
+
+    if (!warranty) {
+      throw new AppError("Không tìm thấy phiếu bảo hành", 404);
+    }
+
+    if (!warranty.customer) {
+      throw new AppError("Phiếu bảo hành này không có thông tin khách hàng", 400);
+    }
+
+    if (!warranty.customer.email) {
+      throw new AppError("Khách hàng của phiếu bảo hành này chưa đăng ký địa chỉ email", 400);
+    }
+
+    const setting = await prisma.setting.findFirst();
+    if (!setting) {
+      throw new AppError("Chưa có cấu hình hệ thống", 400);
+    }
+
+    const domain = process.env.FRONTEND_URL || "http://localhost:3000";
+    const trackingLink = `${domain}/tra-cuu-bao-hanh?code=${warranty.warrantyCode}`;
+
+    const formattedEndDate = new Date(warranty.endDate).toLocaleDateString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+    await sendWarrantyEmail(setting as any, {
+      customerName: warranty.customer.fullName,
+      customerPhone: warranty.customer.phone,
+      customerEmail: warranty.customer.email,
+      productName: warranty.orderDetail?.product?.name || "Sản phẩm",
+      warrantyCode: warranty.warrantyCode,
+      endDate: formattedEndDate,
+      trackingLink,
+    });
+
+    await createAuditLog({
+      req: req as any,
+      action: "WARRANTY_SEND_EMAIL",
+      entityType: "WARRANTY",
+      entityId: warranty.id,
+      metadata: { to: warranty.customer.email },
+    });
+
+    return res.json({
+      success: true,
+      message: "Gửi email thông báo bảo hành thành công",
     });
   })
 );

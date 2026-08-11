@@ -16,6 +16,16 @@ import paymentRoutes from "./routes/payment.routes";
 import reportRoutes from "./routes/report.routes";
 import auditLogRoutes from "./routes/audit-log.routes";
 import promotionRoutes from "./routes/promotion.routes";
+import settingRoutes from "./routes/setting.routes";
+import shiftRoutes from "./routes/shift.routes";
+import purchaseOrderRoutes from "./routes/purchase-order.routes";
+import returnOrderRoutes from "./routes/return-order.routes";
+import vatInvoiceRoutes from "./routes/vat-invoice.routes";
+import notificationRoutes from "./routes/notification.routes";
+import publicInvoiceRoutes from "./routes/public-invoice.routes";
+import remoteScanRoutes from "./routes/remote-scan.routes";
+import salesAssistantRoutes from "./routes/sales-assistant.routes";
+import { demoModeMiddleware } from "./middlewares/demo-mode.middleware";
 import { errorMiddleware } from "./middlewares/error.middleware";
 
 dotenv.config();
@@ -24,9 +34,17 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use(demoModeMiddleware);
 
 app.get("/", (req, res) => {
   res.send("Homex POS Backend is running");
+});
+
+app.get("/mobile-scan", (req, res) => {
+  const sid = (req.query.sid as string) || "";
+  const frontendUrl = process.env.FRONTEND_URL || "https://disparate-sizable-brick.ngrok-free.dev";
+  const targetUrl = sid ? `${frontendUrl}/mobile-scan?sid=${encodeURIComponent(sid)}` : `${frontendUrl}/mobile-scan`;
+  return res.redirect(targetUrl);
 });
 
 app.get("/api/health/db", async (req, res) => {
@@ -100,6 +118,43 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/audit-logs", auditLogRoutes);
 app.use("/api/promotions", promotionRoutes);
+app.use("/api/settings", settingRoutes);
+app.use("/api/shifts", shiftRoutes);
+app.use("/api/purchase-orders", purchaseOrderRoutes);
+app.use("/api/return-orders", returnOrderRoutes);
+app.use("/api/vat-invoices", vatInvoiceRoutes);
+app.use("/api/notifications", notificationRoutes);
+app.use("/api/invoices/public", publicInvoiceRoutes);
+app.use("/api/pos", remoteScanRoutes);
+app.use("/api/pos", salesAssistantRoutes);
+
+// Proxy public warranty & invoice pages to Next.js frontend (port 3000) when ngrok routes to backend (port 5000)
+app.use(async (req, res, next) => {
+  if (
+    req.path.startsWith("/tra-cuu-bao-hanh") ||
+    req.path.startsWith("/invoice") ||
+    req.path.startsWith("/_next")
+  ) {
+    try {
+      const targetUrl = `http://127.0.0.1:3000${req.originalUrl}`;
+      const response = await fetch(targetUrl);
+      
+      const contentType = response.headers.get("content-type");
+      if (contentType) {
+        res.setHeader("Content-Type", contentType);
+      }
+      
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      return res.status(response.status).send(buffer);
+    } catch (error) {
+      console.error("Proxy error to frontend:", error);
+      return res.status(500).send("Không thể kết nối đến giao diện máy chủ");
+    }
+  }
+  next();
+});
+
 app.use(errorMiddleware);
 
 const PORT = process.env.PORT || 5000;

@@ -1,6 +1,5 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { useLanguage } from "@/contexts/language-context";
 import type { OrderStatus, PaymentStatus, RecordStatus, StockTransactionType, UserStatus, WarrantyStatus } from "@/types/domain";
 
@@ -40,14 +39,19 @@ export function StatusBadge({ status }: { status: KnownStatus }) {
   const normalizedStatus = normalizeStatus(status);
   const translatedLabel = normalizedStatus ? t(`status.${normalizedStatus}`) : "-";
   const label = translatedLabel.startsWith("status.") ? normalizedStatus : translatedLabel;
+  const baseClassName = "inline-flex w-fit items-center justify-center rounded-full px-2.5 py-0.5 text-[10px] font-bold whitespace-nowrap border";
 
-  if (["INACTIVE", "LOCKED", "CANCELLED", "FAILED", "REFUNDED", "EXPIRED"].includes(normalizedStatus)) {
-    return <Badge variant="destructive" className="max-w-full justify-center whitespace-normal text-center leading-tight">{label}</Badge>;
+  if (["ACTIVE", "COMPLETED", "SUCCESS", "PAID", "IMPORT", "RESTORE"].includes(normalizedStatus)) {
+    return <div className={`${baseClassName} bg-emerald-50 text-emerald-700 border-emerald-200`}>{label}</div>;
   }
 
   if (["DRAFT", "PENDING", "ADJUSTMENT", "RESTORE"].includes(normalizedStatus)) {
-    return <Badge variant="secondary" className="max-w-full justify-center whitespace-normal text-center leading-tight">{label}</Badge>;
+    return <div className={`${baseClassName} bg-amber-50 text-amber-700 border-amber-200`}>{label}</div>;
   }
 
-  return <Badge className="max-w-full justify-center whitespace-normal text-center leading-tight">{label}</Badge>;
+  if (["INACTIVE", "LOCKED", "CANCELLED", "FAILED", "REFUNDED", "EXPIRED", "SALE"].includes(normalizedStatus)) {
+    return <div className={`${baseClassName} bg-rose-50 text-rose-700 border-rose-200`}>{label}</div>;
+  }
+
+  return <div className={`${baseClassName} bg-slate-50 text-slate-600 border-slate-200`}>{label}</div>;
 }

@@ -6,3 +6,4 @@ export const revalidate = 0;
 export default function DashboardRoutePage() {
   return <DashboardClient />;
 }
+
