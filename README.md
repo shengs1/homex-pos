@@ -2,8 +2,6 @@
 
 Hệ thống quản lý bán hàng tại quầy dành cho cửa hàng đồ gia dụng HomeX. Dự án gồm giao diện web, máy chủ API và cơ sở dữ liệu PostgreSQL; hỗ trợ đầy đủ quy trình bán hàng, kho, thanh toán, bảo hành, báo cáo và trợ lý AI.
 
-> README này được đối chiếu với mã nguồn hiện tại ngày 12/08/2026. Không đưa API key, mật khẩu thật hoặc thông tin bí mật vào Git.
-
 ## 1. Chức năng chính
 
 - Bán hàng tại quầy: tìm hoặc quét sản phẩm, quản lý giỏ hàng, áp dụng khuyến mãi, lưu đơn nháp và thanh toán.
@@ -323,14 +321,4 @@ Hãy kiểm tra tệp sao lưu trước khi phục hồi để tránh ghi đè d
 - Khi dùng địa chỉ công khai/ngrok, cập nhật đồng bộ `FRONTEND_URL`, `APP_URL`, URL PayOS và `NEXT_PUBLIC_MOBILE_SCAN_BASE_URL`.
 - Kết quả AI có thể thay đổi giữa các lần gọi. Luôn kiểm tra lại tồn kho, giá bán và số lượng đề xuất trước khi thực hiện nghiệp vụ.
 
-## 14. Tài liệu đi kèm
-
-- [Tài liệu sơ đồ hệ thống](docs/README.md)
-- [Phân tích hoạt động AI](docs/Phan_tich_hoat_dong_AI_trong_HomeX_POS.docx)
-- [Hướng dẫn học nhanh](docs/Huong_dan_hoc_nhanh_HomeX_POS.docx)
-- [Hướng dẫn thuyết trình website](docs/Huong_dan_thuyet_trinh_gioi_thieu_toan_bo_website_HomeX_POS.docx)
-- [Báo cáo đồ án](docs/Bao_cao_do_an_HomeX_POS.docx)
-
 ---
-
-HomeX POS là dự án phục vụ học tập và trình bày đồ án. Trước khi triển khai thực tế cần bổ sung quy trình sao lưu toàn bộ cơ sở dữ liệu, HTTPS ổn định, giám sát lỗi và quản lý bí mật chuyên dụng.
