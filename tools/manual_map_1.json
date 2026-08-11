@@ -1,0 +1,18 @@
+{
+    "00.1_dang_nhap_giao_dien.jpg": "04.1_khach_hang_danh_sach.jpg",
+    "00.2_dang_nhap_dien_thong_tin.jpg": "04.2_khach_hang_them_moi.jpg",
+    "00.3_dang_nhap_loi_xac_thuc.jpg": "04.3_khach_hang_chinh_sua.jpg",
+    "00.4_dang_nhap_admin_portal.jpg": "00.1_dang_nhap_admin.jpg",
+    "01.1_tong_quan_dashboard_admin.jpg": "13.1_bao_cao_loi_nhuan.jpg",
+    "02.10_pos_in_hoa_don.jpg": "03.4_don_hang_in_hoa_don.jpg",
+    "02.11_pos_thanh_toan_payos.jpg": "02.6_pos_thanh_toan_payos.jpg",
+    "02.12_pos_thanh_toan_thanh_cong.jpg": "03.1_don_hang_danh_sach.jpg",
+    "02.13_pos_don_hang_cho_xac_nhan.jpg": "03.2_don_hang_chi_tiet.jpg",
+    "02.14_pos_lich_su_giao_dich.jpg": "03.5_don_hang_tra_hang_danh_sach.jpg",
+    "02.15_pos_huy_don_hang.jpg": "03.6_don_hang_tao_phieu_tra_hang.jpg",
+    "02.1_pos_giao_dien_chinh.jpg": "01.1_tong_quan_dashboard.jpg",
+    "02.2_pos_them_san_pham_gio_hang.jpg": "01.2_tong_quan_dashboard_chi_tiet.jpg",
+    "02.3_pos_thao_tac_gio_hang.jpg": "02.1_pos_giao_dien_chinh.jpg",
+    "02.4_pos_ket_noi_may_quet.jpg": "02.2_pos_ket_noi_may_quet.jpg",
+    "02.5_pos_giao_dien_co_san_pham.jpg": "02.3_pos_them_san_pham.jpg"
+}

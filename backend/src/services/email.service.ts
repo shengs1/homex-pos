@@ -50,6 +50,9 @@ export async function sendVatEmail(setting: SmtpConfig, request: VatRequestData)
     ? new Intl.NumberFormat("vi-VN").format(Number(request.order.totalAmount))
     : "0";
 
+  const baseUrl = process.env.APP_URL || "https://disparate-sizable-brick.ngrok-free.dev";
+  const vatInvoiceUrl = `${baseUrl}/invoice/${orderCode}`;
+
   const mailOptions = {
     from: `"${setting.storeName}" <${setting.smtpUser}>`,
     to: request.buyerEmail,
@@ -101,7 +104,7 @@ export async function sendVatEmail(setting: SmtpConfig, request: VatRequestData)
 
           <!-- [ NÚT: XEM VÀ TẢI HÓA ĐƠN (PDF) ] -->
           <div style="text-align: center; margin: 24px 0 32px 0;">
-            <a href="https://hoadondientu.gdt.gov.vn" target="_blank" style="display: inline-block; background-color: #0d9488; color: #ffffff; padding: 12px 28px; font-size: 15px; font-weight: 700; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(13, 148, 136, 0.2), 0 2px 4px -2px rgba(13, 148, 136, 0.2);">
+            <a href="${vatInvoiceUrl}" target="_blank" style="display: inline-block; background-color: #0d9488; color: #ffffff; padding: 12px 28px; font-size: 15px; font-weight: 700; text-decoration: none; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(13, 148, 136, 0.2), 0 2px 4px -2px rgba(13, 148, 136, 0.2);">
               XEM VÀ TẢI HÓA ĐƠN (PDF)
             </a>
           </div>
@@ -110,7 +113,7 @@ export async function sendVatEmail(setting: SmtpConfig, request: VatRequestData)
           <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; font-size: 13px; color: #64748b; line-height: 1.6;">
             <p style="margin-top: 0; margin-bottom: 8px;"><strong>Hướng dẫn tra cứu hóa đơn:</strong></p>
             <p style="margin-top: 0; margin-bottom: 12px;">
-              Quý khách vui lòng nhấn nút <strong>Xem và tải hóa đơn (PDF)</strong> ở trên để truy cập Cổng thông tin Hóa đơn điện tử của Tổng cục Thuế, sử dụng thông tin <strong>Mã số thuế</strong> và <strong>Mã hóa đơn đỏ</strong> để đối soát và tải hóa đơn gốc (.xml/.pdf).
+              Quý khách vui lòng nhấn nút <strong>Xem và tải hóa đơn (PDF)</strong> ở trên để truy cập Cổng tra cứu Hóa đơn & Bảo hành điện tử chính thức của <strong>${setting.storeName}</strong>, kiểm tra thông tin <strong>Mã số thuế</strong>, <strong>Mã hóa đơn đỏ</strong> và lưu trữ hóa đơn.
             </p>
             ${request.adminNote ? `
             <p style="margin-top: 0; margin-bottom: 12px; color: #b45309; font-style: italic;">

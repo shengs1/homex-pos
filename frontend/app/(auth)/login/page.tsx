@@ -67,7 +67,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-[#0b1326] p-4">
+    <div suppressHydrationWarning className="relative flex min-h-screen items-center justify-center bg-[#0b1326] p-4">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -right-24 -top-36 h-[500px] w-[500px] animate-pulse rounded-full bg-[radial-gradient(circle,rgba(15,118,110,0.12)_0%,transparent_70%)]" />
         <div className="absolute -bottom-24 -left-20 h-[400px] w-[400px] animate-pulse rounded-full bg-[radial-gradient(circle,rgba(15,118,110,0.08)_0%,transparent_70%)]" style={{ animationDelay: "1s" }} />

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Banknote, Download, Minus, Plus, Printer, QrCode, ReceiptText, Search, ShoppingCart, Trash2, UserPlus, XCircle, Smartphone, Link, Copy, Check, ArrowLeft, Info, ShieldCheck, Scan, User, Wallet, X, FileText, Coins, CreditCard, Sparkles, Package } from "lucide-react";
+import { Banknote, Download, Minus, Plus, Printer, QrCode, ReceiptText, Search, ShoppingCart, Trash2, UserPlus, XCircle, Smartphone, Link, Copy, Check, ArrowLeft, Info, ShieldCheck, Scan, User, Wallet, X, FileText, Coins, CreditCard, Sparkles, Package, FileClock, ChevronLeft, ChevronRight, MoreHorizontal, ChevronDown, Menu, Layers, Ticket } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { createPortal } from "react-dom";
 import { RoleGuard } from "@/components/auth/role-guard";
@@ -13,6 +13,7 @@ import { useCurrentUser } from "@/hooks/use-current-user";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
 import { PageHeader } from "@/components/shared/page-header";
 import { PrintableInvoice } from "@/components/shared/printable-invoice";
+import { CreateVatModal } from "@/components/invoices/create-vat-modal";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -163,6 +164,38 @@ function getStockBadgeStyle(qty: number) {
   return "bg-emerald-600 text-white border-emerald-600";
 }
 
+function renderCustomerTierBadge(tier: string | undefined | null, t: any) {
+  const cleanTier = (tier || "SILVER").toUpperCase().trim();
+
+  switch (cleanTier) {
+    case "DIAMOND":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-extrabold bg-indigo-100 text-indigo-900 border border-indigo-300/90 shrink-0 shadow-2xs">
+          💎 {t("customerTier.DIAMOND")}
+        </span>
+      );
+    case "PLATINUM":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-extrabold bg-cyan-100 text-cyan-900 border border-cyan-300/90 shrink-0 shadow-2xs">
+          🏆 {t("customerTier.PLATINUM")}
+        </span>
+      );
+    case "GOLD":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-extrabold bg-amber-100 text-amber-900 border border-amber-300/90 shrink-0 shadow-2xs">
+          🥇 {t("customerTier.GOLD")}
+        </span>
+      );
+    case "SILVER":
+    default:
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-extrabold bg-slate-100 text-slate-800 border border-slate-300/90 shrink-0 shadow-2xs">
+          🥈 {t("customerTier.SILVER")}
+        </span>
+      );
+  }
+}
+
 export default function PosPage() {
   const router = useRouter();
   const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLElement | null>(null);
@@ -174,9 +207,10 @@ export default function PosPage() {
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [draftOrder, setDraftOrder] = useState<Order | null>(null);
   const [lastCompletedOrder, setLastCompletedOrder] = useState<Order | null>(null);
-  const { settings: setting } = useSettings();
+  const { settings: setting, refreshSettings } = useSettings();
   const [productSearch, setProductSearch] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [isMoreCategoriesOpen, setIsMoreCategoriesOpen] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>("CASH");
@@ -186,6 +220,8 @@ export default function PosPage() {
   const [discountMessage, setDiscountMessage] = useState("");
   const [appliedDiscountAmount, setAppliedDiscountAmount] = useState(0);
   const [appliedPromotionCode, setAppliedPromotionCode] = useState("");
+  const [voucherInput, setVoucherInput] = useState("");
+  const [isPromoPopoverOpen, setIsPromoPopoverOpen] = useState(false);
   const [isLoadingProducts, setIsLoadingProducts] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCustomerDialogOpen, setIsCustomerDialogOpen] = useState(false);
@@ -197,15 +233,19 @@ export default function PosPage() {
   const [quickCustomerEmail, setQuickCustomerEmail] = useState("");
   const [quickCustomerAddress, setQuickCustomerAddress] = useState("");
   const { toast } = useToast();
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
   const [remoteScanOpen, setRemoteScanOpen] = useState(false);
   const [sessionId, setSessionId] = useState("");
   const [isCopied, setIsCopied] = useState(false);
+  const [isPhoneConnected, setIsPhoneConnected] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
   const [isQrLoading, setIsQrLoading] = useState(true);
   const [payOSPayment, setPayOSPayment] = useState<PayOSPayment | null>(null);
-  const [payOSStatusText, setPayOSStatusText] = useState("Đang chờ khách thanh toán...");
-  const { t } = useLanguage();
+  const [payOSStatusText, setPayOSStatusText] = useState("pos.payosWaiting");
+  const [isCreateVatOpen, setIsCreateVatOpen] = useState(false);
+  const [createVatInitialCode, setCreateVatInitialCode] = useState("");
+  const { t, language } = useLanguage();
 
   const [salesAssistantOpen, setSalesAssistantOpen] = useState(false);
   const [salesNeed, setSalesNeed] = useState("");
@@ -259,6 +299,7 @@ export default function PosPage() {
       setSalesAssistantResult(null);
 
       const payload: SalesAssistantRequest = {
+        language,
         need: finalNeed,
         budgetMin,
         budgetMax,
@@ -278,7 +319,7 @@ export default function PosPage() {
           toast.info(t("salesAssistant.sourceFallback"));
         }
       } else {
-        setSalesAssistantError("Không thể tải gợi ý bán hàng.");
+        setSalesAssistantError(t("pos.aiLoadFailed"));
       }
     } catch (error) {
       setSalesAssistantError(getApiErrorMessage(error));
@@ -298,10 +339,10 @@ export default function PosPage() {
         addToCart(product);
         toast.success(t("salesAssistant.addedToCart"));
       } else {
-        toast.error("Không tìm thấy thông tin sản phẩm.");
+        toast.error(t("pos.suggestedProductNotFound"));
       }
     } catch (err) {
-      toast.error("Không thể thêm sản phẩm gợi ý vào giỏ.");
+      toast.error(t("pos.addSuggestedProductFailed"));
     }
   }
   const cartScrollRef = useRef<HTMLDivElement | null>(null);
@@ -310,6 +351,21 @@ export default function PosPage() {
   const previousCartLengthRef = useRef(0);
   const barcodeBufferRef = useRef("");
   const barcodeTimerRef = useRef<number | null>(null);
+  const discountMessageTimerRef = useRef<number | null>(null);
+
+  const setTemporaryDiscountMessage = useCallback((msg: string, durationMs = 5000) => {
+    if (discountMessageTimerRef.current) {
+      window.clearTimeout(discountMessageTimerRef.current);
+      discountMessageTimerRef.current = null;
+    }
+    setDiscountMessage(msg);
+    if (msg && durationMs > 0) {
+      discountMessageTimerRef.current = window.setTimeout(() => {
+        setDiscountMessage("");
+        discountMessageTimerRef.current = null;
+      }, durationMs);
+    }
+  }, []);
 
   
   const subtotal = useMemo(() => {
@@ -320,6 +376,46 @@ export default function PosPage() {
   const totalPayable = Math.max(subtotal - discountAmount, 0);
   const cashReceivedAmount = getMoneyInputAmount(cashReceivedInput);
   const changeAmount = paymentMethod === "CASH" ? Math.max(cashReceivedAmount - totalPayable, 0) : 0;
+
+  const quickCashOptions = useMemo(() => {
+    if (totalPayable <= 0) return [10000, 20000, 50000];
+
+    const presets = new Set<number>([totalPayable]);
+
+    const allBills = [
+      1000, 2000, 5000, 10000, 15000, 20000, 30000, 40000, 50000,
+      70000, 100000, 150000, 200000, 250000, 300000, 350000, 400000, 500000, 1000000
+    ];
+
+    // 1. Next rounded step based on magnitude
+    let step = 1000;
+    if (totalPayable >= 100000) step = 50000;
+    else if (totalPayable >= 10000) step = 5000;
+    else if (totalPayable >= 1000) step = 1000;
+
+    const nextRounded = Math.ceil((totalPayable + 1) / step) * step;
+    if (nextRounded > totalPayable) presets.add(nextRounded);
+
+    // 2. Next major rounded step
+    let nextMajorStep = 10000;
+    if (totalPayable >= 100000) nextMajorStep = 100000;
+    else if (totalPayable >= 10000) nextMajorStep = 20000;
+    else nextMajorStep = 5000;
+
+    const nextMajorRounded = Math.ceil((totalPayable + 1) / nextMajorStep) * nextMajorStep;
+    if (nextMajorRounded > totalPayable) presets.add(nextMajorRounded);
+
+    // 3. Fill remaining options from standard bills > totalPayable
+    for (const bill of allBills) {
+      if (bill > totalPayable) {
+        presets.add(bill);
+      }
+      if (presets.size >= 4) break;
+    }
+
+    return Array.from(presets).sort((a, b) => a - b).slice(0, 4);
+  }, [totalPayable]);
+
   const selectedCustomer = useMemo(() => customers.find((customer) => String(customer.id) === customerId) || null, [customerId, customers]);
   
   const eligiblePromotions = useMemo(() => {
@@ -381,9 +477,17 @@ export default function PosPage() {
   const transferQrValue = buildVietQrDemoValue(setting, totalPayable, payOSPaymentCode);
   const payOSQrValue = payOSPayment?.qrCode || payOSPayment?.checkoutUrl || generateVietQRUrl();
   const isPayOSQrImage = Boolean(payOSPayment?.qrCode && /^(https?:|data:image\/)/i.test(payOSPayment.qrCode));
+  const getPublicBaseUrl = () => {
+    if (typeof window === "undefined") return "https://disparate-sizable-brick.ngrok-free.dev";
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return "https://disparate-sizable-brick.ngrok-free.dev";
+    }
+    return window.location.origin;
+  };
+
   const lastInvoicePublicUrl =
-    lastCompletedOrder && typeof window !== "undefined"
-      ? `${window.location.origin}/invoice/${lastCompletedOrder.orderCode}`
+    lastCompletedOrder
+      ? `${getPublicBaseUrl()}/tra-cuu-bao-hanh?code=${lastCompletedOrder.orderCode}`
       : "";
 
   const isShiftEndingSoon = useMemo(() => {
@@ -560,19 +664,19 @@ export default function PosPage() {
         if (!isMounted) return;
 
         if (status.status === "PAID") {
-          setPayOSStatusText("Thanh toán chuyển khoản thành công.");
+          setPayOSStatusText("pos.payosSuccess");
           const completedOrder = await orderService.detail(status.orderId);
           if (!isMounted) return;
           setLastCompletedOrder(completedOrder);
           resetPosState();
-          toast.success("Thanh toán chuyển khoản thành công.");
+          toast.success(t("pos.payosSuccess"));
           router.refresh();
           await loadProducts();
           if (setting?.autoOpenPrint) {
             window.setTimeout(() => window.print(), 1000);
           }
         } else if (status.status === "FAILED") {
-          setPayOSStatusText("Giao dịch không khớp số tiền, cần kiểm tra thủ công.");
+          setPayOSStatusText("pos.payosAmountMismatch");
         }
       } catch (error) {
         if (isMounted) setPayOSStatusText(getApiErrorMessage(error));
@@ -646,6 +750,10 @@ export default function PosPage() {
       setAppliedDiscountAmount(subtotal);
     }
   }, [subtotal, appliedDiscountAmount]);
+
+  useEffect(() => {
+    setVoucherInput(appliedPromotionCode);
+  }, [appliedPromotionCode]);
 
   useEffect(() => {
     if (appliedPromotionCode) {
@@ -875,6 +983,9 @@ export default function PosPage() {
         const activeTarget = getActiveRemoteBarcodeTarget();
         if (activeTarget && activeTarget !== "pos") return;
         const res = await posService.pollRemoteScan(sessionId);
+        if (typeof res?.isConnected === "boolean") {
+          setIsPhoneConnected(res.isConnected);
+        }
         if (res && res.success && res.barcode) {
           await handleBarcodeFromRemotePhone(res.barcode);
         }
@@ -979,7 +1090,7 @@ export default function PosPage() {
 
     try {
       setIsSubmitting(true);
-      setPayOSStatusText("Đang tạo link thanh toán payOS...");
+      setPayOSStatusText("pos.payosCreating");
       
       const orderToPay = draftOrder
         ? await orderService.updateDraft(draftOrder.id, buildOrderBody())
@@ -993,14 +1104,14 @@ export default function PosPage() {
           promotionCode: appliedPromotionCode || undefined,
         });
         setPayOSPayment(payOSData);
-        setPayOSStatusText("Đang chờ khách thanh toán...");
+        setPayOSStatusText("pos.payosWaiting");
         if (payOSData?.qrCode && payOSData.qrCode.startsWith("000201")) {
           setIsQrLoading(false);
         }
       } catch (payOSError) {
         console.error("PayOS create error:", payOSError);
         setPayOSPayment(null);
-        setPayOSStatusText("Không thể tạo link PayOS. Sử dụng VietQR dự phòng.");
+        setPayOSStatusText("pos.payosFallback");
       }
 
       setCheckoutStep("qr");
@@ -1132,17 +1243,17 @@ export default function PosPage() {
       if (amount <= 0) {
         setAppliedDiscountAmount(0);
         setAppliedPromotionCode("");
-        setDiscountMessage(t("pos.voucherInvalid"));
+        setTemporaryDiscountMessage(t("pos.voucherInvalid"), 5000);
         return;
       }
 
       setAppliedDiscountAmount(amount);
       setAppliedPromotionCode(code.toUpperCase());
-      setDiscountMessage(t("toast.pos.voucherAppliedWithAmount", { code: code.toUpperCase(), amount: formatCurrency(amount) }));
+      setTemporaryDiscountMessage(t("toast.pos.voucherAppliedWithAmount", { code: code.toUpperCase(), amount: formatCurrency(amount) }), 5000);
     } catch (error) {
       setAppliedDiscountAmount(0);
       setAppliedPromotionCode("");
-      setDiscountMessage(getApiErrorMessage(error) || t("pos.voucherInvalid"));
+      setTemporaryDiscountMessage(getApiErrorMessage(error) || t("pos.voucherInvalid"), 5000);
     } finally {
       setIsSubmitting(false);
     }
@@ -1318,16 +1429,50 @@ export default function PosPage() {
                 </div>
               </div>
             </div>
-            <div className="px-6 py-4 border-t shrink-0 flex justify-end gap-3 bg-white">
-              <Button type="button" variant="outline" onClick={() => downloadReceipt(order)}>
-                <Download className="h-4 w-4 mr-2" />
-                {t("pos.downloadInvoice")}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => window.print()}>
-                <Printer className="h-4 w-4 mr-2" />
-                {t("orders.printInvoice")}
-              </Button>
-              <Button type="button" onClick={startNewOrder}>{t("pos.newOrder")}</Button>
+            <div className="px-6 py-4 border-t shrink-0 bg-slate-50">
+              <div className="grid grid-cols-4 gap-3 w-full">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 border-teal-300 bg-white text-teal-900 hover:bg-teal-50 font-bold text-xs shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer transition-all min-w-0"
+                  onClick={() => {
+                    setCreateVatInitialCode(order.orderCode);
+                    setIsCreateVatOpen(true);
+                  }}
+                >
+                  <FileClock className="h-4 w-4 text-teal-700 shrink-0" />
+                  <span className="truncate">{t("pos.vatRequest")}</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 border-slate-300 bg-white text-slate-800 hover:bg-slate-50 font-bold text-xs shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer transition-all min-w-0"
+                  onClick={() => downloadReceipt(order)}
+                >
+                  <Download className="h-4 w-4 text-slate-600 shrink-0" />
+                  <span className="truncate">{t("pos.downloadInvoice")}</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-11 border-slate-300 bg-white text-slate-800 hover:bg-slate-50 font-bold text-xs shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer transition-all min-w-0"
+                  onClick={() => window.print()}
+                >
+                  <Printer className="h-4 w-4 text-slate-600 shrink-0" />
+                  <span className="truncate">{t("orders.printInvoice")}</span>
+                </Button>
+
+                <Button
+                  type="button"
+                  className="h-11 bg-teal-800 hover:bg-teal-900 text-white font-black text-xs uppercase tracking-wider shadow-md flex items-center justify-center gap-1.5 cursor-pointer transition-all min-w-0"
+                  onClick={startNewOrder}
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  <span className="truncate">{t("pos.newOrder")}</span>
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
@@ -1365,13 +1510,13 @@ export default function PosPage() {
               {t("pos.title")}
             </h2>
             
-            <div className="flex items-center gap-2 flex-1 max-w-lg justify-end md:justify-start">
+            <div className="flex items-center gap-2 flex-1 max-w-xl justify-end md:justify-start">
               <form onSubmit={handleProductSearch} className="flex-1 min-w-0">
                 <div className="relative w-full">
                   <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     autoFocus
-                    className="h-9 bg-slate-50 pl-8 pr-2.5 text-xs border-slate-200 focus:border-primary focus:bg-white transition-all rounded-lg w-full"
+                    className="h-9 bg-slate-50 pl-8 pr-2.5 text-xs placeholder:text-[11px] placeholder:font-medium border-slate-200 focus:border-primary focus:bg-white transition-all rounded-lg w-full"
                     placeholder={t("pos.searchProduct")}
                     value={productSearch}
                     onChange={(event) => setProductSearch(event.target.value)}
@@ -1392,26 +1537,49 @@ export default function PosPage() {
               </Button>
               
               <div className="hidden sm:flex items-center gap-1.5 shrink-0">
-                {setting?.enableBarcodeScanner !== false ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleOpenRemoteScan}
-                    className="h-9 px-2.5 border-blue-200 bg-blue-50/50 text-blue-600 hover:bg-blue-100/70 flex items-center gap-1 text-[11px] rounded-lg font-bold shadow-xs cursor-pointer shrink-0 animate-in fade-in duration-200"
-                    title={t("barcode.remoteScanner")}
-                  >
-                    <span>{t("barcode.remoteScannerShort")}</span>
-                  </Button>
-                ) : null}
-
-                <div className={cn(
-                  "hidden md:flex rounded-lg px-2.5 py-1 text-[10px] font-bold shrink-0 border h-9 items-center justify-center transition-colors shadow-xs",
-                  setting?.enableBarcodeScanner 
-                    ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
-                    : "bg-slate-50 text-slate-500 border-slate-200"
-                )}>
-                  {setting?.enableBarcodeScanner ? t("barcode.scannerEnabled") : t("barcode.scannerDisabled")}
-                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const nextState = setting?.enableBarcodeScanner === false;
+                      await settingService.update({ enableBarcodeScanner: nextState });
+                      await refreshSettings();
+                      if (nextState) {
+                        toast.success(t("barcode.scannerEnabled"));
+                      } else {
+                        toast.info(t("barcode.scannerDisabled"));
+                      }
+                    } catch {
+                      handleOpenRemoteScan();
+                    }
+                  }}
+                  className={cn(
+                    "h-9 px-3 text-xs font-medium rounded-lg border transition-all shadow-2xs cursor-pointer flex items-center gap-1.5 shrink-0 select-none",
+                    setting?.enableBarcodeScanner !== false
+                      ? "bg-emerald-100/80 text-emerald-900 border-emerald-300/80 hover:bg-emerald-200/80 hover:text-emerald-950 hover:border-emerald-400"
+                      : "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200 hover:text-slate-900 hover:border-slate-400"
+                  )}
+                  title={t("pos.barcodeToggleTitle")}
+                >
+                  <Scan className={cn("h-3.5 w-3.5 shrink-0", setting?.enableBarcodeScanner !== false ? "text-emerald-800" : "text-slate-500")} />
+                  <span>
+                    {t("pos.barcodeToggleState", { state: setting?.enableBarcodeScanner !== false ? t("pos.enabled") : t("pos.disabled") })}
+                  </span>
+                  {setting?.enableBarcodeScanner !== false ? (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenRemoteScan();
+                      }}
+                      className="ml-1 rounded-md bg-emerald-200/80 p-1 hover:bg-emerald-300/90 text-emerald-900 transition-colors"
+                      title={t("pos.phoneBarcodeTitle")}
+                    >
+                      <Smartphone className="h-3 w-3 text-emerald-900" />
+                    </span>
+                  ) : null}
+                </button>
               </div>
             </div>
           </div>,
@@ -1428,47 +1596,142 @@ export default function PosPage() {
         {lastCompletedOrder ? renderReceiptView(lastCompletedOrder) : null}
         <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(360px,400px)] xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)]">
           {/* Cột trái: tìm kiếm và danh sách sản phẩm */}
-          <div className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/50 bg-white shadow-sm overflow-hidden">
-            <div className="shrink-0 px-4 py-2 border-b border-border/40 bg-slate-50/30">
-              <style>{`
-                .no-scrollbar::-webkit-scrollbar {
-                  display: none;
-                }
-                .no-scrollbar {
-                  -ms-overflow-style: none;
-                  scrollbar-width: none;
-                }
-              `}</style>
-              <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1">
-                <button
-                  type="button"
-                  className={cn(
-                    "shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-200 border cursor-pointer",
-                    selectedCategoryId === ""
-                      ? "bg-primary text-white border-primary shadow-sm"
-                      : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                  )}
-                  onClick={() => setSelectedCategoryId("")}
-                >
-                  {t("common.all")}
-                </button>
-                {categories.map((category) => (
-                  <button
-                    key={category.id}
-                    type="button"
-                    className={cn(
-                      "shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-200 border cursor-pointer",
-                      selectedCategoryId === String(category.id)
-                        ? "bg-primary text-white border-primary shadow-sm"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
-                    )}
-                    onClick={() => setSelectedCategoryId(String(category.id))}
-                  >
-                    {formatCategoryName(category.name)}
-                  </button>
-                ))}
-              </div>
-            </div>
+          <div className="flex min-h-0 min-w-0 flex-col rounded-2xl border border-border/50 bg-white shadow-sm relative">
+            {/* Thanh chọn nhanh danh mục (0% Thanh cuộn - Canh chuẩn 5 ô & Nút 3 gạch đồng kích thước h-8) */}
+            {(() => {
+              // Nếu chọn 1 danh mục ngoài top, hiển thị 3 danh mục đầu + 1 danh mục đang chọn + Tất cả (Tổng 5 nút)
+              const maxTopCount = selectedCategoryId && categories.slice(4).some(c => String(c.id) === selectedCategoryId) ? 3 : 4;
+              const visibleCategories = categories.slice(0, maxTopCount);
+              const extraCategories = categories.slice(maxTopCount);
+              const selectedExtraCategory = extraCategories.find((c) => String(c.id) === selectedCategoryId);
+
+              return (
+                <div className="shrink-0 px-3.5 py-2 border-b border-border/40 bg-slate-50/50 flex items-center justify-between gap-2 relative z-20">
+                  <div className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden">
+                    <button
+                      type="button"
+                      className={cn(
+                        "h-8 shrink-0 flex items-center justify-center rounded-full px-3.5 text-xs font-semibold transition-all duration-150 border cursor-pointer whitespace-nowrap",
+                        selectedCategoryId === ""
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs font-bold"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
+                      )}
+                      onClick={() => {
+                        setSelectedCategoryId("");
+                        setIsMoreCategoriesOpen(false);
+                      }}
+                    >
+                      {t("common.all")}
+                    </button>
+
+                    {visibleCategories.map((category) => (
+                      <button
+                        key={category.id}
+                        type="button"
+                        className={cn(
+                          "h-8 shrink-0 flex items-center justify-center rounded-full px-3 text-xs font-semibold transition-all duration-150 border cursor-pointer whitespace-nowrap",
+                          selectedCategoryId === String(category.id)
+                            ? "bg-primary text-primary-foreground border-primary shadow-xs font-bold"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300"
+                        )}
+                        onClick={() => {
+                          setSelectedCategoryId(String(category.id));
+                          setIsMoreCategoriesOpen(false);
+                        }}
+                      >
+                        {formatCategoryName(category.name)}
+                      </button>
+                    ))}
+
+                    {selectedExtraCategory ? (
+                      <button
+                        type="button"
+                        className="h-8 shrink-0 flex items-center justify-center rounded-full px-3 text-xs font-bold transition-all duration-150 border bg-primary text-primary-foreground border-primary shadow-xs cursor-pointer whitespace-nowrap"
+                      >
+                        {formatCategoryName(selectedExtraCategory.name)}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {/* Nút 3 gạch (Menu Button) góc phải - Canh hàng chuẩn h-8 trùng khớp với các ô */}
+                  <div className="relative shrink-0 flex items-center">
+                    <button
+                      type="button"
+                      onClick={() => setIsMoreCategoriesOpen((prev) => !prev)}
+                      title={t("common.allCategories")}
+                      className={cn(
+                        "h-8 w-8 shrink-0 flex items-center justify-center rounded-lg border transition-all duration-150 cursor-pointer shadow-2xs",
+                        isMoreCategoriesOpen || selectedExtraCategory
+                          ? "bg-primary text-white border-primary"
+                          : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900"
+                      )}
+                    >
+                      <Menu className="h-4 w-4" />
+                    </button>
+
+                    {/* Popover Menu Bo cong 2xl sang trọng */}
+                    {isMoreCategoriesOpen ? (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setIsMoreCategoriesOpen(false)} />
+                        <div className="absolute right-0 top-full mt-2 z-50 min-w-[230px] rounded-2xl border border-slate-200/90 bg-white p-2 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+                          <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1 flex items-center justify-between">
+                            <span>{t("common.allCategories")}</span>
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600 font-bold">{categories.length}</span>
+                          </div>
+                          <div className="grid grid-cols-1 gap-1 max-h-[280px] overflow-y-auto pr-1 scrollbar-thin">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedCategoryId("");
+                                setIsMoreCategoriesOpen(false);
+                              }}
+                              className={cn(
+                                "flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-semibold text-left transition-all cursor-pointer",
+                                selectedCategoryId === ""
+                                  ? "bg-primary/10 text-primary font-bold"
+                                  : "text-slate-700 hover:bg-slate-100/80"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <Layers className="h-4 w-4 text-slate-400" />
+                                <span>{t("common.all")}</span>
+                              </div>
+                              {selectedCategoryId === "" ? <Check className="h-4 w-4 text-primary" /> : null}
+                            </button>
+
+                            {categories.map((category) => {
+                              const isSelected = selectedCategoryId === String(category.id);
+                              return (
+                                <button
+                                  key={category.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedCategoryId(String(category.id));
+                                    setIsMoreCategoriesOpen(false);
+                                  }}
+                                  className={cn(
+                                    "flex items-center justify-between rounded-xl px-3.5 py-2.5 text-xs font-semibold text-left transition-all cursor-pointer",
+                                    isSelected
+                                      ? "bg-primary/10 text-primary font-bold"
+                                      : "text-slate-700 hover:bg-slate-100/80"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-2.5">
+                                    <span className={cn("h-2 w-2 rounded-full", isSelected ? "bg-primary" : "bg-slate-300")} />
+                                    <span>{formatCategoryName(category.name)}</span>
+                                  </div>
+                                  {isSelected ? <Check className="h-4 w-4 text-primary" /> : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="min-h-0 flex-1 overflow-y-auto p-4 pr-2 scrollbar-thin">
               {isLoadingProducts ? <LoadingState /> : null}
@@ -1595,42 +1858,85 @@ export default function PosPage() {
 
               {/* Vùng khách hàng */}
               <div className="shrink-0 space-y-2 border-b border-border/40 px-3 py-2 bg-slate-50/50">
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-muted-foreground pointer-events-none">
-                      <Search className="w-3.5 h-3.5" />
-                    </span>
-                    <form onSubmit={searchCustomers}>
-                      <input
-                        type="text"
-                        value={customerSearch}
-                        onChange={(event) => setCustomerSearch(event.target.value)}
-                        placeholder={t("pos.customerPlaceholder")}
-                        className="w-full bg-white border border-border pl-8 pr-2 py-1 rounded-md text-xs font-semibold text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition h-8"
-                      />
-                    </form>
+                {selectedCustomer ? (
+                  <div className="rounded-xl border border-emerald-300/80 bg-emerald-50/70 p-2 flex items-center justify-between gap-2 shadow-2xs animate-in fade-in">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-8 w-8 rounded-full bg-emerald-600 text-white font-extrabold flex items-center justify-center text-xs shrink-0 shadow-2xs">
+                        {selectedCustomer.fullName.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 leading-tight">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className="font-extrabold text-xs text-slate-900 truncate" title={selectedCustomer.fullName}>
+                            {selectedCustomer.fullName}
+                          </span>
+                          {selectedCustomer.phone && (
+                            <span className="text-[11px] font-mono font-semibold text-slate-600 shrink-0">
+                              ({selectedCustomer.phone})
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px]">
+                          {renderCustomerTierBadge(selectedCustomer.tier, t)}
+                          <span className="text-emerald-700 font-bold shrink-0">
+                            • {formatNumber(selectedCustomer.points)} {t("customers.points")}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomerId("");
+                        setCustomerSearch("");
+                      }}
+                      className="h-7 w-7 rounded-lg text-slate-400 hover:text-destructive hover:bg-emerald-100 transition-colors flex items-center justify-center shrink-0 cursor-pointer"
+                      title={t("pos.clearCustomer")}
+                    >
+                      <XCircle className="h-4 w-4" />
+                    </button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="shrink-0 h-8 w-8 p-0"
-                    title={t("customers.quickAdd")}
-                    onClick={() => {
-                      setQuickCustomerPhone(customerSearch);
-                      setIsCustomerDialogOpen(true);
-                    }}
-                  >
-                    <UserPlus className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-                <Select value={customerId} onChange={(event) => setCustomerId(event.target.value)} className="h-8 text-xs py-1">
-                  <option value="">{t("customers.retail")}</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.fullName} - {customer.phone} - {t(`customerTier.${customer.tier || "NONE"}`)} ({formatNumber(customer.points)} pts)
-                    </option>
-                  ))}
-                </Select>
+                ) : (
+                  <div className="space-y-1.5">
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center text-muted-foreground pointer-events-none">
+                          <Search className="w-3.5 h-3.5" />
+                        </span>
+                        <form onSubmit={searchCustomers}>
+                          <input
+                            type="text"
+                            value={customerSearch}
+                            onChange={(event) => setCustomerSearch(event.target.value)}
+                            placeholder={t("pos.customerPlaceholder")}
+                            className="w-full bg-white border border-border pl-8 pr-2 py-1 rounded-md text-xs font-semibold text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition h-8"
+                          />
+                        </form>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="shrink-0 h-8 w-8 p-0 cursor-pointer"
+                        title={t("customers.quickAdd")}
+                        onClick={() => {
+                          setQuickCustomerPhone(customerSearch);
+                          setIsCustomerDialogOpen(true);
+                        }}
+                      >
+                        <UserPlus className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+
+                    <Select value={customerId} onChange={(event) => setCustomerId(event.target.value)} className="h-8 text-xs py-1">
+                      <option value="">{t("customers.retail")}</option>
+                      {customers.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.fullName} {customer.phone ? `- ${customer.phone}` : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
               </div>
 
               {/* Vùng danh sách sản phẩm trong giỏ: thiết kế dòng phẳng tối giản, cuộn nội bộ */}
@@ -1717,22 +2023,118 @@ export default function PosPage() {
               <div className="shrink-0 border-t border-gray-100 bg-card px-3 py-2 shadow-[0_-8px_20px_rgba(15,23,42,0.05)]">
                 {/* Voucher & Discount Row */}
                 <div className="mb-2 flex items-center gap-2">
-                  <Select
-                    value={appliedPromotionCode}
-                    onChange={(event) => applyVoucher(event.target.value)}
-                    disabled={cart.length === 0 || isSubmitting}
-                    className="h-10 text-[11px] flex-[1.4] min-w-0"
-                  >
-                    <option value="">{t("pos.noVoucher")}</option>
-                    {eligiblePromotions.map((p) => {
-                      const tiersText = p.eligibleTiers === "ALL" || !p.eligibleTiers ? t("promotions.tierAll") : p.eligibleTiers.split(",").map(tier => getTierLabel(tier.trim(), t)).join(", ");
-                      return (
-                        <option key={p.id} value={p.code}>
-                          {p.code} - {p.discountType === "PERCENT" ? `${p.discountValue}%` : formatCurrency(p.discountValue)} ({t("pos.minimumOrderLabel", { amount: formatCurrency(p.minOrderAmount) })} | {t("pos.tierLabel", { tiers: tiersText })})
-                        </option>
-                      );
-                    })}
-                  </Select>
+                  {/* Smart Integrated Voucher Input & Popover List */}
+                  <div className="relative flex-1 min-w-0">
+                    <div className="relative flex items-center">
+                      <Ticket className="absolute left-2.5 h-3.5 w-3.5 text-slate-400 shrink-0 pointer-events-none" />
+                      <Input
+                        type="text"
+                        value={voucherInput}
+                        onChange={(e) => setVoucherInput(e.target.value.toUpperCase())}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            if (voucherInput.trim()) {
+                              void applyVoucher(voucherInput.trim());
+                            }
+                          }
+                        }}
+                        placeholder={t("pos.promotionPlaceholder")}
+                        className={cn(
+                          "h-10 pl-8 pr-8 text-xs font-semibold rounded-lg border-slate-200 transition-all w-full",
+                          appliedPromotionCode
+                            ? "bg-emerald-50 text-emerald-800 border-emerald-300 font-bold"
+                            : "bg-white text-slate-800"
+                        )}
+                        disabled={cart.length === 0 || isSubmitting}
+                      />
+
+                      <div className="absolute right-1 flex items-center gap-0.5">
+                        {appliedPromotionCode ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setVoucherInput("");
+                              void applyVoucher("");
+                            }}
+                            className="p-1.5 rounded-md text-slate-400 hover:text-destructive hover:bg-slate-100 transition-colors"
+                            title={t("pos.removePromotion")}
+                          >
+                            <XCircle className="h-4 w-4" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setIsPromoPopoverOpen(!isPromoPopoverOpen)}
+                            className="p-1.5 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+                            title={t("pos.availablePromotions", { count: eligiblePromotions.length })}
+                            disabled={cart.length === 0 || isSubmitting}
+                          >
+                            <ChevronDown className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Popover danh sách mã khả dụng */}
+                    {isPromoPopoverOpen && (
+                      <div className="absolute bottom-full mb-1 left-0 right-0 z-50 rounded-xl bg-white border border-slate-200 shadow-2xl p-2 space-y-1.5 max-h-56 overflow-y-auto animate-in fade-in slide-in-from-bottom-2 min-w-[240px]">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 px-2 py-1 border-b border-slate-100 flex justify-between items-center">
+                          <span>{t("pos.availablePromotions", { count: eligiblePromotions.length })}</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsPromoPopoverOpen(false)}
+                            className="text-slate-400 hover:text-slate-600 font-bold px-1"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        {eligiblePromotions.length === 0 ? (
+                          <div className="py-4 text-center text-xs text-slate-400 font-medium">
+                            {t("pos.noEligiblePromotion")}
+                          </div>
+                        ) : (
+                          eligiblePromotions.map((p) => {
+                            const tiersText = p.eligibleTiers === "ALL" || !p.eligibleTiers ? t("promotions.tierAll") : p.eligibleTiers.split(",").map(tier => getTierLabel(tier.trim(), t)).join(", ");
+                            const discountLabel = t("pos.discountValue", { value: p.discountType === "PERCENT" ? `${p.discountValue}%` : formatCurrency(p.discountValue) });
+
+                            return (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  setVoucherInput(p.code);
+                                  void applyVoucher(p.code);
+                                  setIsPromoPopoverOpen(false);
+                                }}
+                                className={cn(
+                                  "w-full text-left p-2 rounded-lg border transition-all flex flex-col gap-1 cursor-pointer hover:border-primary/50 hover:bg-primary/5",
+                                  appliedPromotionCode === p.code
+                                    ? "border-emerald-300 bg-emerald-50/70"
+                                    : "border-slate-100 bg-slate-50/60"
+                                )}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="font-extrabold text-xs text-primary font-mono bg-primary/10 px-2 py-0.5 rounded-md">
+                                    {p.code}
+                                  </span>
+                                  <span className="font-bold text-xs text-emerald-600">
+                                    {discountLabel}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                                  <span>{t("pos.minimumOrder")} <strong className="text-slate-700">{formatCurrency(p.minOrderAmount)}</strong></span>
+                                  <span>•</span>
+                                  <span>{t("pos.appliesTo")} <strong className="text-slate-700">{tiersText}</strong></span>
+                                </div>
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Select
@@ -1874,20 +2276,20 @@ export default function PosPage() {
         </div>
 
         <Dialog open={isCheckoutDialogOpen} onOpenChange={setIsCheckoutDialogOpen}>
-          <DialogContent className={cn("max-h-[90vh] overflow-y-auto transition-all duration-300", checkoutStep === "qr" ? "max-w-4xl p-0" : "max-w-2xl")}>
+          <DialogContent className={cn("max-h-[92vh] overflow-y-auto transition-all duration-300", checkoutStep === "qr" ? "max-w-4xl p-0" : "max-w-2xl p-4 sm:p-5")}>
             {checkoutStep !== "qr" ? (
-              <DialogHeader>
-                <DialogTitle>
+              <DialogHeader className="space-y-0.5 mb-1">
+                <DialogTitle className="text-base sm:text-lg">
                   {checkoutStep === "confirm" ? t("pos.confirmOrderTitle") : t("pos.cashCheckoutTitle")}
                 </DialogTitle>
-                <DialogDescription>
+                <DialogDescription className="text-xs">
                   {checkoutStep === "confirm" ? t("pos.confirmOrderDescription") : t("pos.cashCheckoutDescription")}
                 </DialogDescription>
               </DialogHeader>
             ) : null}
 
             <form
-              className={cn(checkoutStep !== "qr" && "space-y-4")}
+              className={cn(checkoutStep !== "qr" && "space-y-2.5")}
               onSubmit={(event) => {
                 event.preventDefault();
                 if (checkoutStep === "confirm") {
@@ -1910,17 +2312,17 @@ export default function PosPage() {
               }}
             >
               {checkoutStep !== "qr" ? (
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_240px]">
+                <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_240px]">
                   <div className="min-w-0 rounded-xl border border-slate-100">
-                    <div className="border-b border-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    <div className="border-b border-slate-100 px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400">
                       {t("pos.orderItems")}
                     </div>
-                    <div className="max-h-56 divide-y divide-slate-100 overflow-y-auto">
+                    <div className="max-h-52 divide-y divide-slate-100 overflow-y-auto">
                       {cart.map((item) => (
-                        <div key={item.product.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-3 px-3 py-2.5">
+                        <div key={item.product.id} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 px-3 py-1.5">
                           <div className="min-w-0">
                             <p className="truncate text-xs font-black text-slate-800">{item.product.name}</p>
-                            <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                               {item.product.sku} x {item.quantity}
                             </p>
                           </div>
@@ -1930,38 +2332,39 @@ export default function PosPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-3 rounded-xl border bg-slate-50 p-3 text-sm">
+                  <div className="space-y-1.5 rounded-xl border bg-slate-50 p-2.5 text-xs">
                     <div className="min-w-0">
                       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("customers.title")}</p>
                       <p className="truncate font-bold text-slate-800">{selectedCustomer?.fullName || t("customers.retail")}</p>
                       {selectedCustomer ? (
-                        <p className="mt-1 text-[11px] font-bold text-amber-700">
-                          {t(`customerTier.${selectedCustomer.tier || "SILVER"}`)} - {formatNumber(selectedCustomer.points)} {t("customers.points")}
-                        </p>
+                        <div className="mt-1 flex items-center gap-1.5 text-[10px]">
+                          {renderCustomerTierBadge(selectedCustomer.tier, t)}
+                          <span className="font-semibold text-slate-500">• {formatNumber(selectedCustomer.points)} {t("customers.points")}</span>
+                        </div>
                       ) : null}
                     </div>
                     <div className="min-w-0">
                       <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">{t("pos.paymentMethod")}</p>
                       <p className="truncate font-bold text-slate-800">{t(`paymentMethod.${paymentMethod}`)}</p>
                     </div>
-                    <div className="space-y-2 border-t border-slate-200 pt-3">
-                      <div className="flex justify-between gap-4">
+                    <div className="space-y-1 border-t border-slate-200 pt-1.5 text-xs">
+                      <div className="flex justify-between gap-2">
                         <span className="text-slate-500">{t("pos.subtotal")}</span>
                         <span className="font-bold text-slate-800">{formatCurrency(subtotal)}</span>
                       </div>
                       {appliedPromotionCode ? (
-                        <div className="flex justify-between gap-4">
+                        <div className="flex justify-between gap-2">
                           <span className="text-emerald-600 font-medium">Voucher ({appliedPromotionCode})</span>
                           <span className="font-bold text-emerald-700">-{formatCurrency(discountAmount)}</span>
                         </div>
                       ) : null}
                       {!appliedPromotionCode && discountAmount > 0 ? (
-                        <div className="flex justify-between gap-4">
+                        <div className="flex justify-between gap-2">
                           <span className="text-amber-600 font-medium">{t("pos.manualDiscount")}</span>
                           <span className="font-bold text-amber-700">-{formatCurrency(discountAmount)}</span>
                         </div>
                       ) : null}
-                      <div className="flex justify-between gap-4 border-t border-slate-200 pt-2 text-base">
+                      <div className="flex justify-between gap-2 border-t border-slate-200 pt-1 text-sm">
                         <span className="font-black text-slate-900">{t("pos.totalPayable")}</span>
                         <span className="font-black text-primary">{formatCurrency(totalPayable)}</span>
                       </div>
@@ -1971,24 +2374,65 @@ export default function PosPage() {
               ) : null}
 
               {checkoutStep === "cash" ? (
-                <div className="grid gap-3 rounded-xl border bg-card p-3 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="pos-cash-received">{t("pos.cashReceived")}</Label>
-                    <Input
-                      id="pos-cash-received"
-                      ref={cashReceivedInputRef}
-                      inputMode="numeric"
-                      value={cashReceivedInput}
-                      onChange={(event) => setCashReceivedInput(formatMoneyInput(event.target.value))}
-                      placeholder={t("pos.cashReceivedPlaceholder")}
-                      className="h-12 text-lg font-semibold"
-                      disabled={cart.length === 0 || isSubmitting}
-                    />
+                <div className="space-y-2 rounded-xl border bg-card p-2.5">
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="pos-cash-received" className="text-xs">{t("pos.cashReceived")}</Label>
+                      <Input
+                        id="pos-cash-received"
+                        ref={cashReceivedInputRef}
+                        inputMode="numeric"
+                        value={cashReceivedInput}
+                        onChange={(event) => setCashReceivedInput(formatMoneyInput(event.target.value))}
+                        placeholder={t("pos.cashReceivedPlaceholder")}
+                        className="h-10 text-base font-semibold"
+                        disabled={cart.length === 0 || isSubmitting}
+                      />
+                    </div>
+                    <div className="flex flex-col justify-center rounded-xl bg-slate-50 p-2">
+                      <span className="text-xs font-semibold text-muted-foreground">{t("pos.changeAmount")}</span>
+                      <span className={cn("text-xl font-black", isCashPaymentInvalid ? "text-destructive" : "text-green-700")}>{formatCurrency(changeAmount)}</span>
+                      {isCashPaymentInvalid ? <p className="mt-0.5 text-xs text-destructive">{t("pos.cashNotEnough")}</p> : null}
+                    </div>
                   </div>
-                  <div className="flex flex-col justify-center rounded-xl bg-slate-50 p-3">
-                    <span className="text-sm font-semibold text-muted-foreground">{t("pos.changeAmount")}</span>
-                    <span className={cn("text-2xl font-black", isCashPaymentInvalid ? "text-destructive" : "text-green-700")}>{formatCurrency(changeAmount)}</span>
-                    {isCashPaymentInvalid ? <p className="mt-2 text-sm text-destructive">{t("pos.cashNotEnough")}</p> : null}
+
+                  {/* 4 Quick Cash Suggestions in 4 Columns Side-by-Side on Single Row */}
+                  <div className="border-t border-slate-100 pt-1.5">
+                    <p className="text-[10px] font-extrabold text-slate-500 mb-1.5 flex items-center gap-1">
+                      <Coins className="h-3 w-3 text-emerald-600 shrink-0" />
+                      <span>{t("pos.quickSelectCash")}</span>
+                    </p>
+                    <div className="grid grid-cols-4 gap-2 w-full">
+                      {quickCashOptions.map((amount) => {
+                        const isExact = amount === totalPayable;
+                        const currentInputNum = getMoneyInputAmount(cashReceivedInput);
+                        const isSelected = currentInputNum === amount;
+                        return (
+                          <button
+                            key={amount}
+                            type="button"
+                            onClick={() => setCashReceivedInput(formatMoneyInput(String(amount)))}
+                            className={cn(
+                              "px-2 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer shadow-2xs flex items-center justify-center gap-1 min-w-0 w-full",
+                              isExact
+                                ? "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700 font-black shadow-xs"
+                                : isSelected
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-300 ring-2 ring-emerald-400 font-extrabold"
+                                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300 font-bold"
+                            )}
+                          >
+                            {isExact ? (
+                              <>
+                                <Check className="h-3.5 w-3.5 shrink-0" />
+                                <span className="truncate">{t("pos.exactCash")}</span>
+                              </>
+                            ) : (
+                              <span className="truncate">{formatCurrency(amount)}</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               ) : null}
@@ -2055,10 +2499,10 @@ export default function PosPage() {
                             </div>
                             <div>
                               <h3 className="text-sm font-black tracking-tight text-slate-800 uppercase leading-none">
-                                Thanh toán chuyển khoản
+                                {t("pos.transferTitle")}
                               </h3>
                               <p className="text-[11px] text-slate-400 font-semibold leading-relaxed mt-1">
-                                Quét mã QR để thanh toán. Hệ thống sẽ tự động xác nhận khi nhận được tiền.
+                                {t("pos.transferAutoDescription")}
                               </p>
                             </div>
                           </div>
@@ -2082,7 +2526,7 @@ export default function PosPage() {
                             {isQrLoading && !isPayOSQrCodeSVG && (
                               <div className="absolute inset-3 z-20 flex flex-col items-center justify-center bg-white rounded-lg space-y-2">
                                 <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-                                <span className="text-[10px] font-bold text-slate-400">Đang tải mã QR...</span>
+                                <span className="text-[10px] font-bold text-slate-400">{t("pos.qrLoading")}</span>
                               </div>
                             )}
 
@@ -2098,7 +2542,7 @@ export default function PosPage() {
                               ) : (
                                 <img
                                   src={qrCodeSrc}
-                                  alt="Mã thanh toán chuyển khoản"
+                                  alt={t("pos.transferQrAlt")}
                                   className={cn(
                                     "max-h-[180px] max-w-[180px] object-contain transition-opacity duration-300",
                                     isQrLoading ? "opacity-0" : "opacity-100"
@@ -2111,7 +2555,7 @@ export default function PosPage() {
                             {/* Scan label inside frame at bottom */}
                             <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
                               <Scan className="h-3.5 w-3.5 text-slate-400" />
-                              <span>Quét mã để thanh toán</span>
+                              <span>{t("pos.scanToPay")}</span>
                             </div>
                           </div>
 
@@ -2122,7 +2566,7 @@ export default function PosPage() {
                               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                             </span>
                             <span className="text-[9px] font-black uppercase tracking-wider text-emerald-700">
-                              ĐANG CHỜ THANH TOÁN — TỰ ĐỘNG XÁC NHẬN
+                              {t("pos.waitingAutoConfirm")}
                             </span>
                           </div>
                         </div>
@@ -2135,7 +2579,7 @@ export default function PosPage() {
                             onClick={() => {
                               setIsCheckoutDialogOpen(false);
                               setPayOSPayment(null);
-                              setPayOSStatusText("Đang chờ khách thanh toán...");
+                              setPayOSStatusText("pos.payosWaiting");
                             }}
                             className="absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
                           >
@@ -2163,7 +2607,7 @@ export default function PosPage() {
                               </span>
                             </div>
                             <div>
-                              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none">Ngân hàng thụ hưởng</p>
+                              <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 leading-none">{t("pos.beneficiaryBank")}</p>
                               <p className="mt-1 text-sm font-extrabold text-slate-800">
                                 {BANK_NAMES_MAP[setting?.bankName || ""] || setting?.bankName || "MB Bank - Ngân hàng TMCP Quân đội"}
                               </p>
@@ -2179,7 +2623,7 @@ export default function PosPage() {
                                   <User className="h-4.5 w-4.5" />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">Số tài khoản</p>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">{t("pos.bankAccountNumber")}</p>
                                   <p className="mt-1 font-mono font-bold text-slate-800 text-sm leading-none">
                                     {setting?.bankAccountNumber || "0877724374"}
                                   </p>
@@ -2192,7 +2636,7 @@ export default function PosPage() {
                                 className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer shrink-0"
                                 onClick={() => {
                                   void navigator.clipboard.writeText(setting?.bankAccountNumber || "0877724374");
-                                  toast.success("Đã sao chép số tài khoản");
+                                  toast.success(t("pos.copiedField", { field: t("pos.bankAccountNumber") }));
                                 }}
                               >
                                 <Copy className="h-4 w-4" />
@@ -2206,7 +2650,7 @@ export default function PosPage() {
                                   <User className="h-4.5 w-4.5" />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">Chủ tài khoản</p>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">{t("pos.bankAccountName")}</p>
                                   <p className="mt-1 font-bold text-slate-800 text-xs leading-none uppercase truncate">
                                     {setting?.bankAccountName || "MAI TRAN THIEN TAM"}
                                   </p>
@@ -2219,7 +2663,7 @@ export default function PosPage() {
                                 className="h-8 w-8 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg cursor-pointer shrink-0"
                                 onClick={() => {
                                   void navigator.clipboard.writeText(setting?.bankAccountName || "MAI TRAN THIEN TAM");
-                                  toast.success("Đã sao chép chủ tài khoản");
+                                  toast.success(t("pos.copiedField", { field: t("pos.bankAccountName") }));
                                 }}
                               >
                                 <Copy className="h-4 w-4" />
@@ -2233,9 +2677,9 @@ export default function PosPage() {
                                   <CreditCard className="h-4.5 w-4.5" />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">Số tiền thanh toán</p>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider leading-none">{t("pos.paymentAmount")}</p>
                                   <p className="mt-1 font-extrabold text-blue-600 text-sm leading-none">
-                                    {`${new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 }).format(payOSPayment?.amount || totalPayable)}đ`}
+                                    {`${new Intl.NumberFormat(language === "en" ? "en-GB" : "vi-VN", { maximumFractionDigits: 0 }).format(payOSPayment?.amount || totalPayable)}đ`}
                                   </p>
                                 </div>
                               </div>
@@ -2247,7 +2691,7 @@ export default function PosPage() {
                                 onClick={() => {
                                   const amount = payOSPayment?.amount || totalPayable;
                                   void navigator.clipboard.writeText(String(amount));
-                                  toast.success("Đã sao chép số tiền cần chuyển");
+                                  toast.success(t("pos.copiedField", { field: t("pos.paymentAmount") }));
                                 }}
                               >
                                 <Copy className="h-4 w-4" />
@@ -2261,7 +2705,7 @@ export default function PosPage() {
                                   <FileText className="h-4.5 w-4.5" />
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider leading-none">Nội dung chuyển khoản (Memo)</p>
+                                  <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider leading-none">{t("pos.transferMemo")}</p>
                                   <p className="mt-1 font-mono font-bold text-slate-800 text-sm leading-none">
                                     {payOSPaymentCode}
                                   </p>
@@ -2274,7 +2718,7 @@ export default function PosPage() {
                                 className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-100/50 rounded-lg cursor-pointer shrink-0"
                                 onClick={() => {
                                   void navigator.clipboard.writeText(payOSPaymentCode);
-                                  toast.success("Đã sao chép nội dung");
+                                  toast.success(t("pos.copiedField", { field: t("pos.transferMemo") }));
                                 }}
                               >
                                 <Copy className="h-4 w-4" />
@@ -2286,7 +2730,7 @@ export default function PosPage() {
                           <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-[11px] font-semibold text-blue-700 leading-relaxed shadow-sm flex items-start gap-2.5">
                             <ShieldCheck className="h-4.5 w-4.5 text-blue-500 shrink-0 mt-0.5" />
                             <span>
-                              Hệ thống PayOS sẽ tự động xác nhận khi nhận được chuyển khoản. Không cần bấm thủ công.
+                              {t("pos.payosAutoNotice")}
                             </span>
                           </div>
                         </div>
@@ -2301,11 +2745,11 @@ export default function PosPage() {
                           onClick={() => {
                             setCheckoutStep("confirm");
                             setPayOSPayment(null);
-                            setPayOSStatusText("Đang chờ khách thanh toán...");
+                            setPayOSStatusText("pos.payosWaiting");
                           }}
                           disabled={isSubmitting}
                         >
-                          <ArrowLeft className="h-4 w-4" /> Quay lại
+                          <ArrowLeft className="h-4 w-4" /> {t("common.back")}
                         </Button>
                         <Button
                           type="submit"
@@ -2313,9 +2757,9 @@ export default function PosPage() {
                           disabled={isSubmitting}
                         >
                           <div className="flex items-center gap-1.5 font-bold text-sm">
-                            <Check className="h-4 w-4" /> Tôi đã chuyển khoản
+                            <Check className="h-4 w-4" /> {t("pos.transferred")}
                           </div>
-                          <span className="text-[9px] font-medium opacity-80 mt-0.5">Nhấn F9 để xác nhận nhanh</span>
+                          <span className="text-[9px] font-medium opacity-80 mt-0.5">{t("pos.f9ConfirmHint")}</span>
                         </Button>
                       </div>
                     </div>
@@ -2411,49 +2855,34 @@ export default function PosPage() {
         </Dialog>
 
         <Dialog open={remoteScanOpen} onOpenChange={setRemoteScanOpen}>
-          <DialogContent className="max-w-md bg-slate-900 border-slate-800 text-white rounded-3xl p-6">
-            <DialogHeader className="text-center flex flex-col items-center">
-              <div className="mx-auto rounded-full bg-blue-500/10 p-3 text-blue-400 mb-2 border border-blue-500/20">
-                <Smartphone className="h-6 w-6" />
+          <DialogContent className="max-w-xl bg-slate-900 border-slate-800 text-white rounded-3xl p-5 shadow-2xl">
+            <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-blue-500/10 p-2 text-blue-400 border border-blue-500/20 shrink-0">
+                  <Smartphone className="h-5 w-5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-base font-extrabold uppercase tracking-wide text-white">
+                    {t("barcode.connectPhoneScanner")}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-slate-400">
+                    {t("barcode.remoteScannerDescription")}
+                  </DialogDescription>
+                </div>
               </div>
-              <DialogTitle className="text-lg font-extrabold uppercase tracking-wide text-white">
-                {t("barcode.connectPhoneScanner")}
-              </DialogTitle>
-              <DialogDescription className="text-xs text-slate-400 max-w-xs text-center leading-relaxed">
-                {t("barcode.remoteScannerDescription")}
-              </DialogDescription>
             </DialogHeader>
 
-            <div className="my-6 flex flex-col items-center justify-center gap-4">
-              {/* Pairing Code */}
-              <div className="text-center">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">
-                  {t("barcode.pairingCode")}
-                </span>
-                <span className="text-3xl font-black text-blue-400 tracking-[0.2em] font-mono select-all">
-                  {sessionId}
-                </span>
-                <Button type="button" size="sm" variant="outline" onClick={handleResetRemoteScanSession} className="mt-3 h-8 rounded-xl border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700">
-                  {t("barcode.newPairingCode")}
-                </Button>
-              </div>
-
-              {/* QR Code Container */}
-              <div className="bg-white p-4 rounded-2xl shadow-xl border border-slate-800/20">
-                <QRCodeSVG value={mobileScanUrl} size={180} level="M" />
-              </div>
-
-              {/* Link copy container */}
-              <div className="w-full flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-2xl p-2 pl-3 mt-2">
-                <Link className="h-4 w-4 text-slate-500 shrink-0" />
-                <span className="text-xs font-mono text-slate-400 truncate flex-1 select-all">
-                  {mobileScanUrl}
-                </span>
+            <div className="grid grid-cols-1 sm:grid-cols-[170px_1fr] gap-5 items-center py-2">
+              {/* Cột trái: Mã QR & Sao chép link */}
+              <div className="flex flex-col items-center gap-2.5">
+                <div className="bg-white p-3 rounded-2xl shadow-xl border border-slate-800/20 shrink-0">
+                  <QRCodeSVG value={mobileScanUrl} size={145} level="M" />
+                </div>
                 <Button
                   type="button"
                   size="sm"
                   onClick={handleCopyLink}
-                  className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl h-8 px-3 shrink-0 flex items-center gap-1.5 transition-all cursor-pointer"
+                  className="w-full bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl h-8 px-2 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 >
                   {isCopied ? (
                     <>
@@ -2468,20 +2897,55 @@ export default function PosPage() {
                   )}
                 </Button>
               </div>
-            </div>
 
-            {/* Instruction Help & Polling Status */}
-            <div className="space-y-4 pt-4 border-t border-slate-800/80">
-              <div className="text-[11px] text-slate-400 leading-relaxed space-y-1">
-                <p>{t("barcode.remoteInstruction1")}</p>
-                <p>{t("barcode.remoteInstruction2")}</p>
-                <p>{t("barcode.remoteInstruction3")}</p>
-                <p>{t("barcode.remoteInstruction4")}</p>
-              </div>
+              {/* Cột phải: Mã ghép đôi & Hướng dẫn & Trạng thái */}
+              <div className="flex flex-col justify-between gap-2.5">
+                {/* Mã ghép đôi */}
+                <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                      {t("barcode.pairingCode")}
+                    </span>
+                    <span className="text-xl font-black text-blue-400 tracking-[0.2em] font-mono select-all">
+                      {sessionId}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleResetRemoteScanSession}
+                    className="h-7 px-2.5 rounded-lg border-slate-700 bg-slate-800 text-[11px] text-white hover:bg-slate-700 shrink-0"
+                    title={t("pos.newPairingCode")}
+                  >
+                    {t("barcode.newPairingCode")}
+                  </Button>
+                </div>
 
-              <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-300">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-ping"></span>
-                <span>{t("barcode.waitingForScan")}</span>
+                {/* Hướng dẫn ngắn gọn */}
+                <div className="text-[11px] text-slate-400 leading-tight space-y-1 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60">
+                  <p className="flex items-start gap-1">
+                    <span className="font-bold text-blue-400">1.</span>
+                    <span>{t("barcode.remoteInstruction1")}</span>
+                  </p>
+                  <p className="flex items-start gap-1">
+                    <span className="font-bold text-blue-400">2.</span>
+                    <span>{t("barcode.remoteInstruction2")}</span>
+                  </p>
+                </div>
+
+                {/* Trạng thái real-time */}
+                {isPhoneConnected ? (
+                  <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs font-bold text-emerald-400 animate-in fade-in duration-300">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                    <span>{t("pos.phoneConnected")}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-950/60 border border-slate-800 text-xs font-semibold text-slate-400">
+                    <span className="w-2 h-2 rounded-full bg-amber-400/80 animate-pulse shrink-0" />
+                    <span>{t("pos.phoneWaiting")}</span>
+                  </div>
+                )}
               </div>
             </div>
           </DialogContent>
@@ -2503,7 +2967,7 @@ export default function PosPage() {
                 <DialogTitle className="text-emerald-900 font-extrabold">{t("salesAssistant.title")}</DialogTitle>
               </div>
               <DialogDescription className="text-slate-500 font-medium">
-                Nhập nhu cầu khách hàng để AI gợi ý sản phẩm và cách tư vấn bán hàng.
+                {t("pos.salesAssistantDescription")}
               </DialogDescription>
             </DialogHeader>
 
@@ -2524,7 +2988,7 @@ export default function PosPage() {
                       }
                     }}
                   />
-                  <p className="text-[10px] text-slate-400 mt-1 font-medium">Nhấn Ctrl + Enter để gợi ý nhanh</p>
+                  <p className="text-[10px] text-slate-400 mt-1 font-medium">{t("pos.quickSuggestHint")}</p>
                 </div>
 
                 {/* Quick needs selection */}
@@ -2532,13 +2996,13 @@ export default function PosPage() {
                   <Label className="text-xs font-bold text-slate-700">{t("salesAssistant.quickNeeds")}</Label>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {[
-                      "Quà tân gia",
-                      "Đồ nhà bếp",
-                      "Dọn dẹp nhà cửa",
-                      "Tiết kiệm điện",
-                      "Đồ phòng tắm",
-                      "Lọc không khí",
-                      "Đang khuyến mãi"
+                      t("pos.quickNeedHousewarming"),
+                      t("pos.quickNeedKitchen"),
+                      t("pos.quickNeedCleaning"),
+                      t("pos.quickNeedEnergy"),
+                      t("pos.quickNeedBathroom"),
+                      t("pos.quickNeedAir"),
+                      t("pos.quickNeedPromotion")
                     ].map((need) => (
                       <button
                         key={need}
@@ -2562,10 +3026,10 @@ export default function PosPage() {
                   <Label className="text-xs font-bold text-slate-700">{t("salesAssistant.budget")}</Label>
                   <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                     {[
-                      { label: t("salesAssistant.under10k"), min: 0, max: 10000 },
-                      { label: t("salesAssistant.from10kTo30k"), min: 10000, max: 30000 },
-                      { label: t("salesAssistant.from30kTo50k"), min: 30000, max: 50000 },
-                      { label: t("salesAssistant.over50k"), min: 50000, max: 999999999 }
+                      { label: t("salesAssistant.under10k"), min: 0, max: 3000 },
+                      { label: t("salesAssistant.from10kTo30k"), min: 3000, max: 7000 },
+                      { label: t("salesAssistant.from30kTo50k"), min: 7000, max: 15000 },
+                      { label: t("salesAssistant.over50k"), min: 15000, max: 999999999 }
                     ].map((b) => {
                       const isSelected = budgetMin === b.min && budgetMax === b.max;
                       return (
@@ -2601,7 +3065,7 @@ export default function PosPage() {
                     <Input
                       type="number"
                       className="h-8 text-[11px] px-2 border-slate-200 focus:border-emerald-500 rounded-lg text-slate-700"
-                      placeholder="Min (đ)"
+                      placeholder={t("pos.minPrice")}
                       value={budgetMin !== undefined ? budgetMin : ""}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -2614,7 +3078,7 @@ export default function PosPage() {
                     <Input
                       type="number"
                       className="h-8 text-[11px] px-2 border-slate-200 focus:border-emerald-500 rounded-lg text-slate-700"
-                      placeholder="Max (đ)"
+                      placeholder={t("pos.maxPrice")}
                       value={budgetMax !== undefined && budgetMax !== 999999999 ? budgetMax : ""}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -2684,7 +3148,7 @@ export default function PosPage() {
                   </div>
                 ) : salesAssistantError ? (
                   <div className="flex flex-col items-center justify-center flex-1 text-center py-16">
-                    <p className="text-sm font-extrabold text-rose-500">Đã xảy ra lỗi</p>
+                    <p className="text-sm font-extrabold text-rose-500">{t("message.errorTitle")}</p>
                     <p className="text-xs text-slate-400 mt-1 font-semibold">{salesAssistantError}</p>
                   </div>
                 ) : salesAssistantResult ? (
@@ -2733,7 +3197,7 @@ export default function PosPage() {
                               <div className="flex-1 min-w-0 text-xs">
                                 <h4 className="font-extrabold text-slate-800 truncate line-clamp-1" title={rec.name}>{rec.name}</h4>
                                 <div className="mt-1 flex items-center gap-2 flex-wrap">
-                                  <span className="text-[10px] text-slate-400 font-bold">Tồn kho: {rec.stockQuantity}</span>
+                                  <span className="text-[10px] text-slate-400 font-bold">{t("pos.inventoryLabel", { count: rec.stockQuantity })}</span>
                                   <span className={cn(
                                     "px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0",
                                     badgeColors[rec.type] || badgeColors.NEED_MATCH
@@ -2741,7 +3205,7 @@ export default function PosPage() {
                                     {badgeLabels[rec.type] || badgeLabels.NEED_MATCH}
                                   </span>
                                 </div>
-                                <p className="mt-2 text-[11px] text-slate-500 leading-normal bg-slate-50/50 rounded-lg p-2 border border-slate-100/50 font-medium truncate" title={rec.reason}>
+                                <p className="mt-2 text-[11px] text-slate-600 leading-relaxed bg-slate-50/80 rounded-lg p-2 border border-slate-200/60 font-medium whitespace-normal break-words">
                                   {rec.reason}
                                 </p>
                               </div>
@@ -2749,7 +3213,7 @@ export default function PosPage() {
                               {/* Price & Add to Cart Column (shrink-0 flex flex-col items-end gap-2) */}
                               <div className="shrink-0 flex flex-col items-end gap-2">
                                 <span className="font-extrabold text-slate-800 text-sm">
-                                  {new Intl.NumberFormat("vi-VN").format(rec.price)}đ
+                                  {new Intl.NumberFormat(language === "en" ? "en-GB" : "vi-VN").format(rec.price)}đ
                                 </span>
                                 <Button
                                   type="button"
@@ -2809,6 +3273,16 @@ export default function PosPage() {
           className="hidden print:block"
         />
       ) : null}
+
+      <CreateVatModal
+        isOpen={isCreateVatOpen}
+        onClose={() => setIsCreateVatOpen(false)}
+        onSuccess={() => {
+          setIsCreateVatOpen(false);
+          toast.success(t("pos.vatRequestSuccess"));
+        }}
+        initialOrderCode={createVatInitialCode}
+      />
     </RoleGuard>
   );
 }

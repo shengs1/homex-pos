@@ -41,7 +41,7 @@ type DraftItem = {
 const emptyDraftItem: DraftItem = { productId: 0, productSearch: "", quantity: 1, unitCost: 0 };
 
 export default function InventoryPage() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { toast } = useToast();
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -76,7 +76,7 @@ export default function InventoryPage() {
   useEffect(() => {
     if (!isAnalyzing) return;
     setLoadingStep(1);
-    
+
     const timer1 = setTimeout(() => {
       setLoadingStep(2);
     }, 1200);
@@ -99,16 +99,17 @@ export default function InventoryPage() {
       setApprovedItems([]);
       setDeclinedSkus([]);
       setActiveFilter("all");
-      
-      const res = await inventoryService.aiForecast({ days: forecastDays });
+
+      const res = await inventoryService.aiForecast({ days: forecastDays, language });
       setAiData(res);
     } catch (error) {
-      toast.error("Không thể phân tích dữ liệu kho: " + getApiErrorMessage(error));
+      toast.error(t("inventory.ai.error", { message: getApiErrorMessage(error) }));
     } finally {
       setIsAnalyzing(false);
       setLoadingStep(0);
     }
   }
+
 
   function handleApproveItem(item: any) {
     if (item.suggestedRestockQuantity <= 0) return;
@@ -121,17 +122,30 @@ export default function InventoryPage() {
     setApprovedItems(prev => prev.filter(i => i.sku !== item.sku));
   }
 
+  function getIsUrgentRestock(item: any) {
+    const avgDailySales = Number(item.avgDailySales || 0);
+    const predictedDailySales = Number(item.predictedDailySales || 0);
+    const dailySales = predictedDailySales > 0 ? predictedDailySales : (item.soldLast30Days > 0 ? item.soldLast30Days / 30 : 0);
+    const daysCovered = (item.currentStock > 0 && dailySales > 0) ? Math.floor(item.currentStock / dailySales) : null;
+    const isStockAmple = item.currentStock >= item.minimumStock && (daysCovered === null || daysCovered > 60);
+    const effectiveRestockQty = isStockAmple ? 0 : Number(item.suggestedRestockQuantity || 0);
+    return effectiveRestockQty > 0 || item.currentStock <= item.minimumStock;
+  }
+
   const visibleRestockList = useMemo(() => {
     if (!aiData?.restockList) return [];
     const nonDeclined = aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku));
     if (activeFilter === "urgent") {
-      return nonDeclined.filter((item: any) => 
-        item.suggestedRestockQuantity > 0 || item.recommendationType === "LOW_STOCK"
-      );
+      return nonDeclined.filter((item: any) => getIsUrgentRestock(item));
     }
     if (activeFilter === "trends") {
-      return nonDeclined.filter((item: any) => 
-        item.recommendationType === "RISING_TREND" || item.recommendationType === "SEASONAL_HOT"
+      return nonDeclined.filter((item: any) =>
+        item.recommendationType === "RISING_TREND" ||
+        item.recommendationType === "SEASONAL_HOT" ||
+        item.recommendationType === "SEASONAL_WATCH" ||
+        item.recommendationType === "CATEGORY_MOMENTUM" ||
+        Number(item.trendRatio) >= 1.2 ||
+        Number(item.seasonBoost) > 1.0
       );
     }
     return nonDeclined;
@@ -153,7 +167,7 @@ export default function InventoryPage() {
     setDraftItems(mappedItems);
     setIsPurchaseDialogOpen(true);
     setIsAiDrawerOpen(false);
-    toast.success(`Đã chuyển ${approvedItems.length} đề xuất nhập kho sang phiếu nhập hàng!`);
+    toast.success(t("inventory.ai.transferApproved", { count: approvedItems.length }));
   }
 
   function handleResetAiDrawer() {
@@ -370,7 +384,7 @@ export default function InventoryPage() {
             className="bg-gradient-to-r from-teal-600 to-emerald-500 text-white hover:from-teal-700 hover:to-emerald-600 shadow-sm border border-teal-500/30 transition-all font-medium flex items-center gap-2 px-4 py-2 rounded-xl transform hover:scale-[1.02] active:scale-[0.98]"
           >
             <Sparkles className="h-4 w-4 animate-pulse text-yellow-300" />
-            Trợ lý AI Kho
+            {t("inventory.ai.openAssistant")}
           </Button>
         </div>
 
@@ -584,39 +598,39 @@ export default function InventoryPage() {
         {isAiDrawerOpen && (
           <div className="fixed inset-0 z-50 overflow-hidden flex justify-end">
             {/* Backdrop */}
-            <div 
+            <div
               className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity duration-300"
               onClick={() => setIsAiDrawerOpen(false)}
             />
-            
+
             {/* Drawer Panel */}
             <div className="relative w-full max-w-3xl bg-slate-50 shadow-2xl flex flex-col h-full border-l border-slate-200 z-10 animate-in slide-in-from-right duration-300">
-              
+
               {/* Header */}
               <div className="bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
                     <Bot className="h-5 w-5 text-teal-600 animate-bounce" />
-                    Trợ lý AI Phân tích Kho
+                    {t("inventory.ai.title")}
                   </h3>
                   <p className="text-xs font-semibold text-slate-500 uppercase mt-0.5">
-                    Dữ liệu bán hàng 30 ngày & dự phòng {forecastDays} ngày tới
+                    {t("inventory.ai.subtitle", { days: forecastDays })}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
-                    className="rounded-full h-8 w-8 hover:bg-slate-100 border-slate-200" 
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="rounded-full h-8 w-8 hover:bg-slate-100 border-slate-200"
                     onClick={handleResetAiDrawer}
-                    title="Đặt lại phân tích"
+                    title={t("inventory.ai.reset")}
                   >
                     <RotateCcw className="h-4 w-4 text-slate-500" />
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    size="icon" 
-                    className="rounded-full h-8 w-8 hover:bg-slate-100 border-slate-200" 
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="rounded-full h-8 w-8 hover:bg-slate-100 border-slate-200"
                     onClick={() => setIsAiDrawerOpen(false)}
                   >
                     <X className="h-4 w-4 text-slate-500" />
@@ -626,23 +640,23 @@ export default function InventoryPage() {
 
               {/* Body */}
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                
+
                 {/* Control Panel */}
                 <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm space-y-4">
                   <div className="flex items-end gap-4">
                     <div className="flex-1 space-y-2">
-                      <Label className="text-xs font-bold text-slate-700 uppercase">Số ngày dự phòng hàng</Label>
-                      <Input 
-                        type="number" 
-                        min={1} 
-                        max={90} 
-                        value={forecastDays} 
+                      <Label className="text-xs font-bold text-slate-700 uppercase">{t("inventory.ai.forecastDays")}</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={90}
+                        value={forecastDays}
                         onChange={(e) => setForecastDays(Math.max(1, Number(e.target.value)))}
                         className="bg-slate-50 border-slate-200 focus:bg-white"
                         disabled={isAnalyzing}
                       />
                     </div>
-                    <Button 
+                    <Button
                       onClick={runAiAnalysis}
                       disabled={isAnalyzing}
                       className="bg-teal-600 hover:bg-teal-700 text-white font-bold flex items-center gap-2 px-6 h-10 shadow-sm transition-all duration-200"
@@ -652,7 +666,7 @@ export default function InventoryPage() {
                       ) : (
                         <Sparkles className="h-4 w-4" />
                       )}
-                      AI Phân tích mới
+                      {t("inventory.ai.analyze")}
                     </Button>
                   </div>
                 </div>
@@ -669,10 +683,10 @@ export default function InventoryPage() {
                           <div className="h-5 w-5 rounded-full border-2 border-teal-600 border-t-transparent animate-spin shrink-0" />
                         )}
                         <span className={loadingStep >= 1 ? "text-slate-500 line-through" : "text-teal-600 font-bold"}>
-                          Đang tổng hợp lịch sử bán hàng...
+                          {t("inventory.ai.loadingSales")}
                         </span>
                       </div>
-                      
+
                       <div className="flex items-center gap-3 text-sm font-medium">
                         {loadingStep >= 2 ? (
                           <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0"><Check className="h-3 w-3 stroke-[3]" /></div>
@@ -682,10 +696,10 @@ export default function InventoryPage() {
                           <div className="h-5 w-5 rounded-full border-2 border-slate-200 shrink-0" />
                         )}
                         <span className={loadingStep >= 2 ? "text-slate-500 line-through" : loadingStep === 1 ? "text-teal-600 font-bold" : "text-slate-400"}>
-                          Đang kiểm tra tồn kho hiện tại...
+                          {t("inventory.ai.loadingStock")}
                         </span>
                       </div>
-                      
+
                       <div className="flex items-center gap-3 text-sm font-medium">
                         {loadingStep >= 3 ? (
                           <div className="h-5 w-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0"><Check className="h-3 w-3 stroke-[3]" /></div>
@@ -695,7 +709,7 @@ export default function InventoryPage() {
                           <div className="h-5 w-5 rounded-full border-2 border-slate-200 shrink-0" />
                         )}
                         <span className={loadingStep >= 3 ? "text-teal-600 font-bold" : "text-slate-400"}>
-                          AI đang phân tích xu hướng nhập hàng...
+                          {t("inventory.ai.loadingTrend")}
                         </span>
                       </div>
                     </div>
@@ -707,29 +721,41 @@ export default function InventoryPage() {
                   <div className="space-y-6">
                     {/* Stats Grid */}
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      <div className="bg-red-50 rounded-xl border border-red-100 p-3 text-center shadow-sm">
-                        <p className="text-[10px] font-bold text-red-500 uppercase">Sắp hết</p>
-                        <p className="text-2xl font-black text-red-700 mt-1">{aiData.stats.outOfStock}</p>
+                      <div className={`bg-white rounded-xl border p-3 text-center shadow-sm transition-all border-l-4 ${aiData.stats.outOfStock > 0 ? "border-slate-200 border-l-red-500" : "border-slate-200/80 border-l-slate-300"}`}>
+                        <p className={`text-[11px] font-semibold ${aiData.stats.outOfStock > 0 ? "text-red-600 font-bold" : "text-slate-400"}`}>{t("inventory.ai.outOfStock")}</p>
+                        <p className={`text-xl font-extrabold mt-0.5 ${aiData.stats.outOfStock > 0 ? "text-red-700" : "text-slate-400"}`}>
+                          {aiData.stats.outOfStock} <span className="text-xs font-normal text-slate-400">{t("inventory.ai.productUnit")}</span>
+                        </p>
                       </div>
-                      <div className="bg-amber-50 rounded-xl border border-amber-100 p-3 text-center shadow-sm">
-                        <p className="text-[10px] font-bold text-amber-500 uppercase">Tồn thấp</p>
-                        <p className="text-2xl font-black text-amber-700 mt-1">{aiData.stats.lowStock}</p>
+                      <div className={`bg-white rounded-xl border p-3 text-center shadow-sm transition-all border-l-4 ${aiData.stats.lowStock > 0 ? "border-slate-200 border-l-amber-500" : "border-slate-200/80 border-l-slate-300"}`}>
+                        <p className={`text-[11px] font-semibold ${aiData.stats.lowStock > 0 ? "text-amber-600 font-bold" : "text-slate-400"}`}>{t("inventory.ai.lowStock")}</p>
+                        <p className={`text-xl font-extrabold mt-0.5 ${aiData.stats.lowStock > 0 ? "text-amber-700" : "text-slate-400"}`}>
+                          {aiData.stats.lowStock} <span className="text-xs font-normal text-slate-400">{t("inventory.ai.productUnit")}</span>
+                        </p>
                       </div>
-                      <div className="bg-teal-50 rounded-xl border border-teal-100 p-3 text-center shadow-sm">
-                        <p className="text-[10px] font-bold text-teal-500 uppercase">Đề xuất nhập</p>
-                        <p className="text-2xl font-black text-teal-700 mt-1">{aiData.stats.recommended}</p>
+                      <div className="bg-white rounded-xl border border-slate-200 border-l-4 border-l-teal-500 p-3 text-center shadow-sm">
+                        <p className="text-[11px] font-semibold text-slate-500">{t("inventory.ai.recommended")}</p>
+                        <p className="text-xl font-extrabold text-teal-700 mt-0.5">
+                          {aiData.stats.recommended} <span className="text-xs font-normal text-slate-400">{t("inventory.ai.productUnit")}</span>
+                        </p>
                       </div>
-                      <div className="bg-orange-50 rounded-xl border border-orange-100 p-3 text-center shadow-sm">
-                        <p className="text-[10px] font-bold text-orange-500 uppercase">Xu hướng tăng</p>
-                        <p className="text-2xl font-black text-orange-700 mt-1">{aiData.stats.risingTrend || 0}</p>
+                      <div className="bg-white rounded-xl border border-slate-200 border-l-4 border-l-orange-500 p-3 text-center shadow-sm">
+                        <p className="text-[11px] font-semibold text-slate-500">{t("inventory.ai.risingTrend")}</p>
+                        <p className="text-xl font-extrabold text-orange-600 mt-0.5">
+                          {aiData.stats.risingTrend || 0} <span className="text-xs font-normal text-slate-400">{t("inventory.ai.productUnit")}</span>
+                        </p>
                       </div>
-                      <div className="bg-emerald-50 rounded-xl border border-emerald-100 p-3 text-center shadow-sm">
-                        <p className="text-[10px] font-bold text-emerald-500 uppercase">Hot mùa vụ</p>
-                        <p className="text-2xl font-black text-emerald-700 mt-1">{aiData.stats.seasonalHot || 0}</p>
+                      <div className="bg-white rounded-xl border border-slate-200 border-l-4 border-l-emerald-500 p-3 text-center shadow-sm">
+                        <p className="text-[11px] font-semibold text-slate-500">{t("inventory.ai.seasonalHot")}</p>
+                        <p className="text-xl font-extrabold text-emerald-700 mt-0.5">
+                          {aiData.stats.seasonalHot || 0} <span className="text-xs font-normal text-slate-400">{t("inventory.ai.productUnit")}</span>
+                        </p>
                       </div>
-                      <div className="bg-slate-100 rounded-xl border border-slate-200 p-3 text-center shadow-sm">
-                        <p className="text-[10px] font-bold text-slate-500 uppercase">Đủ hàng</p>
-                        <p className="text-2xl font-black text-slate-700 mt-1">{aiData.stats.safe}</p>
+                      <div className="bg-white rounded-xl border border-slate-200 border-l-4 border-l-slate-400 p-3 text-center shadow-sm">
+                        <p className="text-[11px] font-semibold text-slate-500">{t("inventory.ai.safe")}</p>
+                        <p className="text-xl font-extrabold text-slate-800 mt-0.5">
+                          {aiData.stats.safe} <span className="text-xs font-normal text-slate-400">{t("inventory.ai.productUnit")}</span>
+                        </p>
                       </div>
                     </div>
 
@@ -737,7 +763,7 @@ export default function InventoryPage() {
                     <div className="bg-teal-50 rounded-2xl border border-teal-100 p-4 shadow-sm space-y-2">
                       <h4 className="text-xs font-bold text-teal-800 uppercase flex items-center gap-1.5">
                         <Bot className="h-4 w-4 text-teal-600" />
-                        Nhận định tổng quan từ AI
+                        {t("inventory.ai.overview")}
                       </h4>
                       <p className="text-sm text-slate-600 leading-relaxed font-medium">
                         {aiData.overview}
@@ -747,8 +773,8 @@ export default function InventoryPage() {
                     {/* Restock Recommendations List */}
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Danh sách Đề xuất Nhập kho</h4>
-                        <span className="text-xs font-semibold text-slate-400">Hiển thị {visibleRestockList.length} đề xuất</span>
+                        <h4 className="text-xs font-bold text-slate-600 uppercase tracking-wider">{t("inventory.ai.restockList")}</h4>
+                        <span className="text-xs font-semibold text-slate-400">{t("inventory.ai.showing", { count: visibleRestockList.length })}</span>
                       </div>
 
                       {/* Tab Filters */}
@@ -758,70 +784,83 @@ export default function InventoryPage() {
                           onClick={() => setActiveFilter("all")}
                           className={`flex-1 py-1.5 text-center text-xs font-bold rounded-md transition-all ${activeFilter === "all" ? "bg-teal-50 text-teal-700 border border-teal-100/50" : "text-slate-400 hover:text-slate-600"}`}
                         >
-                          Tất cả ({aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku)).length})
+                          {t("inventory.ai.filterAll", { count: aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku)).length })}
                         </button>
                         <button
                           type="button"
                           onClick={() => setActiveFilter("urgent")}
                           className={`flex-1 py-1.5 text-center text-xs font-bold rounded-md transition-all ${activeFilter === "urgent" ? "bg-red-50 text-red-600" : "text-slate-400 hover:text-slate-600"}`}
                         >
-                          Cần nhập gấp ({aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku) && (item.suggestedRestockQuantity > 0 || item.recommendationType === "LOW_STOCK")).length})
+                          {t("inventory.ai.filterUrgent", { count: aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku) && getIsUrgentRestock(item)).length })}
                         </button>
                         <button
                           type="button"
                           onClick={() => setActiveFilter("trends")}
                           className={`flex-1 py-1.5 text-center text-xs font-bold rounded-md transition-all ${activeFilter === "trends" ? "bg-orange-50 text-orange-600" : "text-slate-400 hover:text-slate-600"}`}
                         >
-                          Xu hướng sắp hot ({aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku) && (item.recommendationType === "RISING_TREND" || item.recommendationType === "SEASONAL_HOT")).length})
+                          {t("inventory.ai.filterTrend", { count: aiData.restockList.filter((item: any) => !declinedSkus.includes(item.sku) && (item.recommendationType === "RISING_TREND" || item.recommendationType === "SEASONAL_HOT" || item.recommendationType === "SEASONAL_WATCH" || item.recommendationType === "CATEGORY_MOMENTUM" || Number(item.trendRatio) >= 1.2 || Number(item.seasonBoost) > 1.0)).length })}
                         </button>
                       </div>
-                      
+
                       {visibleRestockList.length === 0 ? (
                         <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-500 font-medium">
-                          Không có đề xuất nào trong danh mục này. Kho hàng hiện tại an toàn!
+                          {t("inventory.ai.emptyFilter")}
                         </div>
                       ) : (
                         <div className="space-y-3">
                           {visibleRestockList.map((item: any) => {
                             const isApproved = approvedItems.some(i => i.sku === item.sku);
                             const isExpanded = expandedItemSku === item.sku;
-                            
+
                             let priorityColor = "bg-slate-100 text-slate-700 border-slate-200";
                             if (item.priority === "HIGH") priorityColor = "bg-red-50 text-red-700 border-red-100";
                             else if (item.priority === "MEDIUM") priorityColor = "bg-amber-50 text-amber-700 border-amber-100";
 
                             const rawAvgDailySales = Number(item.avgDailySales ?? 0);
-                            const avgDailySales = rawAvgDailySales > 0 
-                              ? rawAvgDailySales 
+                            const avgDailySales = rawAvgDailySales > 0
+                              ? rawAvgDailySales
                               : (item.soldLast30Days > 0 ? item.soldLast30Days / 30 : 0);
                             const predictedDailySales = Number(item.predictedDailySales ?? 0);
                             const dailySales = predictedDailySales > 0 ? predictedDailySales : avgDailySales;
                             const expectedSales = Math.ceil(dailySales * forecastDays);
 
                             let stockCoverageLabel = "";
+                            const daysCovered = (item.currentStock > 0 && dailySales > 0) ? Math.floor(item.currentStock / dailySales) : null;
                             if (item.currentStock <= 0) {
-                              stockCoverageLabel = "0 ngày";
-                            } else if (dailySales <= 0) {
-                              stockCoverageLabel = "Chưa xác định";
+                              stockCoverageLabel = t("inventory.ai.coverageOut");
+                            } else if (daysCovered !== null) {
+                              if (daysCovered > 180) {
+                                stockCoverageLabel = t("inventory.ai.coverageOver180");
+                              } else {
+                                stockCoverageLabel = t("inventory.ai.coverageDays", { days: daysCovered });
+                              }
                             } else {
-                              stockCoverageLabel = `~${Math.floor(item.currentStock / dailySales)} ngày`;
+                              if (item.currentStock < item.minimumStock) {
+                                stockCoverageLabel = t("inventory.ai.belowSafe");
+                              } else {
+                                stockCoverageLabel = t("inventory.ai.noSales");
+                              }
                             }
+
+                            // AI Guardrail: Nếu tồn kho đã vượt tối thiểu và đủ bán > 60 ngày (hoặc chưa phát sinh bán nhưng đã vượt tối thiểu)
+                            const isStockAmple = item.currentStock >= item.minimumStock && (daysCovered === null || daysCovered > 60);
+                            const effectiveRestockQty = isStockAmple ? 0 : item.suggestedRestockQuantity;
 
                             let typeBadge = null;
                             const hasSales = item.soldLast7Days > 0 || item.soldLast30Days > 0;
-                            
+
                             if (item.seasonName) {
-                              typeBadge = <span className="bg-emerald-50 text-emerald-700 border-emerald-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">Sắp hot theo mùa</span>;
+                              typeBadge = <span className="bg-emerald-50 text-emerald-700 border-emerald-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">{t("inventory.ai.seasonalBadge")}</span>;
                             } else {
                               if (!hasSales) {
-                                typeBadge = <span className="bg-slate-100 text-slate-500 border-slate-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">Chưa đủ dữ liệu</span>;
+                                typeBadge = <span className="bg-slate-100 text-slate-500 border-slate-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">{t("inventory.ai.noDataBadge")}</span>;
                               } else {
                                 if (item.recommendationType === "LOW_STOCK") {
-                                  typeBadge = <span className="bg-red-50 text-red-700 border-red-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">Tồn thấp</span>;
+                                  typeBadge = <span className="bg-red-50 text-red-700 border-red-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">{t("inventory.ai.lowStock")}</span>;
                                 } else if (item.recommendationType === "CATEGORY_MOMENTUM") {
-                                  typeBadge = <span className="bg-blue-50 text-blue-700 border-blue-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">Danh mục tăng</span>;
+                                  typeBadge = <span className="bg-blue-50 text-blue-700 border-blue-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">{t("inventory.ai.categoryMomentum")}</span>;
                                 } else {
-                                  typeBadge = <span className="bg-orange-50 text-orange-700 border-orange-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">Xu hướng tăng</span>;
+                                  typeBadge = <span className="bg-orange-50 text-orange-700 border-orange-200 px-1.5 py-0.5 text-[8px] font-bold rounded border uppercase">{t("inventory.ai.risingTrend")}</span>;
                                 }
                               }
                             }
@@ -834,7 +873,7 @@ export default function InventoryPage() {
                                     {item.imageUrl ? (
                                       <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
                                     ) : (
-                                      <span className="text-[10px] text-slate-400 font-bold">NO IMG</span>
+                                      <span className="text-[10px] text-slate-400 font-bold">{t("inventory.ai.noImage")}</span>
                                     )}
                                   </div>
 
@@ -849,19 +888,19 @@ export default function InventoryPage() {
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-1.5 shrink-0">
-                                        {item.suggestedRestockQuantity <= 0 ? (
+                                        {effectiveRestockQty <= 0 ? (
                                           <span className="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 text-[9px] font-bold rounded-full uppercase">
-                                            Chưa cần nhập
+                                            {t("inventory.ai.noRestock")}
                                           </span>
                                         ) : (
                                           <span className={`px-2 py-0.5 text-[9px] font-bold rounded-full border uppercase ${priorityColor}`}>
-                                            {item.priority}
+                                            {t(`priority.${item.priority}`)}
                                           </span>
                                         )}
                                         {isApproved && (
                                           <span className="bg-emerald-100 text-emerald-800 border-emerald-200 px-2 py-0.5 text-[9px] font-bold rounded-full border flex items-center gap-0.5">
                                             <Check className="h-2.5 w-2.5 stroke-[3]" />
-                                            Đã duyệt
+                                            {t("inventory.ai.approved")}
                                           </span>
                                         )}
                                       </div>
@@ -869,72 +908,69 @@ export default function InventoryPage() {
 
                                     {/* Stats grid */}
                                     <div className="grid grid-cols-3 gap-2 pt-2 text-center border-t border-slate-100">
-                                      <div className="bg-slate-50 rounded px-1 py-1">
-                                        <p className="text-[8px] font-semibold text-slate-400 uppercase">Tồn / T.Thiểu</p>
-                                        <p className="text-xs font-black text-slate-700 mt-0.5">{item.currentStock} / {item.minimumStock}</p>
+                                      <div className="bg-slate-50/80 rounded-lg px-2 py-1.5 border border-slate-100">
+                                        <p className="text-[10px] font-semibold text-slate-400">{t("inventory.ai.stockMinimum")}</p>
+                                        <p className="text-xs font-bold text-slate-800 mt-0.5">{item.currentStock} / {item.minimumStock} SP</p>
                                       </div>
-                                      <div className="bg-slate-50 rounded px-1 py-1">
-                                        <p className="text-[8px] font-semibold text-slate-400 uppercase">Bán 30 ngày</p>
-                                        <p className="text-xs font-black text-slate-700 mt-0.5">{item.soldLast30Days}</p>
+                                      <div className="bg-slate-50/80 rounded-lg px-2 py-1.5 border border-slate-100">
+                                        <p className="text-[10px] font-semibold text-slate-400">{t("inventory.ai.sold30")}</p>
+                                        <p className="text-xs font-bold text-slate-800 mt-0.5">{item.soldLast30Days} SP</p>
                                       </div>
-                                      <div className="bg-slate-50 rounded px-1 py-1">
-                                        <p className="text-[8px] font-semibold text-slate-400 uppercase">Bán 7 ngày</p>
-                                        <p className="text-xs font-black text-slate-700 mt-0.5">{item.soldLast7Days || 0}</p>
+                                      <div className="bg-slate-50/80 rounded-lg px-2 py-1.5 border border-slate-100">
+                                        <p className="text-[10px] font-semibold text-slate-400">{t("inventory.ai.sold7")}</p>
+                                        <p className="text-xs font-bold text-slate-800 mt-0.5">{item.soldLast7Days || 0} SP</p>
                                       </div>
-                                      <div className="bg-slate-50 rounded px-1 py-1">
-                                        <p className="text-[8px] font-semibold text-slate-400 uppercase">Dự kiến bán ({forecastDays} ngày)</p>
-                                        <p className="text-xs font-black text-slate-700 mt-0.5">~ {expectedSales} SP</p>
+                                      <div className="bg-slate-50/80 rounded-lg px-2 py-1.5 border border-slate-100">
+                                        <p className="text-[10px] font-semibold text-slate-400">{t("inventory.ai.expectedSales", { days: forecastDays })}</p>
+                                        <p className="text-xs font-bold text-slate-800 mt-0.5">~ {expectedSales} SP</p>
                                       </div>
-                                      <div className="bg-slate-50 rounded px-1 py-1">
-                                        <p className="text-[8px] font-semibold text-slate-400 uppercase flex items-center justify-center gap-0.5">
-                                          <Hourglass className="h-2.5 w-2.5 text-slate-400 shrink-0" />
-                                          Đủ bán trong
+                                      <div className="bg-slate-50/80 rounded-lg px-2 py-1.5 border border-slate-100">
+                                        <p className="text-[10px] font-semibold text-slate-400">{t("inventory.ai.coverage")}</p>
+                                        <p className="text-xs font-bold text-slate-800 mt-0.5">{stockCoverageLabel}</p>
+                                      </div>
+                                      <div className={`${effectiveRestockQty > 0 ? 'bg-emerald-50/80 border-emerald-200/80' : 'bg-slate-50/80 border-slate-100'} rounded-lg px-2 py-1.5 border`}>
+                                        <p className={`text-[10px] font-semibold ${effectiveRestockQty > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+                                          {effectiveRestockQty > 0 ? t("inventory.ai.restockAdvice") : t("inventory.ai.recommendation")}
                                         </p>
-                                        <p className="text-xs font-black text-slate-700 mt-0.5">{stockCoverageLabel}</p>
-                                      </div>
-                                      <div className={`${item.suggestedRestockQuantity > 0 ? 'bg-teal-50' : 'bg-slate-50'} rounded px-1 py-1`}>
-                                        <p className={`text-[8px] font-bold ${item.suggestedRestockQuantity > 0 ? 'text-teal-600' : 'text-slate-500'} uppercase`}>
-                                          {item.suggestedRestockQuantity > 0 ? "Khuyên Nhập" : "Khuyến nghị"}
-                                        </p>
-                                        <p className={`text-xs font-black ${item.suggestedRestockQuantity > 0 ? 'text-teal-700' : 'text-slate-700'} mt-0.5`}>
-                                          {item.suggestedRestockQuantity > 0 ? item.suggestedRestockQuantity : "Theo dõi"}
+                                        <p className={`text-xs font-extrabold ${effectiveRestockQty > 0 ? 'text-emerald-800' : 'text-slate-700'} mt-0.5`}>
+                                          {effectiveRestockQty > 0 ? `${effectiveRestockQty} ${t("inventory.ai.productUnit")}` : t("inventory.ai.stockEnough")}
                                         </p>
                                       </div>
                                     </div>
 
                                     {/* Reason */}
                                     <p className="text-xs text-slate-500 pt-2 flex items-start gap-1">
-                                      <span className="font-bold text-slate-700 shrink-0">Lý do:</span>
+                                      <span className="font-bold text-slate-700 shrink-0">{t("inventory.ai.reason")}</span>
                                       <span className="italic text-slate-600">{item.reason}</span>
                                     </p>
 
                                     {/* Action Row */}
                                     <div className="flex items-center justify-between pt-3 gap-2">
-                                      <Button 
-                                        variant="ghost" 
+                                      <Button
+                                        variant="ghost"
                                         size="sm"
                                         type="button"
                                         onClick={() => setExpandedItemSku(isExpanded ? null : item.sku)}
                                         className="text-xs text-teal-600 hover:text-teal-700 p-0 h-auto flex items-center gap-0.5 hover:bg-transparent"
                                       >
                                         {isExpanded ? <ChevronUp className="h-4 w-4 text-teal-600" /> : <ChevronDown className="h-4 w-4 text-teal-600" />}
-                                        {isExpanded ? "Thu gọn phân tích" : "Xem AI phân tích chi tiết"}
+                                        {isExpanded ? t("inventory.ai.collapse") : t("inventory.ai.viewDetail")}
                                       </Button>
 
                                       <div className="flex items-center gap-2">
-                                        {item.suggestedRestockQuantity > 0 ? (
+                                        {effectiveRestockQty > 0 ? (
                                           <>
-                                            <Button 
-                                              variant="outline" 
+                                            <Button
+                                              variant="outline"
                                               size="sm"
                                               type="button"
                                               onClick={() => handleDeclineItem(item)}
                                               className="text-xs border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 h-8 px-2.5 rounded-lg flex items-center gap-1 transition-colors"
                                             >
                                               <X className="h-3.5 w-3.5" />
-                                              Từ chối
+                                              {t("inventory.ai.decline")}
                                             </Button>
-                                            <Button 
+                                            <Button
                                               variant="outline"
                                               size="sm"
                                               type="button"
@@ -943,19 +979,19 @@ export default function InventoryPage() {
                                               className={`text-xs h-8 px-2.5 rounded-lg flex items-center gap-1 transition-colors ${isApproved ? 'border-slate-200 bg-slate-50 text-slate-400' : 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800'}`}
                                             >
                                               <Check className="h-3.5 w-3.5" />
-                                              Duyệt
+                                              {t("inventory.ai.approve")}
                                             </Button>
                                           </>
                                         ) : (
-                                          <Button 
-                                            variant="outline" 
+                                          <Button
+                                            variant="outline"
                                             size="sm"
                                             type="button"
                                             onClick={() => handleDeclineItem(item)}
                                             className="text-xs border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 h-8 px-2.5 rounded-lg flex items-center gap-1 transition-colors"
                                           >
                                             <EyeOff className="h-3.5 w-3.5" />
-                                            Ẩn theo dõi
+                                            {t("inventory.ai.hide")}
                                           </Button>
                                         )}
                                       </div>
@@ -965,59 +1001,82 @@ export default function InventoryPage() {
                                 </div>
 
                                 {/* Expanded detailed analysis section */}
-                                {isExpanded && (
-                                  <div className="bg-slate-50/80 border-t border-slate-100 p-4 text-xs space-y-3">
-                                    <div className="space-y-1">
-                                      <p className="font-bold text-slate-700 uppercase text-[9px]">Quyết định nhập</p>
-                                      <p className="text-slate-600 font-medium">{item.detailAnalysis.decision}</p>
+                                {isExpanded && (() => {
+                                  const isNoRestockNeeded = effectiveRestockQty <= 0;
+                                  const decisionText = isNoRestockNeeded
+                                    ? t("inventory.ai.noRestockDecision", { current: item.currentStock })
+                                    : item.detailAnalysis.decision;
+                                  const mainReasonsList = isNoRestockNeeded
+                                    ? [
+                                        t("inventory.ai.stockAboveMinimum", { current: item.currentStock, minimum: item.minimumStock }),
+                                        t("inventory.ai.coverageLong", { coverage: stockCoverageLabel }),
+                                        t("inventory.ai.salesStable"),
+                                      ]
+                                    : item.detailAnalysis.mainReasons;
+                                  const risksList = isNoRestockNeeded
+                                    ? [t("inventory.ai.overstockRisk")]
+                                    : item.detailAnalysis.risks;
+                                  const actionPlanList = isNoRestockNeeded
+                                    ? [
+                                        t("inventory.ai.noPurchaseNow"),
+                                        t("inventory.ai.monitorDemand"),
+                                      ]
+                                    : item.detailAnalysis.actionPlan;
+
+                                  return (
+                                    <div className="bg-slate-50/80 border-t border-slate-100 p-4 text-xs space-y-3">
+                                      <div className="space-y-1">
+                                        <p className="font-bold text-slate-700 uppercase text-[9px]">{t("inventory.ai.decision")}</p>
+                                        <p className="text-slate-600 font-medium">{decisionText}</p>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <p className="font-bold text-slate-700 uppercase text-[9px]">{t("inventory.ai.mainReasons")}</p>
+                                        <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
+                                          {mainReasonsList.map((r: string, idx: number) => (
+                                            <li key={idx}>{r}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <p className="font-bold text-slate-700 uppercase text-[9px]">{t("inventory.ai.risks")}</p>
+                                        <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
+                                          {risksList.map((r: string, idx: number) => (
+                                            <li key={idx}>{r}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                      <div className="space-y-1">
+                                        <p className="font-bold text-slate-700 uppercase text-[9px]">{t("inventory.ai.actionPlan")}</p>
+                                        <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
+                                          {actionPlanList.map((r: string, idx: number) => (
+                                            <li key={idx}>{r}</li>
+                                          ))}
+                                        </ul>
+                                      </div>
+                                      <div className="space-y-1 pt-2 border-t border-slate-200/60 mt-2">
+                                        <p className="font-bold text-slate-700 uppercase text-[9px]">{t("inventory.ai.signals")}</p>
+                                        <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
+                                          <li title={t("inventory.ai.metricDetail", { value: formatPercent(item.trendRatio) })}>
+                                            {t("inventory.ai.trendSignal")} {
+                                              Math.round((item.trendRatio - 1) * 100) > 0
+                                                ? t("inventory.ai.trendUp")
+                                                : Math.round((item.trendRatio - 1) * 100) < 0
+                                                  ? t("inventory.ai.trendDown")
+                                                  : t("inventory.ai.trendStable")
+                                            }
+                                          </li>
+                                          <li title={t("inventory.ai.metricDetail", { value: formatPercent(item.seasonBoost) })}>
+                                            {t("inventory.ai.seasonSignal")} {
+                                              item.seasonName
+                                                ? t("inventory.ai.seasonProduct", { season: item.seasonName, months: item.seasonMonths, reason: item.seasonReason })
+                                                : t("inventory.ai.noSeason")
+                                            }
+                                          </li>
+                                        </ul>
+                                      </div>
                                     </div>
-                                    <div className="space-y-1">
-                                      <p className="font-bold text-slate-700 uppercase text-[9px]">Lý do chính</p>
-                                      <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
-                                        {item.detailAnalysis.mainReasons.map((r: string, idx: number) => (
-                                          <li key={idx}>{r}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <p className="font-bold text-slate-700 uppercase text-[9px]">Rủi ro cần kiểm soát</p>
-                                      <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
-                                        {item.detailAnalysis.risks.map((r: string, idx: number) => (
-                                          <li key={idx}>{r}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                    <div className="space-y-1">
-                                      <p className="font-bold text-slate-700 uppercase text-[9px]">Kế hoạch hành động</p>
-                                      <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
-                                        {item.detailAnalysis.actionPlan.map((r: string, idx: number) => (
-                                          <li key={idx}>{r}</li>
-                                        ))}
-                                      </ul>
-                                    </div>
-                                    <div className="space-y-1 pt-2 border-t border-slate-200/60 mt-2">
-                                      <p className="font-bold text-slate-700 uppercase text-[9px]">Tín hiệu dự báo</p>
-                                      <ul className="list-disc pl-4 space-y-0.5 text-slate-600 font-medium">
-                                        <li title={`Chỉ số chi tiết: ${formatPercent(item.trendRatio)}`}>
-                                          Xu hướng gần đây: {
-                                            Math.round((item.trendRatio - 1) * 100) > 0 
-                                              ? "Nhu cầu đang tăng so với giai đoạn trước." 
-                                              : Math.round((item.trendRatio - 1) * 100) < 0 
-                                                ? "Nhu cầu đang giảm so với giai đoạn trước." 
-                                                : "Chưa ghi nhận biến động rõ ràng."
-                                          }
-                                        </li>
-                                        <li title={`Chỉ số chi tiết: ${formatPercent(item.seasonBoost)}`}>
-                                          Yếu tố mùa vụ: {
-                                            item.seasonName
-                                              ? `Sản phẩm phù hợp với ${item.seasonName} (${item.seasonMonths}). ${item.seasonReason}`
-                                              : "Chưa có mùa vụ rõ ràng cho sản phẩm này."
-                                          }
-                                        </li>
-                                      </ul>
-                                    </div>
-                                  </div>
-                                )}
+                                  );
+                                })()}
                               </div>
                             );
                           })}
@@ -1027,7 +1086,7 @@ export default function InventoryPage() {
 
                   </div>
                 )}
-                
+
                 {/* Empty State */}
                 {!aiData && !isAnalyzing && (
                   <div className="bg-white rounded-xl border border-slate-200 p-12 text-center flex flex-col items-center justify-center space-y-4">
@@ -1035,9 +1094,9 @@ export default function InventoryPage() {
                       <Bot className="h-8 w-8 animate-bounce" />
                     </div>
                     <div className="space-y-1">
-                      <h4 className="font-bold text-slate-800 text-sm">Chưa có kết quả phân tích</h4>
+                      <h4 className="font-bold text-slate-800 text-sm">{t("inventory.ai.emptyTitle")}</h4>
                       <p className="text-xs text-slate-400 max-w-xs mx-auto">
-                        Nhập số ngày dự phòng hàng hóa mong muốn ở trên và nhấn nút Phân tích mới để bắt đầu.
+                        {t("inventory.ai.emptyDescription")}
                       </p>
                     </div>
                   </div>
@@ -1048,15 +1107,15 @@ export default function InventoryPage() {
               {/* Footer */}
               <div className="bg-white border-t border-slate-100 p-4 flex justify-between items-center px-6">
                 <div className="text-xs text-slate-500 font-medium">
-                  Đã duyệt: <span className="font-bold text-emerald-700">{approvedItems.length}</span> đề xuất
+                  {t("inventory.ai.approvedCount", { count: approvedItems.length })}
                 </div>
-                <Button 
+                <Button
                   onClick={handleCreatePurchaseFromApproved}
                   disabled={approvedItems.length === 0}
                   className={`font-bold flex items-center gap-1.5 shadow-md px-6 py-2.5 rounded-xl transition-all duration-200 ${approvedItems.length === 0 ? 'bg-slate-100 text-slate-400 border border-slate-200' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
                 >
                   <Plus className="h-4 w-4" />
-                  Tạo phiếu nhập từ đề xuất đã duyệt
+                  {t("inventory.ai.createPurchase")}
                 </Button>
               </div>
 

@@ -1,0 +1,1322 @@
+{
+  "exportedAt": "2026-08-03T16:09:03.014Z",
+  "totalCategories": 8,
+  "totalSuppliers": 14,
+  "totalProducts": 39,
+  "categories": [
+    {
+      "id": 1,
+      "name": "Thiết bị nhà bếp (KIT)",
+      "description": "Nồi cơm điện, bếp điện, máy xay",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-27T14:16:45.553Z",
+      "updatedAt": "2026-06-28T06:36:14.094Z"
+    },
+    {
+      "id": 2,
+      "name": "Thiết bị làm sạch (CARE)",
+      "description": "Máy hút bụi, cây lau nhà",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-27T14:16:45.553Z",
+      "updatedAt": "2026-06-28T06:36:59.060Z"
+    },
+    {
+      "id": 3,
+      "name": "Đồ dùng gia đình (UTIL)",
+      "description": "Hộp đựng, kệ và vật dụng gia đình",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-27T14:16:45.553Z",
+      "updatedAt": "2026-06-28T06:37:05.483Z"
+    },
+    {
+      "id": 4,
+      "name": "Dụng cụ nấu ăn (COOK)",
+      "description": "Xoong nồi, chảo, hộp đựng thực phẩm, dao thớt, bát đĩa.",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T06:37:57.754Z",
+      "updatedAt": "2026-06-28T06:38:26.196Z"
+    },
+    {
+      "id": 5,
+      "name": "Thiết bị làm mát (COOL)",
+      "description": "Quạt máy, quạt hơi nước, máy lọc không khí.",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T06:38:06.646Z",
+      "updatedAt": "2026-06-28T06:38:33.292Z"
+    },
+    {
+      "id": 6,
+      "name": "Thiết bị điện (ELEC)",
+      "description": "Ổ cắm điện, bóng đèn LED, đèn bàn, vợt muỗi.",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T06:38:12.823Z",
+      "updatedAt": "2026-06-28T06:38:39.903Z"
+    },
+    {
+      "id": 7,
+      "name": "Đồ phòng tắm (BATH)",
+      "description": "Kệ dán tường, vòi sen, thảm đá, dụng cụ cọ rửa.",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T06:38:18.336Z",
+      "updatedAt": "2026-06-28T06:38:46.052Z"
+    },
+    {
+      "id": 8,
+      "name": "Khác (OTHER)",
+      "description": "Các sản phẩm gia dụng nhỏ lẻ, hàng quà tặng kèm, hoặc sản phẩm chưa được phân loại vào 7 nhóm trên.",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:49:42.296Z",
+      "updatedAt": "2026-06-28T14:49:42.296Z"
+    }
+  ],
+  "suppliers": [
+    {
+      "id": 1,
+      "name": "Công ty Gia Dụng Việt",
+      "phone": "0901234567",
+      "email": null,
+      "taxCode": null,
+      "address": "TP. Hồ Chí Minh",
+      "status": "INACTIVE",
+      "createdAt": "2026-06-27T14:16:45.556Z",
+      "updatedAt": "2026-06-28T14:37:05.927Z"
+    },
+    {
+      "id": 2,
+      "name": "Nhà cung cấp Home Star",
+      "phone": "0907654321",
+      "email": null,
+      "taxCode": null,
+      "address": "Cần Thơ",
+      "status": "INACTIVE",
+      "createdAt": "2026-06-27T14:16:45.556Z",
+      "updatedAt": "2026-06-28T14:36:50.538Z"
+    },
+    {
+      "id": 3,
+      "name": "Công ty Cổ phần Tập đoàn SUNHOUSE",
+      "phone": "02437366666",
+      "email": "info@sunhouse.com.vn",
+      "taxCode": null,
+      "address": "Tầng 12, Tòa nhà Richy Tower, Số 35 Mạc Thái Tổ, Yên Hòa, Cầu Giấy, Hà Nội",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:43:02.222Z",
+      "updatedAt": "2026-06-28T14:43:02.222Z"
+    },
+    {
+      "id": 4,
+      "name": "Tập đoàn KANGAROO",
+      "phone": "02436283188",
+      "email": "info@kangaroo.vn",
+      "taxCode": null,
+      "address": "Tầng 5, Tòa nhà Ocean Park, Số 1 Đào Duy Anh, Phương Mai, Đống Đa, Hà Nội",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:43:34.065Z",
+      "updatedAt": "2026-06-28T14:43:34.065Z"
+    },
+    {
+      "id": 5,
+      "name": "Công ty TNHH PANASONIC Việt Nam",
+      "phone": "02438141160",
+      "email": "customer_care@vn.panasonic.com",
+      "taxCode": null,
+      "address": "Lô J1-J2, Khu công nghiệp Thăng Long, Kim Chung, Đông Anh, Hà Nội",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:44:08.003Z",
+      "updatedAt": "2026-06-28T14:44:08.003Z"
+    },
+    {
+      "id": 6,
+      "name": "Công ty TNHH PHILIPS Việt Nam",
+      "phone": "1800599988",
+      "email": "support.vietnam@philips.com",
+      "taxCode": null,
+      "address": "Tầng 12, Tòa nhà A&B Tower, 76A Lê Lai, Phường Bến Thành, Quận 1, TP. Hồ Chí Minh",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:44:59.758Z",
+      "updatedAt": "2026-06-28T14:44:59.758Z"
+    },
+    {
+      "id": 7,
+      "name": "Công ty TNHH LOCK&LOCK Việt Nam",
+      "phone": "02854135756",
+      "email": "info@locknlock.com",
+      "taxCode": null,
+      "address": "Tầng 4, Tòa nhà Mapletree Business Centre, 1060 Nguyễn Văn Linh, Tân Phong, Quận 7, TP. Hồ Chí Minh",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:45:19.701Z",
+      "updatedAt": "2026-06-28T14:45:19.701Z"
+    },
+    {
+      "id": 8,
+      "name": "Công ty TNHH XIAOMI Việt Nam",
+      "phone": "1800400410",
+      "email": "service.vn@support.mi.com",
+      "taxCode": null,
+      "address": "Tầng 18, Tòa nhà Bitexco Financial Tower, 2 Hải Triều, Bến Nghé, Quận 1, TP. Hồ Chí Minh",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:45:38.315Z",
+      "updatedAt": "2026-06-28T14:45:38.315Z"
+    },
+    {
+      "id": 9,
+      "name": "TEFAL Việt Nam",
+      "phone": "02839390393",
+      "email": "seb.vietnam@groupeseb.com",
+      "taxCode": null,
+      "address": "Tầng 15, Tòa nhà Centec Tower, 72-74 Nguyễn Thị Minh Khai, Phường 6, Quận 3, TP. Hồ Chí Minh",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:45:57.564Z",
+      "updatedAt": "2026-06-28T14:45:57.564Z"
+    },
+    {
+      "id": 10,
+      "name": "Công ty Cổ phần TARA",
+      "phone": "1800545494",
+      "email": "support@bluestone.com.vn",
+      "taxCode": null,
+      "address": "15/2 Đường C1, Phường 13, Quận Tân Bình, TP. Hồ Chí Minh",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:46:23.658Z",
+      "updatedAt": "2026-06-28T14:46:23.658Z"
+    },
+    {
+      "id": 11,
+      "name": "Công ty TNHH Điện Tích Hợp Việt-Nhật (SANAKY)",
+      "phone": "19006905",
+      "email": "info@sanaky.com.vn",
+      "taxCode": null,
+      "address": "Lô B2-26-27, Đường số 2, KCN Tân Đông Hiệp B, Dĩ An, Tỉnh Bình Dương",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:46:54.213Z",
+      "updatedAt": "2026-06-28T14:46:54.213Z"
+    },
+    {
+      "id": 12,
+      "name": "Công ty Cổ phần Bóng đèn Phích nước RẠNG ĐÔNG",
+      "phone": "02438584310",
+      "email": "cskh@rangdong.com.vn",
+      "taxCode": null,
+      "address": "Số 87-89 Hạ Đình, Thanh Xuân Trung, Thanh Xuân, Hà Nội",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:47:09.353Z",
+      "updatedAt": "2026-06-28T14:47:09.353Z"
+    },
+    {
+      "id": 13,
+      "name": "Thương hiệu nhựa cao cấp INOCHI",
+      "phone": "18006580",
+      "email": "info@tanphuvn.com",
+      "taxCode": null,
+      "address": "Số 314 Lũy Bán Bích, Phường Hòa Thạnh, Quận Tân Phú, TP. Hồ Chí Minh",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:47:29.068Z",
+      "updatedAt": "2026-06-28T14:47:29.068Z"
+    },
+    {
+      "id": 14,
+      "name": "Nhà cung cấp lẻ",
+      "phone": "0999999999",
+      "email": "ncc.khac@homexpos.vn",
+      "taxCode": null,
+      "address": "Thị trường tự do / Nhà cung cấp vãng lai Việt Nam",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T14:50:30.870Z",
+      "updatedAt": "2026-06-28T14:50:30.870Z"
+    }
+  ],
+  "products": [
+    {
+      "id": 1,
+      "sku": "NOICOM001",
+      "name": "Nồi cơm điện Homex 1.8L",
+      "description": "Nồi cơm điện dung tích 1.8L phù hợp gia đình 3-5 người",
+      "categoryId": 1,
+      "supplierId": 1,
+      "costPrice": "5500",
+      "salePrice": "7900",
+      "originalPrice": null,
+      "stockQuantity": 20,
+      "minStock": 5,
+      "warrantyMonths": 12,
+      "qrCode": "NOICOM001",
+      "barcode": null,
+      "imageUrl": null,
+      "status": "INACTIVE",
+      "createdAt": "2026-06-27T14:16:45.560Z",
+      "updatedAt": "2026-07-03T14:23:45.413Z",
+      "category": {
+        "id": 1,
+        "name": "Thiết bị nhà bếp (KIT)"
+      },
+      "supplier": {
+        "id": 1,
+        "name": "Công ty Gia Dụng Việt"
+      }
+    },
+    {
+      "id": 2,
+      "sku": "MAYXAY001",
+      "name": "Máy xay sinh tố Homex",
+      "description": "Máy xay sinh tố gia đình công suất 350W",
+      "categoryId": 1,
+      "supplierId": 1,
+      "costPrice": "4200",
+      "salePrice": "6500",
+      "originalPrice": null,
+      "stockQuantity": 15,
+      "minStock": 4,
+      "warrantyMonths": 12,
+      "qrCode": "MAYXAY001",
+      "barcode": null,
+      "imageUrl": null,
+      "status": "INACTIVE",
+      "createdAt": "2026-06-27T14:16:45.560Z",
+      "updatedAt": "2026-07-03T14:23:45.412Z",
+      "category": {
+        "id": 1,
+        "name": "Thiết bị nhà bếp (KIT)"
+      },
+      "supplier": {
+        "id": 1,
+        "name": "Công ty Gia Dụng Việt"
+      }
+    },
+    {
+      "id": 3,
+      "sku": "HUTBUI001",
+      "name": "Máy hút bụi mini Home Star",
+      "description": "Máy hút bụi mini dùng cho phòng ngủ và phòng khách",
+      "categoryId": 2,
+      "supplierId": 2,
+      "costPrice": "7000",
+      "salePrice": "9900",
+      "originalPrice": null,
+      "stockQuantity": 8,
+      "minStock": 3,
+      "warrantyMonths": 18,
+      "qrCode": "HUTBUI001",
+      "barcode": null,
+      "imageUrl": null,
+      "status": "INACTIVE",
+      "createdAt": "2026-06-27T14:16:45.560Z",
+      "updatedAt": "2026-07-03T14:23:45.411Z",
+      "category": {
+        "id": 2,
+        "name": "Thiết bị làm sạch (CARE)"
+      },
+      "supplier": {
+        "id": 2,
+        "name": "Nhà cung cấp Home Star"
+      }
+    },
+    {
+      "id": 4,
+      "sku": "BATH-NCDAT-0001",
+      "name": "Nồi cơm điện Homex API Test 1782630814676",
+      "description": null,
+      "categoryId": 7,
+      "supplierId": 1,
+      "costPrice": "5000",
+      "salePrice": "7500",
+      "originalPrice": "9500",
+      "stockQuantity": 10,
+      "minStock": 2,
+      "warrantyMonths": 12,
+      "qrCode": "BATH-NCDAT-0001",
+      "barcode": "8938563081467",
+      "imageUrl": null,
+      "status": "INACTIVE",
+      "createdAt": "2026-06-28T07:13:34.709Z",
+      "updatedAt": "2026-07-03T14:23:45.410Z",
+      "category": {
+        "id": 7,
+        "name": "Đồ phòng tắm (BATH)"
+      },
+      "supplier": {
+        "id": 1,
+        "name": "Công ty Gia Dụng Việt"
+      }
+    },
+    {
+      "id": 5,
+      "sku": "BATH-MLKKSS-0001",
+      "name": "Máy lọc không khí SKU Sequence Test 1782630814676",
+      "description": null,
+      "categoryId": 7,
+      "supplierId": 1,
+      "costPrice": "6000",
+      "salePrice": "8200",
+      "originalPrice": null,
+      "stockQuantity": 2,
+      "minStock": 1,
+      "warrantyMonths": 12,
+      "qrCode": "BATH-MLKKSS-0001",
+      "barcode": null,
+      "imageUrl": null,
+      "status": "INACTIVE",
+      "createdAt": "2026-06-28T07:13:34.777Z",
+      "updatedAt": "2026-07-03T14:23:45.409Z",
+      "category": {
+        "id": 7,
+        "name": "Đồ phòng tắm (BATH)"
+      },
+      "supplier": {
+        "id": 1,
+        "name": "Công ty Gia Dụng Việt"
+      }
+    },
+    {
+      "id": 6,
+      "sku": "BATH-MLKKSS-0002",
+      "name": "Máy lọc không khí SKU Sequence Test 1782630814676",
+      "description": null,
+      "categoryId": 7,
+      "supplierId": 1,
+      "costPrice": "6100",
+      "salePrice": "8300",
+      "originalPrice": null,
+      "stockQuantity": 3,
+      "minStock": 1,
+      "warrantyMonths": 12,
+      "qrCode": "BATH-MLKKSS-0002",
+      "barcode": null,
+      "imageUrl": null,
+      "status": "INACTIVE",
+      "createdAt": "2026-06-28T07:13:34.788Z",
+      "updatedAt": "2026-07-03T14:23:45.406Z",
+      "category": {
+        "id": 7,
+        "name": "Đồ phòng tắm (BATH)"
+      },
+      "supplier": {
+        "id": 1,
+        "name": "Công ty Gia Dụng Việt"
+      }
+    },
+    {
+      "id": 7,
+      "sku": "OTHER-NTKD-0001",
+      "name": "Nước tinh khiết Dasani 1.5 lít",
+      "description": "Nước tinh khiết Dasani 1.5 lít, thuộc nhóm Khác (OTHER).",
+      "categoryId": 8,
+      "supplierId": 12,
+      "costPrice": "1000",
+      "salePrice": "2000",
+      "originalPrice": "2500",
+      "stockQuantity": 1,
+      "minStock": 20,
+      "warrantyMonths": 0,
+      "qrCode": "OTHER-NTKD-0001",
+      "barcode": "8935049510857",
+      "imageUrl": "https://photos.icheckcdn.net/iafoERnuiBc1an7Lz1uf-MRogfM2bWzTUqQmQo6zqbM.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T15:12:39.831Z",
+      "updatedAt": "2026-07-03T14:23:45.433Z",
+      "category": {
+        "id": 8,
+        "name": "Khác (OTHER)"
+      },
+      "supplier": {
+        "id": 12,
+        "name": "Công ty Cổ phần Bóng đèn Phích nước RẠNG ĐÔNG"
+      }
+    },
+    {
+      "id": 8,
+      "sku": "COOK-NCDLL-0001",
+      "name": "Nồi cơm điện Lock&Lock 1L",
+      "description": "Nồi cơm điện Lock&Lock 1L",
+      "categoryId": 4,
+      "supplierId": 7,
+      "costPrice": "6000",
+      "salePrice": "8000",
+      "originalPrice": "8800",
+      "stockQuantity": 45,
+      "minStock": 10,
+      "warrantyMonths": 12,
+      "qrCode": "COOK-NCDLL-0001",
+      "barcode": "6944662525690",
+      "imageUrl": "https://photos.icheckcdn.net/NqhwvY1p6UE-0Yd2ybGl7RwE9_lBYNw8rLZob6QVA70.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T15:14:18.500Z",
+      "updatedAt": "2026-07-26T16:47:51.714Z",
+      "category": {
+        "id": 4,
+        "name": "Dụng cụ nấu ăn (COOK)"
+      },
+      "supplier": {
+        "id": 7,
+        "name": "Công ty TNHH LOCK&LOCK Việt Nam"
+      }
+    },
+    {
+      "id": 9,
+      "sku": "KIT-ACC5RG-0001",
+      "name": "Aroma® 6-Cup (Cooked) / 1.5Qt. Rice & Grain Cooker White New ARC-743-1NG",
+      "description": "Aroma® 6-Cup (Cooked) / 1.5Qt. Rice & Grain Cooker White New ARC-743-1NG.",
+      "categoryId": 1,
+      "supplierId": 14,
+      "costPrice": "2000",
+      "salePrice": "2700",
+      "originalPrice": "3000",
+      "stockQuantity": 94,
+      "minStock": 20,
+      "warrantyMonths": 12,
+      "qrCode": "KIT-ACC5RG-0001",
+      "barcode": "021241007436",
+      "imageUrl": "https://images.barcodelookup.com/1202/12028902-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T15:53:49.990Z",
+      "updatedAt": "2026-07-13T16:27:09.882Z",
+      "category": {
+        "id": 1,
+        "name": "Thiết bị nhà bếp (KIT)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 10,
+      "sku": "KIT-ACC2DR-0001",
+      "name": "Aroma® 8-Cup (Cooked) / 2Qt. Digital Rice & Grain Multicooker",
+      "description": "Aroma® 8-Cup (Cooked) / 2Qt. Digital Rice & Grain Multicooker.",
+      "categoryId": 1,
+      "supplierId": 14,
+      "costPrice": "3500",
+      "salePrice": "4700",
+      "originalPrice": "5500",
+      "stockQuantity": 42,
+      "minStock": 10,
+      "warrantyMonths": 12,
+      "qrCode": "KIT-ACC2DR-0001",
+      "barcode": "021241119146",
+      "imageUrl": "https://images.barcodelookup.com/2963/29638645-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:08.382Z",
+      "updatedAt": "2026-07-13T16:26:26.439Z",
+      "category": {
+        "id": 1,
+        "name": "Thiết bị nhà bếp (KIT)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 11,
+      "sku": "KIT-OKEKCT-0001",
+      "name": "Ovente KS960S Electric Kettle, Cordless Tea and Water Heater, Automatic Shut-Off & Boil-Dry Protection, BPA-Free, Stainless Steel, Concealed Heating E",
+      "description": "Ovente KS960S Electric Kettle, Cordless Tea and Water Heater, Automatic Shut-Off & Boil-Dry Protection, BPA-Free, Stainless Steel, Concealed Heating E.",
+      "categoryId": 1,
+      "supplierId": 14,
+      "costPrice": "2500",
+      "salePrice": "3100",
+      "originalPrice": "3500",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 12,
+      "qrCode": "KIT-OKEKCT-0001",
+      "barcode": "814667020635",
+      "imageUrl": "https://images.barcodelookup.com/27371/273711833-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:13.329Z",
+      "updatedAt": "2026-07-03T14:23:45.423Z",
+      "category": {
+        "id": 1,
+        "name": "Thiết bị nhà bếp (KIT)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 12,
+      "sku": "KIT-ETKLCH-0001",
+      "name": "Electric Tea Kettle 1.7 Liter Cordless Hot Boil Water Coffee Stainless Steel",
+      "description": "Electric Tea Kettle 1.7 Liter Cordless Hot Boil Water Coffee Stainless Steel.",
+      "categoryId": 1,
+      "supplierId": 14,
+      "costPrice": "2500",
+      "salePrice": "3400",
+      "originalPrice": "4000",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 12,
+      "qrCode": "KIT-ETKLCH-0001",
+      "barcode": "848837005207",
+      "imageUrl": "https://images.barcodelookup.com/1682/16829793-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:16.947Z",
+      "updatedAt": "2026-07-13T16:30:50.649Z",
+      "category": {
+        "id": 1,
+        "name": "Thiết bị nhà bếp (KIT)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 13,
+      "sku": "CARE-BMHFM-0001",
+      "name": "Bona Motion Hardwood Floor Mop",
+      "description": "Key Features Hardwood floor mop motion Safe for wood,no-residue Sonic motion deep cleaning 4X More cleaning power to remove stuck on messes Hardwood floor cleaner in a 33-ounce,refillable mop cartridge Durable, light-weight design delivers a fine mist to properly clean hardwood floors Refillable cartridge and machine washable microfiber pad Product Description A premium spray mop with sonic motion power that gives an extra cleaning boost so you spend less time on stuck on messes.combines bona's",
+      "categoryId": 2,
+      "supplierId": 14,
+      "costPrice": "4000",
+      "salePrice": "5900",
+      "originalPrice": "6500",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 12,
+      "qrCode": "CARE-BMHFM-0001",
+      "barcode": "778295337902",
+      "imageUrl": "https://images.barcodelookup.com/496/4965138-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:21.023Z",
+      "updatedAt": "2026-07-03T14:23:45.426Z",
+      "category": {
+        "id": 2,
+        "name": "Thiết bị làm sạch (CARE)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 14,
+      "sku": "CARE-RCSRSM-0001",
+      "name": "Rubbermaid Commercial Steel Roller Sponge Mop Bronze Handle W/12 Wide Yellow Sponge 6435BZE",
+      "description": "Rubbermaid Commercial Steel Roller Sponge Mop Bronze Handle W/12 Wide Yellow Sponge 6435BZE.",
+      "categoryId": 2,
+      "supplierId": 14,
+      "costPrice": "2500",
+      "salePrice": "2900",
+      "originalPrice": "3500",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 0,
+      "qrCode": "CARE-RCSRSM-0001",
+      "barcode": "086876034790",
+      "imageUrl": "https://images.barcodelookup.com/387/3871787-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:25.739Z",
+      "updatedAt": "2026-07-13T16:30:50.647Z",
+      "category": {
+        "id": 2,
+        "name": "Thiết bị làm sạch (CARE)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 15,
+      "sku": "CARE-BPFPSM-0001",
+      "name": "BISSELL Power Fresh Pet Steam Mop Hard Floor Steam Cleaner 12\" Cleaning Path White: Electric Floor Steamer, 2 Pads, 3 Steam Settings",
+      "description": "The PowerFresh Pet Steam Mop provides pet parents a safer and easier way to clean their floors. Cleaning with steam sanitizes* floors, eliminating 99.9% of germs and bacteria* using only water. So you don't have to worry about putting down harsh chemicals on your floors. For those tough, dried-on pet messes we all experience on our floors, use the flip-down Easy Scrubber to break up the mess quickly and easily. *When used as directed, using the microfiber pads.",
+      "categoryId": 2,
+      "supplierId": 14,
+      "costPrice": "3000",
+      "salePrice": "4100",
+      "originalPrice": "5000",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 12,
+      "qrCode": "CARE-BPFPSM-0001",
+      "barcode": "011120224221",
+      "imageUrl": "https://images.barcodelookup.com/2342/23422173-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:31.498Z",
+      "updatedAt": "2026-07-03T14:23:45.428Z",
+      "category": {
+        "id": 2,
+        "name": "Thiết bị làm sạch (CARE)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 16,
+      "sku": "CARE-RSVCRB-0001",
+      "name": "Roborock S5 - Vacuum Cleaner - Robotic - Bagless",
+      "description": "Roborock S5 - vacuum cleaner - robotic.",
+      "categoryId": 2,
+      "supplierId": 8,
+      "costPrice": "2400",
+      "salePrice": "2950",
+      "originalPrice": "3500",
+      "stockQuantity": 20,
+      "minStock": 5,
+      "warrantyMonths": 12,
+      "qrCode": "CARE-RSVCRB-0001",
+      "barcode": "606015769194",
+      "imageUrl": "https://images.barcodelookup.com/15610/156105548-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:35.814Z",
+      "updatedAt": "2026-07-03T14:23:45.429Z",
+      "category": {
+        "id": 2,
+        "name": "Thiết bị làm sạch (CARE)"
+      },
+      "supplier": {
+        "id": 8,
+        "name": "Công ty TNHH XIAOMI Việt Nam"
+      }
+    },
+    {
+      "id": 17,
+      "sku": "UTIL-SSBCPS-0001",
+      "name": "Sterilite 85 L Storage Box, Clear Plastic Storage Bin with Snap-on Lid, White 30\" L X 19 1/8\" W X 13 3/8\" H",
+      "description": "Sterilite 85 L Storage Box, Clear Plastic Storage Bin with Snap-on Lid, White 30\" L X 19 1/8\" W X 13 3/8\" H.",
+      "categoryId": 3,
+      "supplierId": 14,
+      "costPrice": "1500",
+      "salePrice": "1800",
+      "originalPrice": "2000",
+      "stockQuantity": 50,
+      "minStock": 10,
+      "warrantyMonths": 0,
+      "qrCode": "UTIL-SSBCPS-0001",
+      "barcode": "073149186683",
+      "imageUrl": "https://images.barcodelookup.com/3192/31923799-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:39.775Z",
+      "updatedAt": "2026-07-03T14:23:45.430Z",
+      "category": {
+        "id": 3,
+        "name": "Đồ dùng gia đình (UTIL)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 18,
+      "sku": "UTIL-SQLSBC-0001",
+      "name": "Sterilite 30 Qt. Latch Storage Box, Clear",
+      "description": "Sterilite's Ultra Latch Storage Box line is ideal for those customers who want the ability to quickly identify contents, from any angle, yet need a durable storage solution. The innovative latch design secures the lid to the base, providing a rugged and comfortable grip surface, while keeping items safely stored inside. The recessed lids allow same size storage boxes to stack neatly on top of each other to use vertical storage space efficiently. The Sterilite 30 Quart Ultra Storage Box is ideal",
+      "categoryId": 3,
+      "supplierId": 14,
+      "costPrice": "700",
+      "salePrice": "1000",
+      "originalPrice": "1100",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 0,
+      "qrCode": "UTIL-SQLSBC-0001",
+      "barcode": "073149985866",
+      "imageUrl": "https://images.barcodelookup.com/5305/53053712-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:44.405Z",
+      "updatedAt": "2026-07-03T14:23:45.430Z",
+      "category": {
+        "id": 3,
+        "name": "Đồ dùng gia đình (UTIL)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 19,
+      "sku": "UTIL-LSBMPP-0001",
+      "name": "LEGO Storage Brick Multi-Pack 3 Piece Bright Red Bright Blue and Bright Yellow",
+      "description": "LEGO storage provides an interesting angle on tidying up - it is like playing. You can actually stack the storage boxes like you are used to with regular LEGO bricks. It gives you a new and exciting way of doing interior decorating as well as the practical purpose of keeping everything tidy. Let the children tidy up with a smile. These oversized LEGO bricks are designed to stack just like the original LEGO bricks. Decorate play build form and have fun with the bricks or keep your LEGO bricks and",
+      "categoryId": 3,
+      "supplierId": 14,
+      "costPrice": "2000",
+      "salePrice": "2700",
+      "originalPrice": "3000",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 0,
+      "qrCode": "UTIL-LSBMPP-0001",
+      "barcode": "887988005667",
+      "imageUrl": "https://images.barcodelookup.com/207/2079186-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:49.620Z",
+      "updatedAt": "2026-07-03T14:23:45.432Z",
+      "category": {
+        "id": 3,
+        "name": "Đồ dùng gia đình (UTIL)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 20,
+      "sku": "UTIL-COLDOS-0001",
+      "name": "Cosco Outdoor Lockable Deliveries Outdoor Storage Box Decor, Beig/Green",
+      "description": "This Cosco Outdoor Lockable Deliveries Outdoor Storage Box Decor is just what you need for any at home deliveries. This Cosco Outdoor Lockable Deliveries Outdoor Storage Box Decor is just what you need for any at home deliveries. BoxGuard prevents.",
+      "categoryId": 3,
+      "supplierId": 14,
+      "costPrice": "4500",
+      "salePrice": "6500",
+      "originalPrice": "7500",
+      "stockQuantity": 50,
+      "minStock": 10,
+      "warrantyMonths": 0,
+      "qrCode": "UTIL-COLDOS-0001",
+      "barcode": "044681882074",
+      "imageUrl": "https://images.barcodelookup.com/15304/153044439-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:54.146Z",
+      "updatedAt": "2026-07-03T14:23:45.446Z",
+      "category": {
+        "id": 3,
+        "name": "Đồ dùng gia đình (UTIL)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 21,
+      "sku": "COOK-FIPSSC-0001",
+      "name": "T-fal Ingenio Preference Stainless Steel Cookware Set 4 Piece Induction Oven Safe 500F RV Detachable Handle",
+      "description": "T-fal Ingenio Preference Stainless Steel Cookware Set 4 Piece Induction Oven Safe 500F RV Detachable Handle.",
+      "categoryId": 4,
+      "supplierId": 9,
+      "costPrice": "4000",
+      "salePrice": "6500",
+      "originalPrice": "7500",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 12,
+      "qrCode": "COOK-FIPSSC-0001",
+      "barcode": "032406067608",
+      "imageUrl": "https://images.barcodelookup.com/65232/652326350-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:17:58.217Z",
+      "updatedAt": "2026-07-03T14:23:45.445Z",
+      "category": {
+        "id": 4,
+        "name": "Dụng cụ nấu ăn (COOK)"
+      },
+      "supplier": {
+        "id": 9,
+        "name": "TEFAL Việt Nam"
+      }
+    },
+    {
+      "id": 22,
+      "sku": "COOK-CQSSPS-0001",
+      "name": "CONCORD 3 Quart Stainless Steel 3 Piece Steamer Cookware Set (INDUCTION COMPATIBLE)",
+      "description": "Size: Overall dimensions: 8.5 Wide x 6.5 Height. TOP TIER: 8.5 Wide x 3 Height. Bottom Pot: 8.5 Wide x 3.5 Height.",
+      "categoryId": 4,
+      "supplierId": 14,
+      "costPrice": "2500",
+      "salePrice": "3000",
+      "originalPrice": "3500",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 12,
+      "qrCode": "COOK-CQSSPS-0001",
+      "barcode": "877769007751",
+      "imageUrl": "https://images.barcodelookup.com/23680/236806210-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:02.514Z",
+      "updatedAt": "2026-07-03T14:23:45.435Z",
+      "category": {
+        "id": 4,
+        "name": "Dụng cụ nấu ăn (COOK)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 23,
+      "sku": "COOK-NFNPCS-0001",
+      "name": "Ninja Foodi NeverStick 8-Piece Cookware Set",
+      "description": "Ninja Foodi NeverStick Premium Cookware is the cookware that won't stick, chip, or flake. Manufactured at a maximum temperature of 30,000F, our cookware won't rapidly lose nonstick like traditional pans made at 900F.",
+      "categoryId": 4,
+      "supplierId": 14,
+      "costPrice": "1800",
+      "salePrice": "2700",
+      "originalPrice": "3000",
+      "stockQuantity": 50,
+      "minStock": 10,
+      "warrantyMonths": 12,
+      "qrCode": "COOK-NFNPCS-0001",
+      "barcode": "622356565462",
+      "imageUrl": "https://images.barcodelookup.com/27276/272763254-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:07.001Z",
+      "updatedAt": "2026-07-03T14:23:45.436Z",
+      "category": {
+        "id": 4,
+        "name": "Dụng cụ nấu ăn (COOK)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 24,
+      "sku": "COOK-LCQCCP-0001",
+      "name": "Legend Cookware 5 Quart Copper Core 5 Ply Sauce Pot with Lid - Silver-Tone",
+      "description": "Our 5 quart saucepan - complete with a heavy, custom-fitted lid - is the year-round workhorse you need for everything from Sunday brunch in bed to Thanksgiving dinner with extended family - perfect for creating savory soups, rich gravies, sweet glazes.",
+      "categoryId": 4,
+      "supplierId": 14,
+      "costPrice": "5000",
+      "salePrice": "7000",
+      "originalPrice": "8500",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 12,
+      "qrCode": "COOK-LCQCCP-0001",
+      "barcode": "860006413118",
+      "imageUrl": "https://images.barcodelookup.com/32841/328410987-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:11.441Z",
+      "updatedAt": "2026-07-03T14:23:45.437Z",
+      "category": {
+        "id": 4,
+        "name": "Dụng cụ nấu ăn (COOK)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 25,
+      "sku": "COOL-MAMMSF-0001",
+      "name": "Medify Air - Medify MA-40 896 Sq. Ft. Portable Air Purifier with True HEPA H13 Filter - Black",
+      "description": "Medify Air - Medify MA-40 896 Sq. Ft. Portable Air Purifier with True HEPA H13 Filter - Black.",
+      "categoryId": 5,
+      "supplierId": 14,
+      "costPrice": "2000",
+      "salePrice": "2200",
+      "originalPrice": "2400",
+      "stockQuantity": 50,
+      "minStock": 10,
+      "warrantyMonths": 12,
+      "qrCode": "COOL-MAMMSF-0001",
+      "barcode": "860000833677",
+      "imageUrl": "https://images.barcodelookup.com/25533/255332190-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:16.161Z",
+      "updatedAt": "2026-07-03T14:23:45.437Z",
+      "category": {
+        "id": 5,
+        "name": "Thiết bị làm mát (COOL)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 26,
+      "sku": "COOL-AHPHAP-0001",
+      "name": "Austin HealthMate Plus HM450 Air Purifier",
+      "description": "Austin HealthMate Plus HM450 Air Purifier.",
+      "categoryId": 5,
+      "supplierId": 14,
+      "costPrice": "3200",
+      "salePrice": "4000",
+      "originalPrice": "4700",
+      "stockQuantity": 50,
+      "minStock": 10,
+      "warrantyMonths": 12,
+      "qrCode": "COOL-AHPHAP-0001",
+      "barcode": "769100216963",
+      "imageUrl": "https://images.barcodelookup.com/64/644295-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:19.564Z",
+      "updatedAt": "2026-07-03T14:23:45.439Z",
+      "category": {
+        "id": 5,
+        "name": "Thiết bị làm mát (COOL)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 27,
+      "sku": "COOL-HPW-0001",
+      "name": "Healthmate Plus White",
+      "description": "Healthmate Plus White.",
+      "categoryId": 5,
+      "supplierId": 14,
+      "costPrice": "3700",
+      "salePrice": "4150",
+      "originalPrice": "4900",
+      "stockQuantity": 10,
+      "minStock": 2,
+      "warrantyMonths": 12,
+      "qrCode": "COOL-HPW-0001",
+      "barcode": "769100216956",
+      "imageUrl": "https://images.barcodelookup.com/64/642760-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:22.812Z",
+      "updatedAt": "2026-07-03T14:23:45.440Z",
+      "category": {
+        "id": 5,
+        "name": "Thiết bị làm mát (COOL)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 28,
+      "sku": "COOL-BBAPF-0001",
+      "name": "BAPF30 Bionaire Air Purifier Filters",
+      "description": "BAPF30 Bionaire Air Purifier Filters.",
+      "categoryId": 5,
+      "supplierId": 14,
+      "costPrice": "1500",
+      "salePrice": "2000",
+      "originalPrice": "2500",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 0,
+      "qrCode": "COOL-BBAPF-0001",
+      "barcode": "886566120716",
+      "imageUrl": "https://images.barcodelookup.com/1549/15493780-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:26.451Z",
+      "updatedAt": "2026-07-03T14:23:45.441Z",
+      "category": {
+        "id": 5,
+        "name": "Thiết bị làm mát (COOL)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 29,
+      "sku": "ELEC-RAWOAT-0001",
+      "name": "Radiant 15 Amp White 2-Outlet and 2 Type a/C USB Recessed Furniture Power Strip with Switch and 6 Ft. Cord",
+      "description": "Radiant 15 Amp White 2-Outlet and 2 Type a/C USB Recessed Furniture Power Strip with Switch and 6 Ft. Cord.",
+      "categoryId": 6,
+      "supplierId": 14,
+      "costPrice": "700",
+      "salePrice": "1000",
+      "originalPrice": "1200",
+      "stockQuantity": 50,
+      "minStock": 10,
+      "warrantyMonths": 12,
+      "qrCode": "ELEC-RAWOAT-0001",
+      "barcode": "786776192506",
+      "imageUrl": "https://images.barcodelookup.com/23678/236783936-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:30.297Z",
+      "updatedAt": "2026-07-03T14:23:45.441Z",
+      "category": {
+        "id": 6,
+        "name": "Thiết bị điện (ELEC)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 30,
+      "sku": "ELEC-PPSSPO-0001",
+      "name": "POWERADD Power Strip Surge Protector 6 Outlets & 6 USB Charging Ports, 6ft Heavy Duty Extension Cord, USB Outlet Extender for Home & Office 1625W/13A",
+      "description": "POWERADD Power Strip Surge Protector 6 Outlets & 6 USB Charging Ports, 6ft Heavy Duty Extension Cord, USB Outlet Extender for Home & Office 1625W/13A.",
+      "categoryId": 6,
+      "supplierId": 14,
+      "costPrice": "3000",
+      "salePrice": "3600",
+      "originalPrice": "4000",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 12,
+      "qrCode": "ELEC-PPSSPO-0001",
+      "barcode": "707470829833",
+      "imageUrl": "https://images.barcodelookup.com/4947/49478479-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:34.335Z",
+      "updatedAt": "2026-07-03T14:23:45.442Z",
+      "category": {
+        "id": 6,
+        "name": "Thiết bị điện (ELEC)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 31,
+      "sku": "ELEC-IFCOFS-0001",
+      "name": "Iron Forge Cable 3 Outlets Foot Switch Extension Cord 15 Ft 2 Pack 13 Amp Green Extension Cord with Foot Tap Switch Multiple Outlets 16/2 Indoor La",
+      "description": "Iron Forge Cable 3 Outlets Foot Switch Extension Cord 15 Ft 2 Pack 13 Amp Green Extension Cord with Foot Tap Switch Multiple Outlets 16/2 Indoor La.",
+      "categoryId": 6,
+      "supplierId": 14,
+      "costPrice": "2500",
+      "salePrice": "3000",
+      "originalPrice": "3500",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 0,
+      "qrCode": "ELEC-IFCOFS-0001",
+      "barcode": "688941053523",
+      "imageUrl": "https://images.barcodelookup.com/145367/1453672977-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:38.299Z",
+      "updatedAt": "2026-07-03T14:23:45.443Z",
+      "category": {
+        "id": 6,
+        "name": "Thiết bị điện (ELEC)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 32,
+      "sku": "ELEC-LLRLBE-0001",
+      "name": "LOHAS LED Refrigerator Light Bulb, 40W Equivalent 120V A15 LED Lamp, 5 Watt Daylight 5000K with E26 Medium Base, Energy Saving Freezer Ceiling Home Li",
+      "description": "Perfect for refrigerator lighting: Waterproof, widely used in freezer, or normal home ceiling lighting.High lighting efficiency: The bulbs features a comfortable daylight (5000K) and luminous efficiency with 420 lumen output. No flicker and no warm up.Standard A15 shape: Suitable for most light fixtures, do not occupy too much spaces, work with 120 voltage.Easy installation with E26 screw base: Install by yourselves easily, without any complicated steps.High quality and energy saving: Made of hi",
+      "categoryId": 6,
+      "supplierId": 14,
+      "costPrice": "1000",
+      "salePrice": "1500",
+      "originalPrice": "2000",
+      "stockQuantity": 50,
+      "minStock": 10,
+      "warrantyMonths": 0,
+      "qrCode": "ELEC-LLRLBE-0001",
+      "barcode": "689749928921",
+      "imageUrl": "https://images.barcodelookup.com/28907/289071761-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:42.933Z",
+      "updatedAt": "2026-07-03T14:23:45.444Z",
+      "category": {
+        "id": 6,
+        "name": "Thiết bị điện (ELEC)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 33,
+      "sku": "BATH-BSCS-0001",
+      "name": "Binffeey Shower Corner Shelf",
+      "description": "Sản phẩm chưa được cập nhật.",
+      "categoryId": 7,
+      "supplierId": 14,
+      "costPrice": "1100",
+      "salePrice": "1500",
+      "originalPrice": "1900",
+      "stockQuantity": 10,
+      "minStock": 2,
+      "warrantyMonths": 0,
+      "qrCode": "BATH-BSCS-0001",
+      "barcode": "805983706440",
+      "imageUrl": "https://assets.icheck.vn/image/2025/app/5/13/986854d76e46b0ce23a6a6af86024897.webp",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:47.882Z",
+      "updatedAt": "2026-07-03T14:23:45.447Z",
+      "category": {
+        "id": 7,
+        "name": "Đồ phòng tắm (BATH)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 34,
+      "sku": "BATH-IIRBMI-0001",
+      "name": "15.5 in. X 27.5 in. Rubber Bath Mat in White",
+      "description": "Providing a comfortable feel and a secure, non-slip grip, the Glacier Bay Rubber Bath Mat is the perfect addition to any standard tub or shower floor. This easy-to-install bathtub mat features a shell-shaped textured surface with suction cups on its bottom to grip onto your tub or shower. The mat's classic white finish will complement virtually any bath decor.",
+      "categoryId": 7,
+      "supplierId": 14,
+      "costPrice": "700",
+      "salePrice": "1000",
+      "originalPrice": "1100",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 0,
+      "qrCode": "BATH-IIRBMI-0001",
+      "barcode": "043197138651",
+      "imageUrl": "https://images.barcodelookup.com/26318/263181943-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:52.100Z",
+      "updatedAt": "2026-07-03T14:23:45.444Z",
+      "category": {
+        "id": 7,
+        "name": "Đồ phòng tắm (BATH)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 35,
+      "sku": "BATH-SHMBMB-0001",
+      "name": "Skip Hop Moby Bath Mat, Blue",
+      "description": "Keep your little one safe during bath time and prevent slipping with this whale-inspired Skip Hop bath mat. Keep your little one safe during bath time and prevent slipping with this whale-inspired Skip Hop bath mat. Non-slip, textured material All-over.",
+      "categoryId": 7,
+      "supplierId": 14,
+      "costPrice": "1000",
+      "salePrice": "1400",
+      "originalPrice": "1550",
+      "stockQuantity": 100,
+      "minStock": 20,
+      "warrantyMonths": 12,
+      "qrCode": "BATH-SHMBMB-0001",
+      "barcode": "816523026829",
+      "imageUrl": "https://images.barcodelookup.com/12414/124140142-1.jpg",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:19:56.866Z",
+      "updatedAt": "2026-07-03T14:23:45.447Z",
+      "category": {
+        "id": 7,
+        "name": "Đồ phòng tắm (BATH)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 36,
+      "sku": "BATH-VHSC-0001",
+      "name": "Vanderbilt Home Shower Caddy",
+      "description": "Sản phẩm chưa được cập nhật.",
+      "categoryId": 7,
+      "supplierId": 14,
+      "costPrice": "1100",
+      "salePrice": "1500",
+      "originalPrice": "1900",
+      "stockQuantity": 50,
+      "minStock": 10,
+      "warrantyMonths": 0,
+      "qrCode": "BATH-VHSC-0001",
+      "barcode": "810017715343",
+      "imageUrl": "https://assets.icheck.vn/image/2025/app/5/13/986854d76e46b0ce23a6a6af86024897.webp",
+      "status": "ACTIVE",
+      "createdAt": "2026-06-28T16:20:01.208Z",
+      "updatedAt": "2026-07-03T14:23:45.448Z",
+      "category": {
+        "id": 7,
+        "name": "Đồ phòng tắm (BATH)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 37,
+      "sku": "KIT-SCFFDR-0001",
+      "name": "Samsung - 28.1 Cu. Ft. French Door Refrigerator With Thru-the-door Ice And Water - Black",
+      "description": "Samsung - 28.1 Cu. Ft. French Door Refrigerator with Thru-the-Door Ice and Water - Black",
+      "categoryId": 1,
+      "supplierId": 14,
+      "costPrice": "1550",
+      "salePrice": "2000",
+      "originalPrice": "2350",
+      "stockQuantity": 15,
+      "minStock": 5,
+      "warrantyMonths": 12,
+      "qrCode": "KIT-SCFFDR-0001",
+      "barcode": "887276958415",
+      "imageUrl": "http://c.shld.net/rpx/i/s/i/spin/image/spin_prod_930575312",
+      "status": "ACTIVE",
+      "createdAt": "2026-07-08T08:28:56.037Z",
+      "updatedAt": "2026-07-08T08:28:56.037Z",
+      "category": {
+        "id": 1,
+        "name": "Thiết bị nhà bếp (KIT)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 38,
+      "sku": "OTHER-MW1RCF-0001",
+      "name": "Midea WHS-121LB1 Refrigerator, 3.3 Cubic Feet, Black (B00JXQ4PFS)",
+      "description": "Separate chiller compartment and area for 2-liter bottle storage and can dispenserReversible door hinge for right or left openingSlide out shelf, low noise, and energy savingThree half-width and one full-width door shelvesKeeps food and drinks cold",
+      "categoryId": 8,
+      "supplierId": 14,
+      "costPrice": "1050",
+      "salePrice": "1450",
+      "originalPrice": "1600",
+      "stockQuantity": 20,
+      "minStock": 5,
+      "warrantyMonths": 12,
+      "qrCode": "OTHER-MW1RCF-0001",
+      "barcode": "814982018997",
+      "imageUrl": "http://c.shld.net/rpx/i/s/pi/mp/3198/6504762015?src=http%3A%2F%2Fimg.wfrcdn.com%2Flf%2F49%2Fhash%2F13008%2F13633639%2F1%2F1%2F1.jpg&d=6f87f661385a366b682cf92a96f6d068469132a2",
+      "status": "ACTIVE",
+      "createdAt": "2026-07-08T08:29:26.066Z",
+      "updatedAt": "2026-07-08T08:29:26.066Z",
+      "category": {
+        "id": 8,
+        "name": "Khác (OTHER)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    },
+    {
+      "id": 39,
+      "sku": "KIT-HCFFDR-0001",
+      "name": "Haier 15-Cu.-Ft. French-Door Refrigerator 28\" width Stainless Steel HRF15N3AGS",
+      "description": "Haier 15-Cu.-Ft. French-Door Refrigerator 28\" width Stainless Steel HRF15N3AGS, quy cách chiếc.",
+      "categoryId": 1,
+      "supplierId": 14,
+      "costPrice": "1100",
+      "salePrice": "1500",
+      "originalPrice": "1750",
+      "stockQuantity": 10,
+      "minStock": 2,
+      "warrantyMonths": 24,
+      "qrCode": "KIT-HCFFDR-0001",
+      "barcode": "694157033235",
+      "imageUrl": "https://i5.walmartimages.com/asr/6b995e37-ee51-45a5-bc18-e96998c3fbd8.1c91e3fa3a53742d3b921132bc0fb038.jpeg?odnHeight=450&odnWidth=450&odnBg=ffffff",
+      "status": "ACTIVE",
+      "createdAt": "2026-07-08T08:29:51.651Z",
+      "updatedAt": "2026-07-08T08:29:51.651Z",
+      "category": {
+        "id": 1,
+        "name": "Thiết bị nhà bếp (KIT)"
+      },
+      "supplier": {
+        "id": 14,
+        "name": "Nhà cung cấp lẻ"
+      }
+    }
+  ]
+}

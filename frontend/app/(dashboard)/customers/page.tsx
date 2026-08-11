@@ -34,9 +34,9 @@ type FormValues = { fullName: string; phone: string; email?: string; address?: s
 const PAGE_SIZE = 10;
 const POINT_TO_SPEND_RATE = 10;
 const TIER_TARGETS = [
-  { tier: "SILVER", labelKey: "customerTier.SILVER", points: 100 },
-  { tier: "GOLD", labelKey: "customerTier.GOLD", points: 500 },
-  { tier: "DIAMOND", labelKey: "customerTier.DIAMOND", points: 1000 },
+  { tier: "SILVER", labelKey: "customerTier.SILVER", points: 200 },
+  { tier: "GOLD", labelKey: "customerTier.GOLD", points: 1000 },
+  { tier: "DIAMOND", labelKey: "customerTier.DIAMOND", points: 3000 },
 ] as const;
 
 function tierClassName(tier: string | null | undefined) {

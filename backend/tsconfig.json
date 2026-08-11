@@ -17,6 +17,7 @@
   "include": [
     "src",
     "prisma",
+    "scripts",
     "prisma.config.ts"
   ],
   "exclude": [

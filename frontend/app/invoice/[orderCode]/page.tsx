@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useLanguage } from "@/contexts/language-context";
+import { LanguageToggle } from "@/components/shared/language-toggle";
 import { getApiErrorMessage } from "@/lib/api";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { publicInvoiceService } from "@/services/homex.service";
@@ -73,7 +74,8 @@ export default function PublicInvoicePage() {
   }
 
   return (
-    <main className="min-h-screen bg-background p-4 md:p-8">
+    <main className="relative min-h-screen bg-background p-4 md:p-8">
+      <div className="absolute right-4 top-4"><LanguageToggle /></div>
       <div className="mx-auto max-w-5xl space-y-6 print:hidden no-print">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

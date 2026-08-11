@@ -2,7 +2,7 @@
 
 import { QRCodeSVG } from "qrcode.react";
 import { useLanguage } from "@/contexts/language-context";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Order, PublicInvoice, Setting } from "@/types/domain";
 
@@ -28,80 +28,144 @@ function getSetting(order: Order | PublicInvoice, setting?: Setting | null) {
   return null;
 }
 
+function truncateProductName(name: string, maxLen: number = 38) {
+  if (!name) return "";
+  return name.length > maxLen ? `${name.substring(0, maxLen)}...` : name;
+}
+
 export function PrintableInvoice({ order, setting, publicUrl, className }: PrintableInvoiceProps) {
-  const { language, t } = useLanguage();
+  const { t } = useLanguage();
   const invoiceSetting = getSetting(order, setting);
   const isK80 = (invoiceSetting?.printPaperSize || "K80").toUpperCase() === "K80";
   const paperClassName = isK80
-    ? "mx-auto w-[80mm] max-w-[80mm] bg-white px-[4mm] py-[5mm] text-[11px] leading-snug text-black print:w-[80mm] print:max-w-[80mm] print:p-[4mm]"
+    ? "mx-auto w-[80mm] max-w-[80mm] bg-white px-[3mm] py-[4mm] text-[11px] leading-snug text-black print:w-[80mm] print:max-w-[80mm] print:p-[3mm]"
     : "mx-auto max-w-[210mm] bg-white p-6 text-sm text-black print:max-w-[210mm] print:p-0";
+
+  const getPublicBaseUrl = () => {
+    if (typeof window === "undefined") return "https://disparate-sizable-brick.ngrok-free.dev";
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+      return "https://disparate-sizable-brick.ngrok-free.dev";
+    }
+    return window.location.origin;
+  };
+
+  const baseUrl = getPublicBaseUrl();
+  const qrCodeValue = publicUrl || `${baseUrl}/tra-cuu-bao-hanh?code=${order.orderCode}`;
 
   return (
     <div className={cn("print-area", className)}>
+      <style>{`
+        @media print {
+          @page {
+            margin: 0;
+            size: auto;
+          }
+          body {
+            margin: 0 !important;
+            padding: 0 !important;
+            -webkit-print-color-adjust: exact;
+          }
+        }
+      `}</style>
       <div className={paperClassName}>
+        {/* Header Store Info */}
         <div className="text-center">
-          <h2 className="text-lg font-bold">{invoiceSetting?.storeName || "Homex POS"}</h2>
-          {invoiceSetting?.storeAddress ? <p>{invoiceSetting.storeAddress}</p> : null}
-          {invoiceSetting?.storeHotline ? <p>{t("invoice.hotline")}: {invoiceSetting.storeHotline}</p> : null}
-          <div className="mt-3 border-t border-dashed border-black pt-3">
-            <h1 className="text-xl font-bold">{t("invoices.invoiceTitle")}</h1>
+          <h2 className="text-base font-black uppercase tracking-tight">{invoiceSetting?.storeName || "Homex POS"}</h2>
+          {invoiceSetting?.storeAddress ? <p className="text-[10px] text-gray-700">{invoiceSetting.storeAddress}</p> : null}
+          {invoiceSetting?.storeHotline ? <p className="text-[10px] text-gray-700">Hotline: {invoiceSetting.storeHotline}</p> : null}
+          <div className="mt-2 border-t border-dashed border-black pt-2">
+            <h1 className="text-lg font-black tracking-wide uppercase">{t("invoices.invoiceTitle")}</h1>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-1">
-          <p>{t("orders.orderCode")}: <span className="font-semibold">{order.orderCode}</span></p>
-          <p>{t("common.createdAt")}: {formatDateTime(order.createdAt)}</p>
-          <p>{t("orders.cashier")}: {getCashierName(order)}</p>
-          <p>{t("orders.customer")}: {getCustomerName(order)}</p>
+        {/* Order Details Meta */}
+        <div className="mt-2.5 grid gap-0.5 text-[10px]">
+          <p><span className="font-bold">{t("invoice.orderCode")}:</span> <span className="font-black">{order.orderCode}</span></p>
+          <p><span className="font-bold">{t("invoice.createdDate")}:</span> {formatDateTime(order.createdAt)}</p>
+          <p><span className="font-bold">{t("invoice.cashier")}:</span> {getCashierName(order)}</p>
+          <p><span className="font-bold">{t("invoice.customer")}:</span> {getCustomerName(order)}</p>
         </div>
 
-        <table className={`mt-4 w-full border-collapse text-left ${isK80 ? "text-[10px]" : "text-xs"}`}>
+        {/* Products Table */}
+        <table className={`mt-3 w-full border-collapse text-left ${isK80 ? "text-[10px]" : "text-xs"}`}>
           <thead>
-            <tr className="border-y border-black">
-              <th className="py-2 pr-2">{t("products.product")}</th>
-              <th className="py-2 text-center">{t("reports.quantity")}</th>
-              <th className="py-2 text-right">{t("orders.unitPrice")}</th>
-              <th className="py-2 text-right">{t("orders.lineTotal")}</th>
+            <tr className="border-y border-black font-bold">
+              <th className="py-1.5 pr-1">{t("products.product")}</th>
+              <th className="py-1.5 text-center px-1">{t("invoice.quantityShort")}</th>
+              <th className="py-1.5 text-right px-1">{t("invoice.unitPrice")}</th>
+              <th className="py-1.5 text-right pl-1">{t("invoice.lineTotal")}</th>
             </tr>
           </thead>
           <tbody>
-            {order.orderDetails.map((detail) => (
-              <tr key={detail.id} className="border-b border-dashed border-gray-400">
-                <td className="py-2 pr-2">
-                  <div className="font-medium">{detail.product?.name || `#${detail.productId}`}</div>
-                  <div>{detail.product?.sku || ""}</div>
-                </td>
-                <td className="py-2 text-center">{detail.quantity}</td>
-                <td className="py-2 text-right">{formatCurrency(detail.unitPrice)}</td>
-                <td className="py-2 text-right">{formatCurrency(detail.lineTotal)}</td>
-              </tr>
-            ))}
+            {order.orderDetails.map((detail) => {
+              const rawName = detail.product?.name || `#${detail.productId}`;
+              const displayName = truncateProductName(rawName, isK80 ? 38 : 50);
+              return (
+                <tr key={detail.id} className="border-b border-dashed border-gray-300">
+                  <td className="py-1.5 pr-1 align-top">
+                    <div className="font-semibold leading-tight">{displayName}</div>
+                    {detail.product?.sku ? <div className="text-[9px] text-gray-500 font-mono">{detail.product.sku}</div> : null}
+                  </td>
+                  <td className="py-1.5 text-center px-1 align-top font-bold">{detail.quantity}</td>
+                  <td className="py-1.5 text-right px-1 align-top font-semibold whitespace-nowrap">{formatNumber(detail.unitPrice)}</td>
+                  <td className="py-1.5 text-right pl-1 align-top font-black whitespace-nowrap">{formatNumber(detail.lineTotal)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 
-        <div className="mt-4 space-y-1 border-b border-dashed border-black pb-4 text-right">
-          <p>{t("invoice.subtotal")}: {formatCurrency(order.totalAmount)}</p>
+        {/* Financial Summary */}
+        <div className="mt-3 space-y-1 border-t border-b border-dashed border-black py-2.5 text-right text-[11px]">
+          <div className="flex justify-between">
+            <span className="text-gray-600">{t("pos.subtotal")}:</span>
+            <span className="font-semibold">{formatCurrency(order.totalAmount)}</span>
+          </div>
           {order.payment && order.payment.amount < order.totalAmount ? (
-            <p>{t("invoice.discount")}: -{formatCurrency(Number(order.totalAmount) - Number(order.payment.amount))}</p>
+            <div className="flex justify-between text-emerald-700">
+              <span>{t("pos.discount")}:</span>
+              <span className="font-semibold">-{formatCurrency(Number(order.totalAmount) - Number(order.payment.amount))}</span>
+            </div>
           ) : null}
-          <p>{t("orders.total")}: <span className="font-bold">{formatCurrency(order.payment?.amount || order.totalAmount)}</span></p>
-          {order.payment ? <p>{t("payments.method")}: {t(`paymentMethod.${order.payment.method}`)}</p> : null}
+          <div className="flex justify-between text-xs font-black pt-1 border-t border-slate-100">
+            <span>{t("pos.totalPayable")}:</span>
+            <span>{formatCurrency(order.payment?.amount || order.totalAmount)}</span>
+          </div>
+          {order.payment ? (
+            <div className="flex justify-between text-[10px]">
+              <span className="text-gray-600">{t("pos.paymentMethod")}:</span>
+              <span className="font-semibold">{t(`paymentMethod.${order.payment.method}`)}</span>
+            </div>
+          ) : null}
           {order.payment?.cashReceived !== null && order.payment?.cashReceived !== undefined ? (
-            <p>{t("invoices.customerPaid")}: {formatCurrency(order.payment.cashReceived)}</p>
+            <div className="flex justify-between text-[10px]">
+              <span className="text-gray-600">{t("invoice.amountPaid")}:</span>
+              <span className="font-semibold">{formatCurrency(order.payment.cashReceived)}</span>
+            </div>
           ) : null}
           {order.payment?.changeAmount !== null && order.payment?.changeAmount !== undefined ? (
-            <p>{t("invoices.changeAmount")}: {formatCurrency(order.payment.changeAmount)}</p>
+            <div className="flex justify-between text-[10px]">
+              <span className="text-gray-600">{t("invoice.changeReturned")}:</span>
+              <span className="font-bold text-emerald-800">{formatCurrency(order.payment.changeAmount)}</span>
+            </div>
           ) : null}
         </div>
 
-        {publicUrl ? (
-          <div className="mt-4 flex flex-col items-center gap-2 text-center">
-            <QRCodeSVG value={publicUrl} size={isK80 ? 96 : 116} />
-            <p className="text-xs">{t("invoice.scanPublic")}</p>
-          </div>
-        ) : null}
+        {/* QR Code Section */}
+        <div className="mt-3 flex flex-col items-center gap-1 text-center">
+          <QRCodeSVG value={qrCodeValue} size={isK80 ? 88 : 110} />
+          <p className="text-[10px] font-bold text-gray-700 mt-0.5">{t("invoice.lookupQrHint")}</p>
+        </div>
 
-        <p className="mt-5 text-center text-xs">{t("invoices.thankYou")}</p>
+        {/* Return & Warranty Policy Notice */}
+        <div className="mt-3 border-t border-dashed border-black pt-2 text-center space-y-1 text-[10px]">
+          <p className="font-semibold text-gray-700 leading-tight">
+            {t("invoice.returnPolicy")}
+          </p>
+          <p className="font-black text-black text-[11px] pt-1">
+            {t("invoice.thankYou")}
+          </p>
+        </div>
       </div>
     </div>
   );

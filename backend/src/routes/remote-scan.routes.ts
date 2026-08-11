@@ -8,6 +8,7 @@ type RemoteScanPayload = {
 };
 
 const activeScans = new Map<string, RemoteScanPayload[]>();
+const connectedPhones = new Map<string, number>();
 const maxQueueSizePerSession = 30;
 
 function cleanupExpiredScans() {
@@ -21,6 +22,12 @@ function cleanupExpiredScans() {
       activeScans.delete(sessionId);
     } else if (freshQueue.length !== queue.length) {
       activeScans.set(sessionId, freshQueue);
+    }
+  }
+
+  for (const [sessionId, lastPingTime] of connectedPhones.entries()) {
+    if (now - lastPingTime > 15000) {
+      connectedPhones.delete(sessionId);
     }
   }
 }
@@ -51,6 +58,21 @@ function validateBarcode(barcode: unknown) {
   return { value: cleanBarcode };
 }
 
+// POST /api/pos/remote-scan-ping
+router.post("/remote-scan-ping", (req, res, next) => {
+  try {
+    cleanupExpiredScans();
+    const { sessionId } = req.body;
+    const sessionResult = validateSessionId(sessionId);
+    if (!sessionResult.error && sessionResult.value) {
+      connectedPhones.set(sessionResult.value, Date.now());
+    }
+    return res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/pos/remote-scan
 router.post("/remote-scan", (req, res, next) => {
   try {
@@ -74,6 +96,8 @@ router.post("/remote-scan", (req, res, next) => {
     }
 
     const cleanSessionId = sessionResult.value!;
+    connectedPhones.set(cleanSessionId, Date.now());
+
     const queue = activeScans.get(cleanSessionId) || [];
     queue.push({
       barcode: barcodeResult.value!,
@@ -115,6 +139,9 @@ router.get("/remote-scan-poll/:sessionId", (req, res, next) => {
     }
 
     const cleanSessionId = sessionResult.value!;
+    const lastPing = connectedPhones.get(cleanSessionId);
+    const isConnected = Boolean(lastPing && Date.now() - lastPing <= 8000);
+
     const queue = activeScans.get(cleanSessionId) || [];
     const payload = queue.shift();
 
@@ -130,6 +157,7 @@ router.get("/remote-scan-poll/:sessionId", (req, res, next) => {
         data: {
           success: true,
           barcode: payload.barcode,
+          isConnected,
           remaining: queue.length,
         }
       });
@@ -139,6 +167,7 @@ router.get("/remote-scan-poll/:sessionId", (req, res, next) => {
       success: true,
       data: {
         success: false,
+        isConnected,
       }
     });
   } catch (error) {

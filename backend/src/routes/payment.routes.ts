@@ -265,7 +265,7 @@ async function validatePromotionForPayOS(
 async function completePayOSPayment(
   tx: Prisma.TransactionClient,
   paymentId: number,
-  webhookData: { reference?: string; paymentLinkId?: string; amount: number },
+  webhookData: { reference?: string; paymentLinkId?: string; orderCode?: number; amount: number },
   rawPayload: unknown
 ) {
   const payment = await tx.payment.findUnique({
@@ -284,6 +284,9 @@ async function completePayOSPayment(
   if (payment.status === PAYMENT_STATUS.PAID) return payment;
   if (payment.status !== PAYMENT_STATUS.PENDING) throw new AppError("Trạng thái thanh toán không hợp lệ", 400);
   if (payment.order.status !== ORDER_STATUS.DRAFT) throw new AppError("Đơn hàng không còn ở trạng thái chờ thanh toán", 400);
+  if (webhookData.orderCode !== undefined && Number(payment.providerOrderCode) !== Number(webhookData.orderCode)) {
+    throw new AppError("Mã đơn thanh toán PayOS không khớp", 400);
+  }
   if (Number(payment.amount) !== Number(webhookData.amount)) throw new AppError("Giao dịch không khớp số tiền, cần kiểm tra thủ công.", 400);
 
   const setting = await tx.setting.findFirst();
@@ -515,6 +518,8 @@ router.post(
   catchAsync(async (req, res) => {
     let webhookData: Awaited<ReturnType<typeof payOS.webhooks.verify>>;
 
+    // Trust boundary: the frontend never marks a payment as paid. Only a payload
+    // verified with the PayOS checksum key, or a direct PayOS status query, may do so.
     try {
       webhookData = await payOS.webhooks.verify(req.body);
     } catch (error) {
@@ -532,20 +537,56 @@ router.post(
       return res.json({ success: true, message: "Webhook payOS processed." });
     }
 
-    if (payment.status === PAYMENT_STATUS.PAID) {
-      await prisma.paymentWebhookLog.create({
-        data: { provider: "PAYOS", eventId: webhookData.reference, paymentId: payment.id, orderCode: webhookData.orderCode, payload: req.body as Prisma.InputJsonValue, status: "DUPLICATE" },
-      });
-      return res.json({ success: true, message: "Webhook payOS processed." });
-    }
-
     try {
-      await prisma.$transaction(async (tx) => {
+      const outcome = await prisma.$transaction(async (tx) => {
+        // PostgreSQL row lock serializes concurrent webhook deliveries for the same
+        // payment. A replay that arrives while the first request is processing must
+        // wait, then observes PAID and cannot decrement stock or award points twice.
+        await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "Payment" WHERE "id" = ${payment.id} FOR UPDATE`);
+
+        const lockedPayment = await tx.payment.findUnique({ where: { id: payment.id } });
+        if (!lockedPayment) throw new AppError("Không tìm thấy thanh toán", 404);
+
+        const processedEvent = webhookData.reference
+          ? await tx.paymentWebhookLog.findFirst({
+              where: { provider: "PAYOS", eventId: webhookData.reference, status: "PROCESSED" },
+              select: { id: true },
+            })
+          : null;
+
+        if (lockedPayment.status === PAYMENT_STATUS.PAID || processedEvent) {
+          await tx.paymentWebhookLog.create({
+            data: {
+              provider: "PAYOS",
+              eventId: webhookData.reference,
+              paymentId: payment.id,
+              orderCode: webhookData.orderCode,
+              payload: req.body as Prisma.InputJsonValue,
+              status: "DUPLICATE",
+            },
+          });
+          return "DUPLICATE" as const;
+        }
+
+        if (Number(lockedPayment.providerOrderCode) !== Number(webhookData.orderCode)) {
+          throw new AppError("Mã đơn thanh toán PayOS không khớp", 400);
+        }
+
         await completePayOSPayment(tx, payment.id, webhookData, req.body);
         await tx.paymentWebhookLog.create({
-          data: { provider: "PAYOS", eventId: webhookData.reference, paymentId: payment.id, orderCode: webhookData.orderCode, payload: req.body as Prisma.InputJsonValue, status: "PROCESSED" },
+          data: {
+            provider: "PAYOS",
+            eventId: webhookData.reference,
+            paymentId: payment.id,
+            orderCode: webhookData.orderCode,
+            payload: req.body as Prisma.InputJsonValue,
+            status: "PROCESSED",
+          },
         });
+        return "PROCESSED" as const;
       });
+
+      return res.json({ success: true, message: "Webhook payOS processed.", data: { outcome } });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Không thể xử lý webhook payOS";
       await prisma.paymentWebhookLog.create({
@@ -553,8 +594,6 @@ router.post(
       });
       return res.status(400).json({ success: false, message: errorMessage });
     }
-
-    return res.json({ success: true, message: "Webhook payOS processed." });
   })
 );
 
@@ -582,6 +621,7 @@ router.get(
               {
                 reference: payOSInfo.transactions?.[0]?.reference || "",
                 paymentLinkId: payOSInfo.id || "",
+                orderCode: payment.providerOrderCode || undefined,
                 amount: payOSInfo.amount,
               },
               payOSInfo

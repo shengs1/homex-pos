@@ -1513,44 +1513,34 @@ export default function ProductsPage() {
 
       {/* Remote barcode scanner dialog */}
       <Dialog open={remoteBarcodeOpen} onOpenChange={setRemoteBarcodeOpen}>
-        <DialogContent className="max-w-md bg-slate-900 border-slate-800 text-white rounded-3xl p-6">
-          <DialogHeader className="text-center flex flex-col items-center">
-            <div className="mx-auto rounded-full bg-emerald-500/10 p-3 text-emerald-400 mb-2 border border-emerald-500/20">
-              <Smartphone className="h-6 w-6" />
+        <DialogContent className="max-w-xl bg-slate-900 border-slate-800 text-white rounded-3xl p-5 shadow-2xl">
+          <DialogHeader className="flex flex-row items-center justify-between pb-3 border-b border-slate-800">
+            <div className="flex items-center gap-3">
+              <div className="rounded-xl bg-emerald-500/10 p-2 text-emerald-400 border border-emerald-500/20 shrink-0">
+                <Smartphone className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-extrabold uppercase tracking-wide text-white">
+                  {t("products.scanBarcodeTitle")}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-400">
+                  {t("products.scanBarcodeDescription")}
+                </DialogDescription>
+              </div>
             </div>
-            <DialogTitle className="text-lg font-extrabold uppercase tracking-wide text-white">
-              {t("products.scanBarcodeTitle")}
-            </DialogTitle>
-            <DialogDescription className="text-xs text-slate-400 max-w-xs text-center leading-relaxed">
-              {t("products.scanBarcodeDescription")}
-            </DialogDescription>
           </DialogHeader>
 
-          <div className="my-6 flex flex-col items-center justify-center gap-4">
-            <div className="text-center">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">{t("barcode.pairingCode")}</span>
-              <span className="text-3xl font-black text-emerald-400 tracking-[0.2em] font-mono select-all">
-                {remoteBarcodeSessionId}
-              </span>
-              <Button type="button" size="sm" variant="outline" onClick={resetRemoteBarcodeScanner} className="mt-3 h-8 rounded-xl border-slate-700 bg-slate-800 text-xs text-white hover:bg-slate-700">
-                {t("barcode.newPairingCode")}
-              </Button>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl shadow-xl border border-slate-800/20">
-              {remoteBarcodeScanUrl ? <QRCodeSVG value={remoteBarcodeScanUrl} size={180} level="M" /> : null}
-            </div>
-
-            <div className="w-full flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-2xl p-2 pl-3 mt-2">
-              <Link className="h-4 w-4 text-slate-500 shrink-0" />
-              <span className="text-xs font-mono text-slate-400 truncate flex-1 select-all">
-                {remoteBarcodeScanUrl}
-              </span>
+          <div className="grid grid-cols-1 sm:grid-cols-[170px_1fr] gap-5 items-center py-2">
+            {/* Cột trái: Mã QR & Sao chép link */}
+            <div className="flex flex-col items-center gap-2.5">
+              <div className="bg-white p-3 rounded-2xl shadow-xl border border-slate-800/20 shrink-0">
+                {remoteBarcodeScanUrl ? <QRCodeSVG value={remoteBarcodeScanUrl} size={145} level="M" /> : null}
+              </div>
               <Button
                 type="button"
                 size="sm"
                 onClick={copyRemoteBarcodeScanLink}
-                className="bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl h-8 px-3 shrink-0 flex items-center gap-1.5 transition-all cursor-pointer"
+                className="w-full bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl h-8 px-2 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
               >
                 {isBarcodeLinkCopied ? (
                   <>
@@ -1565,17 +1555,48 @@ export default function ProductsPage() {
                 )}
               </Button>
             </div>
-          </div>
 
-          <div className="space-y-3 pt-4 border-t border-slate-800/80">
-            <div className="text-[11px] text-slate-400 leading-relaxed space-y-1">
-              <p>{t("products.scanInstruction1")}</p>
-              <p>{t("products.scanInstruction2")}</p>
-              <p>{t("products.scanInstruction3")}</p>
-            </div>
-            <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-950/60 border border-slate-800 text-[11px] text-slate-300">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
-              <span>{t("barcode.waitingForScan")}</span>
+            {/* Cột phải: Mã ghép đôi & Hướng dẫn & Trạng thái */}
+            <div className="flex flex-col justify-between gap-2.5">
+              {/* Mã ghép đôi */}
+              <div className="rounded-xl bg-slate-950/80 border border-slate-800 p-2.5 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    {t("barcode.pairingCode")}
+                  </span>
+                  <span className="text-xl font-black text-emerald-400 tracking-[0.2em] font-mono select-all">
+                    {remoteBarcodeSessionId}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={resetRemoteBarcodeScanner}
+                  className="h-7 px-2.5 rounded-lg border-slate-700 bg-slate-800 text-[11px] text-white hover:bg-slate-700 shrink-0"
+                  title={t("pos.newPairingCode")}
+                >
+                  {t("barcode.newPairingCode")}
+                </Button>
+              </div>
+
+              {/* Hướng dẫn ngắn gọn */}
+              <div className="text-[11px] text-slate-400 leading-tight space-y-1 bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/60">
+                <p className="flex items-start gap-1">
+                  <span className="font-bold text-emerald-400">1.</span>
+                  <span>{t("barcode.remoteInstruction1")}</span>
+                </p>
+                <p className="flex items-start gap-1">
+                  <span className="font-bold text-emerald-400">2.</span>
+                  <span>{t("barcode.remoteInstruction2")}</span>
+                </p>
+              </div>
+
+              {/* Trạng thái real-time */}
+              <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-slate-950/60 border border-slate-800 text-xs font-semibold text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-amber-400/80 animate-pulse shrink-0" />
+                <span>{t("pos.phoneWaiting")}</span>
+              </div>
             </div>
           </div>
         </DialogContent>
