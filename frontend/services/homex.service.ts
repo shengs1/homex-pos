@@ -167,7 +167,7 @@ export const productService = {
     warrantyMonths?: number;
     imageUrl?: string;
     description?: string;
-    source: "DATABASE" | "UPCITEMDB" | "BARCODE_SPIDER" | "BARCODE_LOOKUP" | "OPEN_FOOD_FACTS" | "OPEN_PRODUCTS_FACTS" | "ICHECK" | "AI" | "HYBRID";
+    source: "DATABASE" | "UPCITEMDB" | "BARCODE_SPIDER" | "BARCODE_LOOKUP" | "OPEN_FOOD_FACTS" | "OPEN_PRODUCTS_FACTS" | "AI" | "HYBRID";
     missingFields?: string[];
     confidence?: number;
     existingProductId?: number;
@@ -195,7 +195,7 @@ export const inventoryService = {
   transactions: (params?: ListParams) => getPaginatedDataByIdAsc<StockTransaction>("/inventory/transactions", params),
   importStock: (body: { productId: number; quantity: number; note?: string }) => postData<StockTransaction>("/inventory/import", body),
   adjustStock: (body: { productId: number; newQuantity: number; note?: string }) => postData<StockTransaction>("/inventory/adjust", body),
-  aiForecast: (params: { days: number }) => getData<any>("/inventory/ai-forecast", params, { timeout: 120000 }),
+  aiForecast: (params: { days: number; language?: "vi" | "en" }) => getData<any>("/inventory/ai-forecast", params, { timeout: 120000 }),
 };
 
 export type OrderLinePayload = { productId: number; quantity: number };
@@ -228,7 +228,7 @@ export type SettingPayload = Omit<Setting, "id" | "createdAt" | "updatedAt">;
 
 export const settingService = {
   get: () => getData<Setting>("/settings"),
-  update: (body: SettingPayload) => putData<Setting>("/settings", body),
+  update: (body: Partial<SettingPayload>) => putData<Setting>("/settings", body),
 };
 
 export const publicInvoiceService = {
@@ -377,7 +377,8 @@ export const auditLogService = {
 
 export const posService = {
   sendRemoteScan: (body: { sessionId: string; barcode: string }) => postData<{ success: boolean; message: string }>("/pos/remote-scan", body),
-  pollRemoteScan: (sessionId: string) => getData<{ success: boolean; barcode?: string }>(`/pos/remote-scan-poll/${encodeURIComponent(sessionId)}`),
+  pingRemoteScan: (body: { sessionId: string }) => postData<{ success: boolean }>("/pos/remote-scan-ping", body),
+  pollRemoteScan: (sessionId: string) => getData<{ success: boolean; barcode?: string; isConnected?: boolean }>(`/pos/remote-scan-poll/${encodeURIComponent(sessionId)}`),
   getSalesAssistantSuggestions: (body: SalesAssistantRequest) => postData<SalesAssistantResponse>("/pos/sales-assistant", body),
 };
 

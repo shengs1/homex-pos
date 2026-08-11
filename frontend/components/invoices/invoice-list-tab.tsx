@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Eye, PlayCircle, Plus, Printer, XCircle, RotateCcw, FileClock } from "lucide-react";
+import { Download, Eye, PlayCircle, Plus, Printer, XCircle, RotateCcw, FileClock, User } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { useLanguage } from "@/contexts/language-context";
@@ -105,9 +105,11 @@ async function fetchAllOrders(filters: OrderFilters) {
   }
 
   return allItems.filter(order => {
-    if (filters.cashierId && String(order.userId) !== filters.cashierId) return false;
+    // If cashier is searching by code/phone/name, allow searching all orders across the store for returns/warranty
+    const isSearching = Boolean(filters.search?.trim());
+    if (filters.cashierId && !isSearching && String(order.userId) !== filters.cashierId) return false;
     if (filters.paymentMethod && order.payment?.method !== filters.paymentMethod) return false;
-    
+
     const orderTime = getTimestamp(order.createdAt);
     if (filters.startDate) {
       const start = getTimestamp(filters.startDate);
@@ -118,7 +120,7 @@ async function fetchAllOrders(filters: OrderFilters) {
       end.setHours(23, 59, 59, 999);
       if (orderTime > end.getTime()) return false;
     }
-    
+
     return true;
   });
 }
@@ -136,7 +138,7 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
   const { language, t } = useLanguage();
   const user = useCurrentUser();
   const detailRef = useRef<HTMLDivElement | null>(null);
-  
+
   const [items, setItems] = useState<Order[]>([]);
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -152,6 +154,14 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
   const [paymentMethod, setPaymentMethod] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+
+  const isAdmin = user?.role === "ADMIN";
+
+  useEffect(() => {
+    if (!isAdmin && user?.id) {
+      setCashierId(String(user.id));
+    }
+  }, [user, isAdmin]);
 
   const [isCreatingReturn, setIsCreatingReturn] = useState(false);
   const [returnQuantities, setReturnQuantities] = useState<Record<number, number>>({});
@@ -176,6 +186,21 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
       setIsLoading(true);
 
       const allOrders = await fetchAllOrders({ search, status, cashierId, paymentMethod, startDate, endDate });
+
+      // Dynamically merge unique cashiers into users list for filtering
+      setUsers((prevUsers) => {
+        const map = new Map<number, UserAccount>();
+        prevUsers.forEach((u) => map.set(u.id, u));
+        allOrders.forEach((o) => {
+          if (o.user && !map.has(o.user.id)) {
+            map.set(o.user.id, { id: o.user.id, fullName: o.user.fullName } as UserAccount);
+          } else if (o.userId && !map.has(o.userId)) {
+            map.set(o.userId, { id: o.userId, fullName: `#${o.userId}` } as UserAccount);
+          }
+        });
+        return Array.from(map.values());
+      });
+
       const sortedOrders = sortOrdersByCreatedAtDesc(allOrders);
       const startIndex = (currentPage - 1) * PAGE_SIZE;
       const pageItems = sortedOrders.slice(startIndex, startIndex + PAGE_SIZE);
@@ -208,7 +233,14 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
   async function loadUsers() {
     try {
       const data = await userService.list({ limit: 100 });
-      setUsers(data.items);
+      setUsers((prev) => {
+        const map = new Map<number, UserAccount>();
+        data.items.forEach((u) => map.set(u.id, u));
+        prev.forEach((u) => {
+          if (!map.has(u.id)) map.set(u.id, u);
+        });
+        return Array.from(map.values());
+      });
     } catch {
       // ignore
     }
@@ -306,15 +338,15 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
     if (!selectedOrder) return;
 
     if (!vatForm.companyName.trim()) {
-      toast.error(t("vat.companyName") + " is required.");
+      toast.error(t("vat.companyNameRequired"));
       return;
     }
     if (!vatForm.taxCode.trim()) {
-      toast.error(t("vat.taxCode") + " is required.");
+      toast.error(t("vat.taxCodeRequired"));
       return;
     }
     if (vatForm.buyerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(vatForm.buyerEmail)) {
-      toast.error(t("vat.email") + " is invalid.");
+      toast.error(t("vat.emailInvalid"));
       return;
     }
 
@@ -408,12 +440,19 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
                   <option value="TRANSFER">{t("paymentMethod.TRANSFER")}</option>
                 </Select>
 
-                <Select value={cashierId} onChange={(event) => { setCashierId(event.target.value); setPage(1); }} className="h-10 w-[155px] text-sm border-slate-200 rounded-lg px-2 text-slate-600 bg-white">
-                  <option value="">{t("invoices.allCashiers")}</option>
-                  {users.map(u => (
-                    <option key={u.id} value={String(u.id)}>{u.fullName}</option>
-                  ))}
-                </Select>
+                {isAdmin ? (
+                  <Select value={cashierId} onChange={(event) => { setCashierId(event.target.value); setPage(1); }} className="h-10 w-[155px] text-sm border-slate-200 rounded-lg px-2 text-slate-600 bg-white">
+                    <option value="">{t("invoices.allCashiers")}</option>
+                    {users.map(u => (
+                      <option key={u.id} value={String(u.id)}>{u.fullName}</option>
+                    ))}
+                  </Select>
+                ) : (
+                  <div className="h-10 px-3.5 flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-xs font-bold shrink-0 shadow-2xs">
+                    <User className="h-4 w-4 text-teal-700 shrink-0" />
+                    <span>{user?.fullName || t("invoice.cashier")}</span>
+                  </div>
+                )}
               </div>
 
               {/* Row 2 */}
@@ -542,7 +581,7 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
                         {t("orders.continuePayment")}
                       </Button>
                     ) : null}
-                    
+
                     {selectedOrder.status === "COMPLETED" && user?.role === "ADMIN" ? (
                       <Button type="button" variant="outline" onClick={() => { setIsCreatingReturn(!isCreatingReturn); setIsCreatingVat(false); }}>
                         <RotateCcw className="h-4 w-4" />
@@ -561,7 +600,7 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
                       <Printer className="h-4 w-4" />
                       {t("orders.printInvoice")}
                     </Button>
-                    
+
                     {user?.role === "ADMIN" ? (
                       <Button type="button" variant="destructive" onClick={() => handleCancelOrder(selectedOrder)} disabled={selectedOrder.status === "CANCELLED"}>
                         <XCircle className="h-4 w-4" />
@@ -813,11 +852,10 @@ export function InvoiceListTab({ forceStatus }: { forceStatus?: string }) {
         <PrintableInvoice
           order={selectedOrder}
           setting={setting}
-          publicUrl={typeof window !== "undefined" ? `${window.location.origin}/invoice/${selectedOrder.orderCode}` : ""}
+          publicUrl={selectedOrder ? `${typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") ? "https://disparate-sizable-brick.ngrok-free.dev" : (typeof window !== "undefined" ? window.location.origin : "https://disparate-sizable-brick.ngrok-free.dev")}/tra-cuu-bao-hanh?code=${selectedOrder.orderCode}` : ""}
           className="hidden print:block"
         />
       ) : null}
     </RoleGuard>
   );
 }
-

@@ -1,5 +1,5 @@
 "use client";
- 
+
 import { useState, useEffect, Suspense, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, Smartphone, Shield, ShieldCheck, ShieldAlert, Loader2, Sparkles, ReceiptText } from "lucide-react";
@@ -7,8 +7,9 @@ import { cn } from "@/lib/utils";
 import { warrantyService } from "@/services/homex.service";
 import { formatDateVN } from "@/lib/date-format";
 import { useLanguage } from "@/contexts/language-context";
+import { LanguageToggle } from "@/components/shared/language-toggle";
 import type { Warranty } from "@/types/domain";
- 
+
 function maskCustomerName(fullName: string) {
   if (!fullName) return "";
   const parts = fullName.trim().split(/\s+/);
@@ -25,7 +26,7 @@ function maskCustomerName(fullName: string) {
   }
   return parts.join(" ");
 }
- 
+
 function SearchContent() {
   const { t } = useLanguage();
   const searchParams = useSearchParams();
@@ -36,9 +37,11 @@ function SearchContent() {
   const [results, setResults] = useState<Warranty[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
   const resultRef = useRef<HTMLDivElement>(null);
- 
+  const [mounted, setMounted] = useState(false);
+
   // Handle auto-load if code is passed in URL
   useEffect(() => {
+    setMounted(true);
     const codeParam = searchParams.get("code");
     if (codeParam) {
       setActiveTab("code");
@@ -46,24 +49,23 @@ function SearchContent() {
       void triggerSearch("code", codeParam);
     }
   }, [searchParams]);
- 
+
   const triggerSearch = async (type: "phone" | "code", value: string) => {
     const trimmed = value.trim();
     if (!trimmed) return;
- 
+
     setIsLoading(true);
     setErrorMsg("");
     setResults([]);
     setSearched(false);
- 
+
     try {
       const params = type === "phone" ? { phone: trimmed } : { code: trimmed };
       const data = await warrantyService.publicLookup(params);
       
       setResults(data);
       setSearched(true);
- 
-      // Smooth scroll to results after a short timeout to let render finish
+
       setTimeout(() => {
         resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
@@ -75,7 +77,7 @@ function SearchContent() {
       setIsLoading(false);
     }
   };
- 
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputValue.trim()) {
@@ -84,11 +86,20 @@ function SearchContent() {
     }
     void triggerSearch(activeTab, inputValue);
   };
- 
+
+  if (!mounted) {
+    return (
+      <div className="flex flex-col items-center justify-center space-y-2 p-12">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-800" />
+        <p className="text-xs text-slate-500 font-bold">{t("common.loading")}</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="w-full max-w-xl mx-auto space-y-6">
+    <div className="w-full max-w-xl mx-auto space-y-6" suppressHydrationWarning>
       {/* Search form card */}
-      <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden" suppressHydrationWarning>
         <div className="bg-teal-800 p-6 text-white text-center space-y-1">
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-teal-700/60 border border-teal-500/30 mb-2">
             <Shield className="h-6 w-6 text-teal-300" />
@@ -96,10 +107,10 @@ function SearchContent() {
           <h2 className="text-lg font-black tracking-tight uppercase">{t("warrantyLookup.title")}</h2>
           <p className="text-xs text-teal-200/90 font-medium">{t("warrantyLookup.subtitle")}</p>
         </div>
- 
-        <div className="p-6 space-y-6">
+
+        <div className="p-6 space-y-6" suppressHydrationWarning>
           {/* Tabs */}
-          <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl">
+          <div className="grid grid-cols-2 p-1 bg-slate-100 rounded-xl" suppressHydrationWarning>
             <button
               type="button"
               onClick={() => {
@@ -131,7 +142,7 @@ function SearchContent() {
               <ReceiptText className="h-4 w-4" /> {t("warrantyLookup.byCode")}
             </button>
           </div>
- 
+
           {/* Input & Action */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -158,7 +169,7 @@ function SearchContent() {
                 </button>
               </div>
             </div>
- 
+
             <button
               type="submit"
               disabled={isLoading}
@@ -175,7 +186,7 @@ function SearchContent() {
               )}
             </button>
           </form>
- 
+
           {errorMsg ? (
             <div className="rounded-xl border border-rose-100 bg-rose-50 p-4 text-xs font-semibold text-rose-700 text-center leading-normal">
               {errorMsg}
@@ -183,21 +194,22 @@ function SearchContent() {
           ) : null}
         </div>
       </div>
- 
+
       {/* Results Section */}
       {searched && results.length > 0 ? (
-        <div ref={resultRef} className="space-y-4">
+        <div ref={resultRef} className="space-y-4" suppressHydrationWarning>
           <p className="text-xs font-black uppercase text-slate-400 tracking-wider pl-1 flex items-center gap-1">
             <Sparkles className="h-3 w-3 text-amber-500" /> {t("warrantyLookup.results", { count: results.length })}
           </p>
           
-          <div className="space-y-4">
+          <div className="space-y-4" suppressHydrationWarning>
             {results.map((w) => (
               <div
                 key={w.id}
                 className="relative bg-white rounded-3xl border border-slate-100 shadow-lg overflow-hidden border-t-4 border-t-teal-600 transition-all hover:shadow-xl"
+                suppressHydrationWarning
               >
-                <div className="p-6 space-y-4">
+                <div className="p-6 space-y-4" suppressHydrationWarning>
                   {/* Title & Status Badge */}
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
                     <div>
@@ -214,7 +226,7 @@ function SearchContent() {
                       </span>
                     )}
                   </div>
- 
+
                   {/* Core details */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                     <div className="space-y-1">
@@ -243,15 +255,22 @@ function SearchContent() {
     </div>
   );
 }
- 
+
 export default function WarrantyLookupPage() {
   const { t } = useLanguage();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
-    <div className="min-h-screen bg-slate-50/50 flex flex-col justify-between">
+    <div className="relative min-h-screen bg-slate-50/50 flex flex-col justify-between" suppressHydrationWarning>
+      <div className="absolute right-4 top-4 z-20"><LanguageToggle /></div>
       {/* Header bar */}
-      <header className="bg-white border-b border-slate-100 shadow-sm py-4">
-        <div className="container max-w-6xl mx-auto px-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+      <header className="bg-white border-b border-slate-100 shadow-sm py-4" suppressHydrationWarning>
+        <div className="container max-w-6xl mx-auto px-4 flex items-center justify-between" suppressHydrationWarning>
+          <div className="flex items-center gap-3" suppressHydrationWarning>
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal-800 text-white font-black text-sm">
               H
             </div>
@@ -260,29 +279,33 @@ export default function WarrantyLookupPage() {
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest hidden sm:inline-block">{t("warrantyLookup.portal")}</span>
         </div>
       </header>
- 
+
       {/* Main Form container */}
-      <main className="flex-1 container max-w-6xl mx-auto px-4 py-12 flex items-center justify-center">
-        <Suspense fallback={
+      <main className="flex-1 container max-w-6xl mx-auto px-4 py-12 flex items-center justify-center" suppressHydrationWarning>
+        {mounted ? (
+          <Suspense fallback={
+            <div className="flex flex-col items-center justify-center space-y-2">
+              <Loader2 className="h-8 w-8 animate-spin text-teal-800" />
+              <p className="text-xs text-slate-500 font-bold">{t("common.loading")}</p>
+            </div>
+          }>
+            <SearchContent />
+          </Suspense>
+        ) : (
           <div className="flex flex-col items-center justify-center space-y-2">
             <Loader2 className="h-8 w-8 animate-spin text-teal-800" />
             <p className="text-xs text-slate-500 font-bold">{t("common.loading")}</p>
           </div>
-        }>
-          <SearchContent />
-        </Suspense>
+        )}
       </main>
- 
+
       {/* Footer copyright */}
-      <footer className="bg-white border-t border-slate-100 py-6 text-center text-xs text-slate-400 font-medium">
-        <div className="container max-w-6xl mx-auto px-4">
-          <p>© {new Date().getFullYear()} Homex POS. {t("common.allRightsReserved")}</p>
-          <p className="mt-1 text-[10px] opacity-75">{t("warrantyLookup.footerNote")}</p>
+      <footer className="bg-white border-t border-slate-100 py-6 text-center text-xs text-slate-400 font-medium" suppressHydrationWarning>
+        <div className="container max-w-6xl mx-auto px-4" suppressHydrationWarning>
+          <p suppressHydrationWarning>© 2026 Homex POS. {t("common.allRightsReserved")}</p>
+          <p className="mt-1 text-[10px] opacity-75" suppressHydrationWarning>{t("warrantyLookup.footerNote")}</p>
         </div>
       </footer>
     </div>
   );
 }
-
-
-

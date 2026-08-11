@@ -17,9 +17,10 @@ type CreateVatModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  initialOrderCode?: string;
 };
 
-export function CreateVatModal({ isOpen, onClose, onSuccess }: CreateVatModalProps) {
+export function CreateVatModal({ isOpen, onClose, onSuccess, initialOrderCode }: CreateVatModalProps) {
   const [orderCode, setOrderCode] = useState("");
   const [taxCode, setTaxCode] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -41,7 +42,12 @@ export function CreateVatModal({ isOpen, onClose, onSuccess }: CreateVatModalPro
   const lookupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      if (initialOrderCode) {
+        setOrderCode(initialOrderCode);
+        void checkOrderCode(initialOrderCode);
+      }
+    } else {
       setOrderCode("");
       setTaxCode("");
       setCompanyName("");
@@ -52,17 +58,17 @@ export function CreateVatModal({ isOpen, onClose, onSuccess }: CreateVatModalPro
       setOrderError("");
       setTaxError("");
     }
-  }, [isOpen]);
+  }, [isOpen, initialOrderCode]);
 
-  async function handleCheckOrder() {
-    if (!orderCode.trim()) return;
+  async function checkOrderCode(targetCode: string) {
+    if (!targetCode.trim()) return;
 
     setIsCheckingOrder(true);
     setOrderError("");
     setOrderInfo(null);
 
     try {
-      const order = await orderService.getByCode(orderCode.trim());
+      const order = await orderService.getByCode(targetCode.trim());
       if (order.status === "CANCELLED") {
         setOrderError(t("vat.orderCancelled"));
       } else if (order.status !== "COMPLETED") {
@@ -73,18 +79,22 @@ export function CreateVatModal({ isOpen, onClose, onSuccess }: CreateVatModalPro
           setOrderError(t("vat.pendingRequestExists"));
         } else if (existingReq.status === "APPROVED") {
           setOrderError(t("vat.alreadyIssued"));
-        } else {
-          // If REJECTED or FAILED, user can recreate.
-          setOrderInfo(order);
         }
       } else {
         setOrderInfo(order);
+        if (order.customer?.email && !buyerEmail) {
+          setBuyerEmail(order.customer.email);
+        }
       }
-    } catch (error: any) {
-      setOrderError(getApiErrorMessage(error));
+    } catch (error) {
+      setOrderError(t("vat.orderNotFound"));
     } finally {
       setIsCheckingOrder(false);
     }
+  }
+
+  async function handleCheckOrder() {
+    await checkOrderCode(orderCode);
   }
 
   async function handleTaxCodeChange(e: React.ChangeEvent<HTMLInputElement>) {

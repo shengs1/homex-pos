@@ -1,7 +1,7 @@
-import OpenAI from "openai";
+import { runWithAiProviderFallback } from "./ai-provider.service";
 import prisma from "../lib/prisma";
 
-export type EnrichedProductSource = "DATABASE" | "UPCITEMDB" | "BARCODE_SPIDER" | "BARCODE_LOOKUP" | "OPEN_FOOD_FACTS" | "OPEN_PRODUCTS_FACTS" | "ICHECK" | "AI" | "HYBRID";
+export type EnrichedProductSource = "DATABASE" | "UPCITEMDB" | "BARCODE_SPIDER" | "BARCODE_LOOKUP" | "OPEN_FOOD_FACTS" | "OPEN_PRODUCTS_FACTS" | "AI" | "HYBRID";
 
 export type EnrichedProductData = {
   barcode: string;
@@ -60,7 +60,7 @@ function normalizeDescription(value: unknown) {
 
 function isBadBrand(value?: string) {
   const normalized = normalizeText(value || "");
-  return !normalized || normalized.includes("icheck") || normalized.includes("mang xa hoi san pham");
+  return !normalized || normalized.includes("mang xa hoi san pham");
 }
 
 function buildCleanDescription(data: Partial<EnrichedProductData>) {
@@ -76,7 +76,7 @@ function sanitizeDescriptionAgainstProduct(value: unknown, data: Partial<Enriche
   const description = normalizeDescription(value);
   if (!description) return undefined;
   const normalized = normalizeText(description);
-  if (normalized.includes("icheck") || normalized.includes("du lieu ma vach") || normalized.includes("ai") || normalized.includes("kiem tra lai truoc khi luu") || normalized.includes("thuoc nhom") || normalized.includes("home garden")) {
+  if (normalized.includes("du lieu ma vach") || normalized.includes("ai") || normalized.includes("kiem tra lai truoc khi luu") || normalized.includes("thuoc nhom") || normalized.includes("home garden")) {
     return buildCleanDescription(data);
   }
   return description;
@@ -397,7 +397,7 @@ function sanitizePartialData(data: Partial<EnrichedProductData>) {
   cleanData.minStock = normalizePrice(data.minStock);
   cleanData.imageUrl = cleanImageUrl(data.imageUrl);
   cleanData.description = sanitizeDescriptionAgainstProduct(data.description, cleanData);
-  if (["DATABASE", "UPCITEMDB", "BARCODE_SPIDER", "BARCODE_LOOKUP", "OPEN_FOOD_FACTS", "OPEN_PRODUCTS_FACTS", "ICHECK", "AI", "HYBRID"].includes(String(data.source))) {
+  if (["DATABASE", "UPCITEMDB", "BARCODE_SPIDER", "BARCODE_LOOKUP", "OPEN_FOOD_FACTS", "OPEN_PRODUCTS_FACTS", "AI", "HYBRID"].includes(String(data.source))) {
     cleanData.source = data.source;
   }
   cleanData.confidence = typeof data.confidence === "number" ? Math.min(1, Math.max(0, data.confidence)) : undefined;
@@ -626,93 +626,6 @@ function decodeHtmlEntities(value: string) {
     .trim();
 }
 
-async function lookupICheckPublic(barcode: string): Promise<Partial<EnrichedProductData> | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 6000);
-
-    try {
-      const response = await fetch(`https://icheck.vn/san-pham/${encodeURIComponent(barcode)}`, {
-        signal: controller.signal,
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept-Language": "vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7",
-        },
-      });
-
-      if (!response.ok) return null;
-      const html = await response.text();
-      const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
-      if (!titleMatch) return null;
-
-      const name = decodeHtmlEntities(titleMatch[1])
-        .replace(/\s*\|\s*iCheck(\.vn)?\s*$/i, "")
-        .trim();
-      const normalizedName = normalizeText(name);
-      if (
-        !name ||
-        normalizedName.includes("mang xa hoi san pham") ||
-        normalizedName.includes("khong tim thay") ||
-        normalizedName === "icheck"
-      ) {
-        return null;
-      }
-
-      const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-      const rawImageUrl = imageMatch?.[1]?.trim();
-      const imageUrl = rawImageUrl && !/avatar-default|logo-|default/i.test(rawImageUrl)
-        ? rawImageUrl
-        : undefined;
-      const companyMatch = html.match(/(Công\s+ty\s+TNHH\s+[^<]+)/i) || html.match(/(Công\s+ty\s+Cổ\s+phần\s+[^<]+)/i);
-      const brand = companyMatch?.[1]?.replace(/Doanh nghiệp sở hữu/i, "").trim();
-
-      return {
-        barcode,
-        name,
-        brand,
-        imageUrl,
-        source: "ICHECK",
-        confidence: 0.76,
-      };
-    } finally {
-      clearTimeout(timeout);
-    }
-  } catch (error) {
-    if (shouldWarnLookupError(error)) console.warn("iCheck public lookup failed:", error);
-    return null;
-  }
-}
-async function lookupICheck(barcode: string): Promise<Partial<EnrichedProductData> | null> {
-  const baseUrl = process.env.ICHECK_API_BASE_URL?.trim();
-  const apiKey = process.env.ICHECK_API_KEY?.trim();
-  if (!baseUrl || !apiKey) return null;
-
-  try {
-    const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
-    const data = await fetchJsonWithTimeout(`${normalizedBaseUrl}/products/${encodeURIComponent(barcode)}`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    const product = data?.data || data?.product || data;
-    if (!product) return null;
-
-    return {
-      barcode,
-      name: product.name || product.title,
-      brand: product.brand,
-      category: product.category || product.categoryName,
-      estimatedSalePrice: normalizePrice(product.price || product.salePrice),
-      originalPrice: normalizePrice(product.originalPrice || product.listPrice),
-      imageUrl: product.imageUrl || product.image || product.thumbnail,
-      description: product.description,
-      source: "ICHECK",
-      confidence: 0.78,
-    };
-  } catch (error) {
-    if (shouldWarnLookupError(error)) console.warn("iCheck lookup failed:", error);
-    return null;
-  }
-}
-
 function mergeExternalResults(barcode: string, results: Partial<EnrichedProductData>[]) {
   let merged: EnrichedProductData = { barcode, source: "HYBRID", missingFields: calculateMissingFields({}) };
   let firstSource: EnrichedProductSource | undefined;
@@ -729,23 +642,18 @@ function mergeExternalResults(barcode: string, results: Partial<EnrichedProductD
 }
 
 async function enrichFromImageWithAi(barcode: string, imageUrl: string) {
-  const token = process.env.GITHUB_TOKEN?.trim();
-  if (!token || !imageUrl) return null;
+  if (!imageUrl) return null;
 
-  try {
-    const client = new OpenAI({
-      baseURL: "https://models.inference.ai.azure.com",
-      apiKey: token,
-    });
+  return runWithAiProviderFallback("AI đọc ảnh sản phẩm", async (client, provider) => {
 
     const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: provider.visionModelName,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content:
-            "Bạn là hệ thống đọc nhãn sản phẩm từ ảnh thật. Chỉ dựa vào chữ/nhãn nhìn thấy trong ảnh, không suy đoán từ barcode. BẮT BUỘC trả về duy nhất JSON thuần túy gồm: name, brand, category, supplierName, unit, estimatedImportPrice, estimatedSalePrice, originalPrice, stockQuantity, minStock, warrantyMonths, description. Nếu không đọc rõ tên sản phẩm từ ảnh, trả về object rỗng {}. Category chỉ chọn một trong: Thiết bị nhà bếp (KIT), Thiết bị làm sạch (CARE), Đồ dùng gia đình (UTIL), Dụng cụ nấu ăn (COOK), Thiết bị làm mát (COOL), Thiết bị điện (ELEC), Đồ phòng tắm (BATH), Khác (OTHER). Với sản phẩm ngoài phạm trù đồ gia dụng như đồ chơi trẻ em, băng keo cá nhân, nước, thực phẩm, hàng tiêu dùng linh tinh thì dùng Khác (OTHER) và supplierName là Nhà cung cấp lẻ. Giá tiền trả về theo đơn vị nghìn của Homex POS: 1000 tương đương 1.000.000 VND thực tế; chỉ đề xuất trong khoảng từ 1000 đến vài chục nghìn, nếu không chắc thì bỏ trống giá.",
+            "Bạn là hệ thống đọc nhãn sản phẩm từ ảnh thật cho Homex POS. Chỉ dựa vào chữ/nhãn nhìn thấy trong ảnh. BẮT BUỘC trả về duy nhất JSON thuần túy gồm: name, brand, category, supplierName, unit, estimatedImportPrice, estimatedSalePrice, originalPrice, stockQuantity, minStock, warrantyMonths, description. Category chọn một trong: Thiết bị nhà bếp (KIT), Thiết bị làm sạch (CARE), Đồ dùng gia đình (UTIL), Dụng cụ nấu ăn (COOK), Thiết bị làm mát (COOL), Thiết bị điện (ELEC), Đồ phòng tắm (BATH), Khác (OTHER). ĐỊNH GIÁ DEMO TRONG KHOẢNG 1.000đ ĐẾN 9.500đ: Đồ đắt tiền (tủ lạnh, máy hút bụi, bộ nồi lớn) đề xuất 7500 - 9500; Đồ tầm trung (nồi cơm, máy xay, ấm đun) đề xuất 3500 - 6500; Đồ nhỏ/lẻ (bóng đèn, ổ cắm, nước suối) đề xuất 1000 - 3000. estimatedImportPrice khoảng 70% estimatedSalePrice.",
         },
         {
           role: "user",
@@ -779,35 +687,27 @@ async function enrichFromImageWithAi(barcode: string, imageUrl: string) {
       source: "AI" as const,
       confidence: 0.7,
     };
-  } catch (error) {
-    console.warn("AI image barcode enrichment failed:", error);
-    return null;
-  }
+  });
 }
 async function enrichMissingFieldsWithAi(barcode: string, externalData: Partial<EnrichedProductData>) {
-  const token = process.env.GITHUB_TOKEN?.trim();
-  const missingFields = calculateAiSuggestionFields(externalData);
+const missingFields = calculateAiSuggestionFields(externalData);
   const supplierOptions = await prisma.supplier.findMany({ where: { status: "ACTIVE" }, select: { name: true } });
-  if (!token || missingFields.length === 0 || !hasTrustedProductName(externalData)) return null;
+  if (missingFields.length === 0 || !hasTrustedProductName(externalData)) return null;
 
-  try {
-    const client = new OpenAI({
-      baseURL: "https://models.inference.ai.azure.com",
-      apiKey: token,
-    });
+  return runWithAiProviderFallback("AI bổ sung thông tin sản phẩm", async (client, provider) => {
 
     const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: provider.modelName,
       response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
           content:
-            "Bạn là hệ thống chuẩn hóa dữ liệu sản phẩm cho Homex POS. BẮT BUỘC trả về duy nhất một object JSON thuần túy, không markdown, không giải thích. JSON gồm: name, category, supplierName, unit, estimatedImportPrice, estimatedSalePrice, originalPrice, stockQuantity, minStock, warrantyMonths, description. Không được thay đổi danh tính sản phẩm. Field name/brand chỉ được trả về nếu trùng khớp rõ với tên/thương hiệu trong dữ liệu external. Nếu external không có tên sản phẩm thật, bỏ trống name. Không được bịa URL ảnh. Category chỉ được chọn một trong các nhóm Homex: Thiết bị nhà bếp (KIT), Thiết bị làm sạch (CARE), Đồ dùng gia đình (UTIL), Dụng cụ nấu ăn (COOK), Thiết bị làm mát (COOL), Thiết bị điện (ELEC), Đồ phòng tắm (BATH), Khác (OTHER). Với sản phẩm ngoài phạm trù đồ gia dụng như đồ chơi trẻ em, băng keo cá nhân, nước, thực phẩm, hàng tiêu dùng linh tinh thì chọn Khác (OTHER) và supplierName là Nhà cung cấp lẻ. Description phải mô tả đúng name/brand từ external; nếu không chắc thì bỏ trống. Giá tiền trả về theo đơn vị nghìn của Homex POS: 1000 tương đương 1.000.000 VND thực tế; chỉ đề xuất trong khoảng từ 1000 đến vài chục nghìn.",
+            "Bạn là hệ thống chuẩn hóa dữ liệu sản phẩm cho Homex POS. BẮT BUỘC trả về duy nhất một object JSON thuần túy gồm: name, category, supplierName, unit, estimatedImportPrice, estimatedSalePrice, originalPrice, stockQuantity, minStock, warrantyMonths, description. Category chọn một trong: Thiết bị nhà bếp (KIT), Thiết bị làm sạch (CARE), Đồ dùng gia đình (UTIL), Dụng cụ nấu ăn (COOK), Thiết bị làm mát (COOL), Thiết bị điện (ELEC), Đồ phòng tắm (BATH), Khác (OTHER). ĐỊNH GIÁ DEMO TRONG KHOẢNG 1.000đ ĐẾN 9.500đ: Sản phẩm lớn/đắt tiền (tủ lạnh, máy hút bụi, bộ nồi cao cấp) đề xuất giá bán 7500 - 9500; Sản phẩm tầm trung (nồi cơm, máy xay, ấm đun) đề xuất giá bán 3500 - 6500; Sản phẩm nhỏ/phụ kiện (bóng đèn, ổ cắm, nước uống) đề xuất giá bán 1000 - 3000. estimatedImportPrice bằng khoảng 70% estimatedSalePrice. Giá tiền là số nguyên từ 1000 đến 9500.",
         },
         {
           role: "user",
-          content: `Barcode: ${barcode}\n\nDữ liệu đã lấy được từ external APIs:\n${JSON.stringify(externalData)}\n\nNhà cung cấp hiện có, supplierName phải chọn đúng một tên trong danh sách này nếu có thể:\n${JSON.stringify(supplierOptions.map((supplier) => supplier.name))}\n\nCác field còn thiếu:\n${missingFields.join(", ")}\n\nChỉ bù các field còn thiếu nếu không mâu thuẫn dữ liệu external. Không đổi tên sản phẩm. Không bịa sản phẩm khác cùng barcode. Giá tiền là số nguyên theo đơn vị nghìn của Homex POS: 1000 tương đương 1.000.000 VND thực tế; chỉ đề xuất trong khoảng từ 1000 đến vài chục nghìn. Gợi ý stockQuantity là tồn kho ban đầu hợp lý, minStock là tồn kho tối thiểu cảnh báo. Nếu là hàng tiêu dùng không bảo hành thì warrantyMonths = 0; hàng điện/gia dụng thường 6-24 tháng.`,
+          content: `Barcode: ${barcode}\n\nDữ liệu đã lấy được từ external APIs:\n${JSON.stringify(externalData)}\n\nNhà cung cấp hiện có, supplierName phải chọn đúng một tên trong danh sách này nếu có thể:\n${JSON.stringify(supplierOptions.map((supplier) => supplier.name))}\n\nCác field còn thiếu:\n${missingFields.join(", ")}\n\nChỉ bù các field còn thiếu nếu không mâu thuẫn dữ liệu external. Giá tiền là số nguyên trong khoảng DEMO 1000 đến 9500 VND. Gợi ý stockQuantity là tồn kho ban đầu hợp lý (10-100), minStock là tồn kho tối thiểu. Bảo hành 0-24 tháng.`,
         },
       ],
     });
@@ -831,12 +731,8 @@ async function enrichMissingFieldsWithAi(barcode: string, externalData: Partial<
       source: "AI" as const,
       confidence: 0.62,
     };
-  } catch (error) {
-    console.warn("AI barcode enrichment failed:", error);
-    return null;
-  }
+  });
 }
-
 export async function enrichProductByBarcode(barcode: string) {
   const cleanBarcode = barcode.trim();
 
@@ -867,7 +763,7 @@ export async function enrichProductByBarcode(barcode: string) {
   }
 
   const externalResults: Partial<EnrichedProductData>[] = [];
-  for (const lookup of [lookupUpcItemDb, lookupBarcodeSpider, lookupBarcodeLookup, lookupOpenProductsFacts, lookupOpenFoodFacts, lookupICheck, lookupICheckPublic]) {
+  for (const lookup of [lookupUpcItemDb, lookupBarcodeSpider, lookupBarcodeLookup, lookupOpenProductsFacts, lookupOpenFoodFacts]) {
     const result = await lookup(cleanBarcode);
     if (result && hasUsefulData(result)) {
       externalResults.push(result);

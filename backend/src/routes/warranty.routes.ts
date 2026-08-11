@@ -318,18 +318,103 @@ router.get(
     let warranties: any[] = [];
 
     if (code) {
-      const warranty = await prisma.warranty.findFirst({
+      warranties = await prisma.warranty.findMany({
         where: {
-          warrantyCode: {
-            equals: code,
-            mode: "insensitive",
-          },
+          OR: [
+            {
+              warrantyCode: {
+                equals: code,
+                mode: "insensitive",
+              },
+            },
+            {
+              orderDetail: {
+                order: {
+                  orderCode: {
+                    equals: code,
+                    mode: "insensitive",
+                  },
+                },
+              },
+            },
+          ],
         },
         include: warrantyInclude,
+        orderBy: {
+          createdAt: "desc",
+        },
       });
 
-      if (warranty) {
-        warranties.push(warranty);
+      // Fallback: If no explicit Warranty rows exist for this code, find Order by orderCode and construct warranty details for all products
+      if (warranties.length === 0) {
+        const order = await prisma.order.findFirst({
+          where: {
+            orderCode: {
+              equals: code,
+              mode: "insensitive",
+            },
+          },
+          include: {
+            customer: {
+              select: {
+                id: true,
+                fullName: true,
+                phone: true,
+                email: true,
+                address: true,
+                points: true,
+                status: true,
+              },
+            },
+            orderDetails: {
+              include: {
+                product: {
+                  select: {
+                    id: true,
+                    sku: true,
+                    name: true,
+                    salePrice: true,
+                    warrantyMonths: true,
+                    status: true,
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (order) {
+          warranties = order.orderDetails.map((detail, idx) => {
+            const months = detail.product?.warrantyMonths || 12;
+            const startDate = order.createdAt;
+            const endDate = new Date(startDate);
+            endDate.setMonth(endDate.getMonth() + months);
+
+            const isExpired = new Date() > endDate;
+
+            return {
+              id: detail.id,
+              warrantyCode: `BH-${order.orderCode}-${idx + 1}`,
+              status: isExpired ? WARRANTY_STATUS.EXPIRED : WARRANTY_STATUS.ACTIVE,
+              startDate,
+              endDate,
+              notes: `Bảo hành điện tử theo hóa đơn ${order.orderCode}`,
+              createdAt: order.createdAt,
+              updatedAt: order.createdAt,
+              customer: order.customer,
+              orderDetail: {
+                ...detail,
+                order: {
+                  id: order.id,
+                  orderCode: order.orderCode,
+                  totalAmount: order.totalAmount,
+                  status: order.status,
+                  createdAt: order.createdAt,
+                },
+              },
+            };
+          });
+        }
       }
     } else if (phone) {
       const customer = await prisma.customer.findFirst({

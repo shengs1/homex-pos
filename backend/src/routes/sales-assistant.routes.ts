@@ -8,6 +8,7 @@ import { salesAssistantService } from "../services/sales-assistant.service";
 const router = Router();
 
 const salesAssistantSchema = z.object({
+  language: z.enum(["vi", "en"]).optional(),
   need: z.string().optional(),
   budgetMin: z.number().optional(),
   budgetMax: z.number().optional(),

@@ -1,0 +1,191 @@
+{
+  "summary": {
+    "scenarioCount": 8,
+    "constraintPassRate": 1,
+    "aiResponseCount": 0,
+    "heuristicResponseCount": 8,
+    "fallbackValid": true,
+    "evaluatedAt": "2026-08-03T16:20:16.840Z"
+  },
+  "results": [
+    {
+      "scenario": {
+        "need": "nồi cơm cho gia đình",
+        "budgetMin": 0,
+        "budgetMax": 2000
+      },
+      "source": "HEURISTIC",
+      "recommendationCount": 0,
+      "allIdsValid": true,
+      "allInStock": true,
+      "allWithinBudget": true,
+      "noDuplicate": true,
+      "maxFive": true,
+      "recommendations": []
+    },
+    {
+      "scenario": {
+        "need": "máy xay sinh tố",
+        "budgetMin": 0,
+        "budgetMax": 1500
+      },
+      "source": "HEURISTIC",
+      "recommendationCount": 0,
+      "allIdsValid": true,
+      "allInStock": true,
+      "allWithinBudget": true,
+      "noDuplicate": true,
+      "maxFive": true,
+      "recommendations": []
+    },
+    {
+      "scenario": {
+        "need": "máy hút bụi",
+        "budgetMin": 0,
+        "budgetMax": 2500
+      },
+      "source": "HEURISTIC",
+      "recommendationCount": 0,
+      "allIdsValid": true,
+      "allInStock": true,
+      "allWithinBudget": true,
+      "noDuplicate": true,
+      "maxFive": true,
+      "recommendations": []
+    },
+    {
+      "scenario": {
+        "need": "thiết bị làm mát",
+        "budgetMin": 0,
+        "budgetMax": 3000
+      },
+      "source": "HEURISTIC",
+      "recommendationCount": 4,
+      "allIdsValid": true,
+      "allInStock": true,
+      "allWithinBudget": true,
+      "noDuplicate": true,
+      "maxFive": true,
+      "recommendations": [
+        {
+          "productId": 28,
+          "name": "BAPF30 Bionaire Air Purifier Filters",
+          "price": 2200,
+          "stockQuantity": 100,
+          "imageUrl": "https://images.barcodelookup.com/1549/15493780-1.jpg",
+          "reason": "Phù hợp với nhu cầu \"thiết bị làm mát\" và đang có ưu đãi giảm giá tốt.",
+          "type": "NEED_MATCH",
+          "confidence": 0.9
+        },
+        {
+          "productId": 29,
+          "name": "Radiant 15 Amp White 2-Outlet and 2 Type a/C USB Recessed Furniture Power Strip with Switch and 6 Ft. Cord",
+          "price": 2800,
+          "stockQuantity": 50,
+          "imageUrl": "https://images.barcodelookup.com/23678/236783936-1.jpg",
+          "reason": "Phù hợp với nhu cầu \"thiết bị làm mát\" và đang có ưu đãi giảm giá tốt.",
+          "type": "NEED_MATCH",
+          "confidence": 0.9
+        },
+        {
+          "productId": 35,
+          "name": "Skip Hop Moby Bath Mat, Blue",
+          "price": 1600,
+          "stockQuantity": 100,
+          "imageUrl": "https://images.barcodelookup.com/12414/124140142-1.jpg",
+          "reason": "Phù hợp với nhu cầu \"thiết bị làm mát\" và đang có ưu đãi giảm giá tốt.",
+          "type": "NEED_MATCH",
+          "confidence": 0.9
+        },
+        {
+          "productId": 34,
+          "name": "15.5 in. X 27.5 in. Rubber Bath Mat in White",
+          "price": 1400,
+          "stockQuantity": 100,
+          "imageUrl": "https://images.barcodelookup.com/26318/263181943-1.jpg",
+          "reason": "Phù hợp với nhu cầu \"thiết bị làm mát\" và đang có ưu đãi giảm giá tốt.",
+          "type": "NEED_MATCH",
+          "confidence": 0.9
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "need": "dụng cụ nấu ăn",
+        "budgetMin": 0,
+        "budgetMax": 2000
+      },
+      "source": "HEURISTIC",
+      "recommendationCount": 0,
+      "allIdsValid": true,
+      "allInStock": true,
+      "allWithinBudget": true,
+      "noDuplicate": true,
+      "maxFive": true,
+      "recommendations": []
+    },
+    {
+      "scenario": {
+        "need": "sản phẩm có bảo hành",
+        "budgetMin": 500,
+        "budgetMax": 4000,
+        "preferences": {
+          "preferWarranty": true
+        }
+      },
+      "source": "HEURISTIC",
+      "recommendationCount": 0,
+      "allIdsValid": true,
+      "allInStock": true,
+      "allWithinBudget": true,
+      "noDuplicate": true,
+      "maxFive": true,
+      "recommendations": []
+    },
+    {
+      "scenario": {
+        "need": "sản phẩm đang khuyến mãi",
+        "budgetMin": 0,
+        "budgetMax": 5000,
+        "preferences": {
+          "preferPromotion": true
+        }
+      },
+      "source": "HEURISTIC",
+      "recommendationCount": 0,
+      "allIdsValid": true,
+      "allInStock": true,
+      "allWithinBudget": true,
+      "noDuplicate": true,
+      "maxFive": true,
+      "recommendations": []
+    },
+    {
+      "scenario": {
+        "need": "mua kèm đồ nhà bếp",
+        "budgetMin": 0,
+        "budgetMax": 2500,
+        "preferences": {
+          "crossSellFromCart": true
+        }
+      },
+      "source": "HEURISTIC",
+      "recommendationCount": 0,
+      "allIdsValid": true,
+      "allInStock": true,
+      "allWithinBudget": true,
+      "noDuplicate": true,
+      "maxFive": true,
+      "recommendations": []
+    }
+  ],
+  "fallback": {
+    "summary": "Không tìm thấy sản phẩm nào phù hợp với nhu cầu \"nồi cơm\" trong khoảng ngân sách đã chọn. Vui lòng thử từ khóa khác hoặc điều chỉnh ngân sách.",
+    "recommendations": [],
+    "bundleSuggestion": "",
+    "cashierTips": [
+      "Gợi ý khách hàng mở rộng khoảng ngân sách hoặc tìm kiếm nhóm sản phẩm tương tự."
+    ],
+    "source": "HEURISTIC"
+  }
+}

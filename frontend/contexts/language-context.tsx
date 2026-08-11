@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
+import { completionEn, completionVi } from "@/contexts/i18n-completion";
 
 export type Language = "vi" | "en";
 
@@ -68,10 +69,10 @@ const vi: Dictionary = {
   "salesAssistant.needPlaceholder": "Ví dụ: Khách cần đồ nhà bếp cho gia đình 4 người, ngân sách khoảng 1 triệu...",
   "salesAssistant.quickNeeds": "Nhu cầu nhanh",
   "salesAssistant.budget": "Ngân sách",
-  "salesAssistant.under10k": "Dưới 10K",
-  "salesAssistant.from10kTo30k": "10K - 30K",
-  "salesAssistant.from30kTo50k": "30K - 50K",
-  "salesAssistant.over50k": "Trên 50K",
+  "salesAssistant.under10k": "Dưới 3 triệu",
+  "salesAssistant.from10kTo30k": "3Tr – 7 triệu",
+  "salesAssistant.from30kTo50k": "7Tr – 15 triệu",
+  "salesAssistant.over50k": "Trên 15 triệu",
   "salesAssistant.preferPromotion": "Ưu tiên khuyến mãi",
   "salesAssistant.preferWarranty": "Ưu tiên bảo hành",
   "salesAssistant.preferHighStock": "Ưu tiên còn nhiều hàng",
@@ -246,7 +247,7 @@ const vi: Dictionary = {
   "login.failed": "Đăng nhập thất bại",
   "login.info": "Thông báo",
   "login.expired": "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
-  "login.demoTitle": "Tài khoản demo từ seed backend:",
+  "login.demoTitle": "Tài khoản demo:",
   "login.demoAdmin": "Quản trị viên: ADMIN (hoặc admin@homex.com) / 123456",
   "login.demoCashier": "Thu ngân: TN0001 (hoặc cashier@homex.com) / 123456",
   "login.footer": "© 2026 Homex POS - Hệ thống quản lý bán hàng",
@@ -442,7 +443,7 @@ const vi: Dictionary = {
 
   "pos.title": "Bán hàng POS",
   "pos.description": "Tìm sản phẩm, thêm vào giỏ hàng, tạo bản nháp, cập nhật bản nháp và thanh toán.",
-  "pos.searchProduct": "Tìm SKU, tên sản phẩm, mô tả hoặc mã QR...",
+  "pos.searchProduct": "Tìm SKU, tên sản phẩm hoặc mã QR...",
   "pos.allProducts": "Tất cả",
   "pos.addToCart": "Thêm vào giỏ",
   "pos.outOfStock": "Hết hàng",
@@ -716,10 +717,10 @@ const en: Dictionary = {
   "salesAssistant.needPlaceholder": "E.g. Customer needs kitchen utensils for a family of 4, budget around 1 million...",
   "salesAssistant.quickNeeds": "Quick Needs",
   "salesAssistant.budget": "Budget",
-  "salesAssistant.under10k": "Under 10K",
-  "salesAssistant.from10kTo30k": "10K - 30K",
-  "salesAssistant.from30kTo50k": "30K - 50K",
-  "salesAssistant.over50k": "Over 50K",
+  "salesAssistant.under10k": "Under 3M",
+  "salesAssistant.from10kTo30k": "3M – 7M",
+  "salesAssistant.from30kTo50k": "7M – 15M",
+  "salesAssistant.over50k": "Over 15M",
   "salesAssistant.preferPromotion": "Prefer promotion",
   "salesAssistant.preferWarranty": "Prefer warranty",
   "salesAssistant.preferHighStock": "Prefer high stock",
@@ -1095,7 +1096,7 @@ const en: Dictionary = {
 
   "pos.title": "POS Sale",
   "pos.description": "Search products, add to cart, create draft, update draft and checkout.",
-  "pos.searchProduct": "Search SKU, product name, description or QR...",
+  "pos.searchProduct": "Search SKU, product name or QR...",
   "pos.allProducts": "All",
   "pos.addToCart": "Add to cart",
   "pos.outOfStock": "Out of stock",
@@ -1332,6 +1333,8 @@ const megaVi: Dictionary = {
   "products.originalPrice": "Giá gốc",
   "pos.cashReceived": "Tiền khách đưa",
   "pos.cashReceivedPlaceholder": "Nhập tiền khách đưa",
+  "pos.quickSelectCash": "Gợi ý số tiền:",
+  "pos.exactCash": "Vừa đủ",
   "pos.cashCheckoutTitle": "Thanh toán tiền mặt",
   "pos.cashCheckoutDescription": "Nhập số tiền khách đưa để hệ thống tự tính tiền thối trước khi hoàn tất hóa đơn.",
   "pos.changeAmount": "Tiền thối",
@@ -1848,7 +1851,7 @@ const megaVi: Dictionary = {
   "barcode.copyLinkFailed": "Không thể sao chép liên kết.",
   "barcode.remoteScannerDescription": "Biến điện thoại của bạn thành máy quét mã vạch từ xa bằng cách quét mã QR bên dưới.",
   "barcode.newPairingCode": "Tạo mã mới",
-  "barcode.remoteInstruction1": "1. Dùng camera điện thoại hoặc Zalo để quét mã QR bên trên.",
+  "barcode.remoteInstruction1": "1. Dùng camera điện thoại hoặc Zalo để quét mã QR bên trên (nếu hiện màn hình Ngrok Free, nhấn 'Visit Site' trên ĐT).",
   "barcode.remoteInstruction2": "2. Cho phép trình duyệt truy cập Camera trên điện thoại.",
   "barcode.remoteInstruction3": "3. Di chuyển camera đưa mã vạch của sản phẩm vào tiêu cự.",
   "barcode.remoteInstruction4": "4. Sản phẩm sẽ tự động được thêm vào giỏ hàng tại đây.",
@@ -2075,6 +2078,8 @@ const megaEn: Dictionary = {
   "products.originalPrice": "Original price",
   "pos.cashReceived": "Cash received",
   "pos.cashReceivedPlaceholder": "Enter cash received",
+  "pos.quickSelectCash": "Quick cash suggestions",
+  "pos.exactCash": "Exact",
   "pos.cashCheckoutTitle": "Cash payment",
   "pos.cashCheckoutDescription": "Enter the cash received so the system can calculate change before completing the invoice.",
   "pos.changeAmount": "Change",
@@ -2585,7 +2590,7 @@ const megaEn: Dictionary = {
   "barcode.copyLinkFailed": "Could not copy the link.",
   "barcode.remoteScannerDescription": "Turn your phone into a remote barcode scanner by scanning the QR code below.",
   "barcode.newPairingCode": "New code",
-  "barcode.remoteInstruction1": "1. Use your phone camera or Zalo to scan the QR code above.",
+  "barcode.remoteInstruction1": "1. Use your phone camera or Zalo to scan the QR code above (click 'Visit Site' if Ngrok free warning page appears).",
   "barcode.remoteInstruction2": "2. Allow Camera access in the phone browser.",
   "barcode.remoteInstruction3": "3. Move the camera until the product barcode is in focus.",
   "barcode.remoteInstruction4": "4. The product will be added to this cart automatically.",
@@ -2806,7 +2811,10 @@ const megaEn: Dictionary = {
   "dashboard.quick": "Quick"
 };
 
-const dictionaries: Record<Language, Dictionary> = { vi: { ...vi, ...megaVi }, en: { ...en, ...megaEn } };
+const dictionaries: Record<Language, Dictionary> = {
+  vi: { ...vi, ...megaVi, ...completionVi },
+  en: { ...en, ...megaEn, ...completionEn },
+};
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
@@ -2818,6 +2826,13 @@ function interpolate(value: string, params?: TranslateParams) {
   }, value);
 }
 
+function getMissingTranslationLabel(key: string) {
+  const leaf = key.split(".").pop() || "";
+  return leaf
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .trim();
+}
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   // Use a stable default for the initial render to match the server output.
   const [language, setLanguageState] = useState<Language>("vi");
@@ -2864,7 +2879,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
       language,
       setLanguage,
       toggleLanguage,
-      t: (key: string, params?: TranslateParams) => interpolate(dictionaries[language][key] || key, params),
+      t: (key: string, params?: TranslateParams) => interpolate(dictionaries[language][key] || getMissingTranslationLabel(key), params),
     };
   }, [language, setLanguage, toggleLanguage]);
 

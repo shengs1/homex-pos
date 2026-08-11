@@ -6,6 +6,7 @@ import { posService } from "@/services/homex.service";
 import { toast } from "sonner";
 import { Camera, Send, CheckCircle2, AlertCircle, RefreshCw, Video, Zap, ZoomIn, SwitchCamera } from "lucide-react";
 import { useLanguage } from "@/contexts/language-context";
+import { LanguageToggle } from "@/components/shared/language-toggle";
 
 export default function MobileScanClient() {
   const { t } = useLanguage();
@@ -492,8 +493,16 @@ export default function MobileScanClient() {
 
     setStatus("idle");
 
+    // Send heartbeat ping to server
+    const sendPing = () => {
+      posService.pingRemoteScan({ sessionId }).catch(() => {});
+    };
+    sendPing();
+    const pingTimer = window.setInterval(sendPing, 3500);
+
     return () => {
       isMountedRef.current = false;
+      window.clearInterval(pingTimer);
       void stopScannerNow();
     };
   }, [sessionId, t]);
@@ -501,6 +510,7 @@ export default function MobileScanClient() {
   if (!hasMounted) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white font-medium">
+        <div className="fixed right-4 top-4 z-[100]"><LanguageToggle /></div>
         {t("mobileScan.loadingScanner")}
       </div>
     );
@@ -509,6 +519,7 @@ export default function MobileScanClient() {
   if (!sessionId) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-slate-950 p-6 text-center text-white">
+        <div className="fixed right-4 top-4 z-[100]"><LanguageToggle /></div>
         <div className="rounded-full bg-red-950/50 p-4 border border-red-500/20 text-red-500 mb-4 animate-bounce">
           <AlertCircle className="h-10 w-10" />
         </div>
@@ -522,6 +533,7 @@ export default function MobileScanClient() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-950 text-slate-100 p-4 pb-12 font-sans selection:bg-blue-500/30">
+        <div className="fixed right-4 top-4 z-[100]"><LanguageToggle /></div>
       <div className="flex flex-col items-center justify-center text-center py-6 border-b border-slate-900 mb-6">
         <h1 className="text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300">
           Homex Mobile Scanner

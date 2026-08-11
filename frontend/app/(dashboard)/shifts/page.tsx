@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, CircleDollarSign, DoorClosed, DoorOpen, RefreshCw, Scale, Clock, Unlock, Lock, Wallet } from "lucide-react";
+import { CalendarClock, CircleDollarSign, DoorClosed, DoorOpen, RefreshCw, Scale, Clock, Unlock, Lock, Wallet, AlertCircle } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { DataTable, Td, Th } from "@/components/shared/data-table";
 import { EmptyState, ErrorState, LoadingState } from "@/components/shared/message-state";
@@ -10,6 +10,7 @@ import { PaginationControls } from "@/components/shared/pagination-controls";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
@@ -45,6 +46,14 @@ function numberFromInput(value: string) {
   return normalizedValue ? Number(normalizedValue) : 0;
 }
 
+function formatInputNumber(value: string) {
+  const clean = value.replace(/[^\d]/g, "");
+  if (!clean) return "";
+  const num = parseInt(clean, 10);
+  if (isNaN(num)) return "";
+  return new Intl.NumberFormat("vi-VN").format(num);
+}
+
 function displayShiftDate(value: string | null) {
   return value ? formatDateTime(value) : "-";
 }
@@ -77,7 +86,6 @@ export default function ShiftsPage() {
   async function loadData(currentPage = page) {
     try {
       setIsLoading(true);
-      setErrorMessage("");
       const promises: [Promise<Shift | null>, Promise<{ items: Shift[]; pagination: Pagination; summary?: ShiftSummary }>, Promise<{ items: UserAccount[] }> | null] = [
         shiftService.current(),
         shiftService.list({ page: currentPage, limit: PAGE_SIZE, status }),
@@ -92,7 +100,7 @@ export default function ShiftsPage() {
         setUsersList(usersData.items);
       }
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
@@ -106,7 +114,6 @@ export default function ShiftsPage() {
     event.preventDefault();
     try {
       setIsSubmitting(true);
-      setErrorMessage("");
       const shift = await shiftService.open({
         openingCash: numberFromInput(openingCash),
         note: note.trim() || undefined,
@@ -121,7 +128,7 @@ export default function ShiftsPage() {
       await loadData(1);
       setPage(1);
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -133,7 +140,6 @@ export default function ShiftsPage() {
 
     try {
       setIsSubmitting(true);
-      setErrorMessage("");
       const shift = await shiftService.close(currentShift.id, {
         closingCash: numberFromInput(closingCash),
         note: note.trim() || undefined,
@@ -145,7 +151,7 @@ export default function ShiftsPage() {
       await loadData(1);
       setPage(1);
     } catch (error) {
-      setErrorMessage(getApiErrorMessage(error));
+      toast.error(getApiErrorMessage(error));
     } finally {
       setIsSubmitting(false);
     }
@@ -160,8 +166,6 @@ export default function ShiftsPage() {
             {t("shifts.refresh")}
           </Button>
         </PageHeader>
-
-        <ErrorState message={errorMessage} />
 
         {isAdmin ? (
           <div className="grid min-w-0 gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -264,7 +268,7 @@ export default function ShiftsPage() {
                 <form onSubmit={handleCloseShift} className="space-y-3">
                   <div className="space-y-2">
                     <Label>{t("shifts.closingCash")}</Label>
-                    <Input inputMode="numeric" value={closingCash} onChange={(event) => setClosingCash(event.target.value)} placeholder="0" />
+                    <Input inputMode="numeric" value={closingCash} onChange={(event) => setClosingCash(formatInputNumber(event.target.value))} placeholder="0" />
                   </div>
                   <div className="space-y-2">
                     <Label>{t("common.note")}</Label>
@@ -295,7 +299,7 @@ export default function ShiftsPage() {
                   </div>
                   <div className="space-y-2">
                     <Label>{t("shifts.openingCash")}</Label>
-                    <Input inputMode="numeric" value={openingCash} onChange={(event) => setOpeningCash(event.target.value)} placeholder="0" />
+                    <Input inputMode="numeric" value={openingCash} onChange={(event) => setOpeningCash(formatInputNumber(event.target.value))} placeholder="0" />
                   </div>
                   <div className="space-y-2">
                     <Label>{t("common.note")}</Label>

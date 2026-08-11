@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "db:backup": "tsx scripts/backup-products.ts",
+    "db:restore": "tsx scripts/restore-products.ts"
   },
   "keywords": [],
   "author": "",

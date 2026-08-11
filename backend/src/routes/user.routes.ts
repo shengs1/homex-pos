@@ -275,7 +275,7 @@ async function verifyAdminPassword(adminId: number, password?: string) {
 router.get(
   "/",
   authenticateToken,
-  authorizeRoles(USER_ROLES.ADMIN),
+  authorizeRoles(USER_ROLES.ADMIN, USER_ROLES.CASHIER),
   catchAsync(async (req, res) => {
     const page = getPaginationValue(req.query.page, 1);
     const limit = Math.min(getPaginationValue(req.query.limit, 10), 100);

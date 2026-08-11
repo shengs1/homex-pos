@@ -23,6 +23,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 import { useLanguage } from "@/contexts/language-context";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { getApiErrorMessage } from "@/lib/api";
@@ -104,6 +105,34 @@ function ProductThumb({ src, alt }: { src?: string | null; alt: string }) {
   );
 }
 
+type GrowthInfo = {
+  text: string;
+  isNegative: boolean;
+  isPositive: boolean;
+  isZero: boolean;
+};
+
+function calculateGrowthInfo(today: number, yesterday: number, t: (key: string, params?: Record<string, string | number>) => string): GrowthInfo | null {
+  if (yesterday === 0) {
+    if (today === 0) return null;
+    return {
+      text: t("dashboard.comparedToYesterday", { percent: "+100%" }),
+      isNegative: false,
+      isPositive: true,
+      isZero: false,
+    };
+  }
+  const diff = today - yesterday;
+  const percent = (diff / yesterday) * 100;
+  const absPercent = Math.abs(percent).toFixed(1);
+  return {
+    text: t("dashboard.comparedToYesterday", { percent: `${absPercent}%` }),
+    isNegative: percent < 0,
+    isPositive: percent > 0,
+    isZero: percent === 0,
+  };
+}
+
 /* ─── KPI Summary Card (SORA-style) ─── */
 type SummaryCardProps = {
   title: string;
@@ -112,7 +141,9 @@ type SummaryCardProps = {
   iconBg?: string;
   iconColor?: string;
   valueColor?: string;
-  growth?: string;
+  accentBorderColor?: string;
+  growthInfo?: GrowthInfo | null;
+  warningText?: string;
   isWarning?: boolean;
 };
 
@@ -123,27 +154,38 @@ function SummaryCard({
   iconBg = "bg-blue-50",
   iconColor = "text-blue-600",
   valueColor = "text-slate-950",
-  growth,
+  accentBorderColor = "border-l-blue-500",
+  growthInfo,
+  warningText,
   isWarning = false,
 }: SummaryCardProps) {
-  const { t } = useLanguage();
-
   return (
     <div
-      className={`min-w-0 min-h-27 rounded-xl border ${isWarning ? "border-rose-200 bg-rose-50/30" : "border-slate-100 bg-white"} p-4 shadow-sm flex flex-col justify-between transition-shadow hover:shadow-md`}
+      className={`min-w-0 min-h-28 rounded-xl border border-slate-100 border-l-4 ${accentBorderColor} bg-white p-4 shadow-xs flex flex-col justify-between transition-all hover:shadow-md hover:-translate-y-0.5`}
     >
-      <div className="flex justify-between items-start gap-4">
+      <div className="flex justify-between items-start gap-3">
         <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{title}</p>
-        <div className={`w-10 h-10 rounded-xl ${iconBg} ${iconColor} flex items-center justify-center shrink-0`}>
-          <Icon className="w-5 h-5" />
+        <div className={`w-9 h-9 rounded-xl ${iconBg} ${iconColor} flex items-center justify-center shrink-0`}>
+          <Icon className="w-4.5 h-4.5" />
         </div>
       </div>
       <div className="mt-2 min-w-0">
-        <div className={`text-3xl font-extrabold tracking-tight truncate ${valueColor}`}>{value}</div>
-        {growth && growth !== t("dashboard.noComparisonData") && growth !== t("dashboard.safeStock") ? (
-           <span className={`mt-2 flex w-max items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${isWarning ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}`}>
-             {isWarning ? "↑" : "↗"} {growth}
-           </span>
+        <div className={`text-2xl font-extrabold tracking-tight truncate ${valueColor}`}>{value}</div>
+        {isWarning && warningText ? (
+          <span className="mt-2 flex w-max items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-600">
+            ↑ {warningText}
+          </span>
+        ) : growthInfo ? (
+          <span
+            className={cn(
+              "mt-2 flex w-max items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold",
+              growthInfo.isNegative && "bg-rose-50 text-rose-600",
+              growthInfo.isPositive && "bg-emerald-50 text-emerald-600",
+              growthInfo.isZero && "bg-slate-100 text-slate-600"
+            )}
+          >
+            {growthInfo.isNegative ? "↘" : growthInfo.isPositive ? "↗" : "→"} {growthInfo.text}
+          </span>
         ) : null}
       </div>
     </div>
@@ -235,16 +277,23 @@ function buildDateSeries(fromDate: string, toDate: string) {
 }
 
 function fillRevenueChartData(items: RevenueReportItem[], fromDate: string, toDate: string) {
-  const revenueByDate = new Map<string, number>();
+  const revenueByDate = new Map<string, { revenue: number; paymentCount: number }>();
   items.forEach((item) => {
     const key = normalizeIsoDate(item.period);
     if (!key) return;
-    revenueByDate.set(key, Number(item.revenue || 0));
+    revenueByDate.set(key, {
+      revenue: Number(item.revenue || 0),
+      paymentCount: Number(item.paymentCount || 0),
+    });
   });
-  return buildDateSeries(fromDate, toDate).map((period) => ({
-    period,
-    revenue: revenueByDate.get(period) || 0,
-  }));
+  return buildDateSeries(fromDate, toDate).map((period) => {
+    const data = revenueByDate.get(period) || { revenue: 0, paymentCount: 0 };
+    return {
+      period,
+      revenue: data.revenue,
+      paymentCount: data.paymentCount,
+    };
+  });
 }
 
 async function buildFallbackDashboardCharts(fromDate: string, toDate: string) {
@@ -339,14 +388,20 @@ function buildPaymentMethodSummary(payments: Payment[]) {
 }
 
 /* ─── Custom Recharts Tooltip ─── */
-function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; payload?: { paymentCount?: number } }>; label?: string }) {
+  const { t } = useLanguage();
   if (!active || !payload?.length) return null;
+  const count = payload[0].payload?.paymentCount ?? 0;
   return (
-    <div className="rounded-xl bg-slate-900/95 px-3 py-2 text-white shadow-lg border border-slate-700">
+    <div className="rounded-xl bg-slate-900/95 px-3.5 py-2 text-white shadow-lg border border-slate-700">
       <p className="text-[10px] font-bold text-slate-300">{formatRevenueChartDate(label)}</p>
       <div className="mt-0.5 flex items-baseline gap-1">
         <span className="text-xs font-black">{formatNumber(payload[0].value)}</span>
         <span className="text-[10px] font-semibold text-slate-400">VND</span>
+      </div>
+      <div className="mt-1 pt-1 border-t border-slate-800 flex items-center justify-between gap-2 text-[10px] text-slate-300">
+        <span className="text-slate-400 font-medium">{t("dashboard.orderCountLabel")}</span>
+        <span className="font-extrabold text-blue-400">{formatNumber(count)} {t("dashboard.ordersUnit")}</span>
       </div>
     </div>
   );
@@ -407,6 +462,7 @@ export default function DashboardPage() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodSummary[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [revenuePeriod, setRevenuePeriod] = useState<"7days" | "30days">("7days");
   const [topProductRange, setTopProductRange] = useState<"7days" | "30days">("7days");
 
   const productRangeFilter = useMemo(() => {
@@ -416,7 +472,12 @@ export default function DashboardPage() {
     return { fromDate: toLocalIsoDate(fromDate), toDate: toLocalIsoDate(toDate) };
   }, [topProductRange]);
 
-  const range = useMemo(() => chartDateRange(), []);
+  const range = useMemo(() => {
+    const toDate = new Date();
+    const fromDate = new Date(toDate);
+    fromDate.setDate(toDate.getDate() - (revenuePeriod === "7days" ? 6 : 29));
+    return { fromDate: toLocalIsoDate(fromDate), toDate: toLocalIsoDate(toDate) };
+  }, [revenuePeriod]);
 
   const cashierText = useMemo(() => ({
     title: t("dashboard.cashierTitle"),
@@ -456,7 +517,7 @@ export default function DashboardPage() {
         ]);
 
         let nextRevenueItems = revenueData.items || [];
-        
+
 
         if (nextRevenueItems.length === 0) {
           const fallbackData = await buildFallbackDashboardCharts(range.fromDate, range.toDate);
@@ -468,7 +529,7 @@ export default function DashboardPage() {
         setSummary(summaryData);
         setYesterdaySummary(yesterdaySummaryData);
         setRevenueItems(nextRevenueItems);
-        
+
         setLowStockProducts(lowStockData.items || []);
         setRecentOrders(recentOrderData.items || []);
         setPaymentMethods(buildPaymentMethodSummary(paymentData.items || []));
@@ -552,23 +613,26 @@ export default function DashboardPage() {
             icon={TrendingUp}
             iconBg="bg-blue-50"
             iconColor="text-blue-600"
-            growth={calculateGrowth(summary.netRevenue, yesterdaySummary?.netRevenue || 0, t)}
+            accentBorderColor="border-l-blue-500"
+            growthInfo={calculateGrowthInfo(summary.netRevenue, yesterdaySummary?.netRevenue || 0, t)}
           />
-          <SummaryCard 
+          <SummaryCard
             title={t("dashboard.orders")}
             value={`${formatNumber(summary.totalOrders)} ${t("orders.title")}`}
-            icon={ReceiptText} 
-            iconBg="bg-violet-50" 
-            iconColor="text-violet-600" 
-            growth={calculateGrowth(summary.totalOrders, yesterdaySummary?.totalOrders || 0, t)}
+            icon={ReceiptText}
+            iconBg="bg-purple-50"
+            iconColor="text-purple-600"
+            accentBorderColor="border-l-purple-500"
+            growthInfo={calculateGrowthInfo(summary.totalOrders, yesterdaySummary?.totalOrders || 0, t)}
           />
-          <SummaryCard 
+          <SummaryCard
             title={t("dashboard.productsSold")}
             value={`${formatNumber(summary.productsSold)} ${t("products.title")}`}
-            icon={Package} 
-            iconBg="bg-emerald-50" 
-            iconColor="text-emerald-600" 
-            growth={calculateGrowth(summary.productsSold, yesterdaySummary?.productsSold || 0, t)}
+            icon={Package}
+            iconBg="bg-emerald-50"
+            iconColor="text-emerald-600"
+            accentBorderColor="border-l-emerald-500"
+            growthInfo={calculateGrowthInfo(summary.productsSold, yesterdaySummary?.productsSold || 0, t)}
           />
           <SummaryCard
             title={t("dashboard.lowStockWarning")}
@@ -577,8 +641,9 @@ export default function DashboardPage() {
             iconBg="bg-rose-50"
             iconColor="text-rose-600"
             valueColor="text-rose-600"
+            accentBorderColor="border-l-rose-500"
             isWarning={summary.lowStockProducts > 0}
-            growth={summary.lowStockProducts > 0 ? t("dashboard.lowStockCount", { count: summary.lowStockProducts }) : t("dashboard.safeStock")}
+            warningText={summary.lowStockProducts > 0 ? t("dashboard.lowStockCount", { count: summary.lowStockProducts }) : undefined}
           />
         </div>
       ) : null}
@@ -588,8 +653,14 @@ export default function DashboardPage() {
         {/* Doanh thu 7 ngày */}
         <div className="col-span-12 xl:col-span-8 min-w-0 flex h-[360px] flex-col rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-sm font-extrabold uppercase text-slate-900 tracking-wide">{t("dashboard.revenue7Days")}</h2>
-            <select className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 outline-none focus:border-primary focus:ring-1 focus:ring-primary">
+            <h2 className="text-sm font-extrabold uppercase text-slate-900 tracking-wide">
+              {revenuePeriod === "7days" ? t("dashboard.revenue7Days") : t("dashboard.revenue30Days")}
+            </h2>
+            <select
+              value={revenuePeriod}
+              onChange={(e) => setRevenuePeriod(e.target.value as "7days" | "30days")}
+              className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 outline-none focus:border-primary focus:ring-1 focus:ring-primary cursor-pointer"
+            >
               <option value="7days">{t("dashboard.last7DaysOption")}</option>
               <option value="30days">{t("dashboard.last30DaysOption")}</option>
             </select>
@@ -749,5 +820,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-

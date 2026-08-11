@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
-import { Download, Upload, RotateCcw, Save, Store, User, CreditCard, Receipt, Package, QrCode, Shield, Settings2, Clock } from "lucide-react";
+import { useEffect, useRef, useState, useMemo, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import { Download, Upload, RotateCcw, Save, Store, User, CreditCard, Receipt, Package, QrCode, Shield, Settings2, Clock, ChevronDown, Check } from "lucide-react";
 import { RoleGuard } from "@/components/auth/role-guard";
 import { ErrorState, LoadingState } from "@/components/shared/message-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -18,6 +18,7 @@ import { getApiErrorMessage } from "@/lib/api";
 import { confirmAction } from "@/lib/confirm-action";
 import { settingService, type SettingPayload } from "@/services/homex.service";
 import { getAuthUser } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import type { AuthUser } from "@/types/auth";
 
 const emptyForm: SettingPayload = {
@@ -57,6 +58,128 @@ const emptyForm: SettingPayload = {
   smtpUser: "",
   smtpPassword: "",
 };
+
+const TIME_OPTIONS = [
+  "00:00", "01:00", "02:00", "03:00", "04:00", "05:00",
+  "06:00", "06:30", "07:00", "07:30", "08:00", "08:30",
+  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30",
+  "12:00", "12:30", "13:00", "13:30", "14:00", "14:30",
+  "15:00", "15:30", "16:00", "16:30", "17:00", "17:30",
+  "18:00", "18:30", "19:00", "19:30", "20:00", "20:30",
+  "21:00", "21:30", "22:00", "22:30", "23:00", "23:30", "23:59"
+];
+
+function parseOperatingHours(value?: string | null) {
+  if (!value || !value.trim()) return { start: "07:00", end: "22:00" };
+  const clean = value.trim().toLowerCase();
+  const parts = clean.split(/[-–—]|đến|\bto\b/);
+  if (parts.length !== 2) return { start: "07:00", end: "22:00" };
+
+  const parseOne = (s: string) => {
+    const trimmed = s.trim();
+    const colonMatch = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+    if (colonMatch) {
+      const h = parseInt(colonMatch[1], 10).toString().padStart(2, "0");
+      const m = parseInt(colonMatch[2], 10).toString().padStart(2, "0");
+      return `${h}:${m}`;
+    }
+    const hMatch = trimmed.match(/^(\d{1,2})h(\d{2})?$/);
+    if (hMatch) {
+      const h = parseInt(hMatch[1], 10).toString().padStart(2, "0");
+      const m = (hMatch[2] ? parseInt(hMatch[2], 10) : 0).toString().padStart(2, "0");
+      return `${h}:${m}`;
+    }
+    const numMatch = trimmed.match(/^(\d{1,2})$/);
+    if (numMatch) {
+      const h = parseInt(numMatch[1], 10).toString().padStart(2, "0");
+      return `${h}:00`;
+    }
+    return null;
+  };
+
+  const start = parseOne(parts[0]) || "07:00";
+  const end = parseOne(parts[1]) || "22:00";
+  return { start, end };
+}
+
+function TimePickerSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  options: string[];
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen && listRef.current) {
+      const selectedEl = listRef.current.querySelector("[data-selected='true']");
+      if (selectedEl) {
+        selectedEl.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }, [isOpen]);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <span className="mb-1 block text-[10px] font-bold text-slate-400 uppercase">{label}</span>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="flex h-10 w-full items-center justify-between rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-800 shadow-2xs hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-teal-700 cursor-pointer"
+      >
+        <span>{value}</span>
+        <ChevronDown className={cn("h-4 w-4 text-slate-400 transition-transform duration-200", isOpen && "rotate-180")} />
+      </button>
+
+      {isOpen && (
+        <div
+          ref={listRef}
+          className="absolute top-full left-0 mt-1.5 w-full z-50 max-h-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl ring-1 ring-black/5"
+        >
+          {options.map((time) => {
+            const isSelected = time === value;
+            return (
+              <div
+                key={time}
+                data-selected={isSelected}
+                onClick={() => {
+                  onChange(time);
+                  setIsOpen(false);
+                }}
+                className={cn(
+                  "flex items-center justify-between px-3 py-2 text-xs font-bold rounded-lg cursor-pointer transition-colors",
+                  isSelected
+                    ? "bg-teal-800 text-white"
+                    : "text-slate-700 hover:bg-teal-50 hover:text-teal-900"
+                )}
+              >
+                <span>{time}</span>
+                {isSelected && <Check className="h-3.5 w-3.5 text-teal-200" />}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function formatDateTimeVN(value?: string | Date | null) {
   if (!value) return "-";
@@ -123,6 +246,7 @@ export default function SettingsPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const { toast } = useToast();
+  const parsedHours = useMemo(() => parseOperatingHours(form.businessHours), [form.businessHours]);
   const { settings, isLoading, refreshSettings } = useSettings();
 
   useEffect(() => {
@@ -244,7 +368,20 @@ export default function SettingsPage() {
                   <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.taxCode || ""} onChange={(event) => updateField("taxCode", event.target.value)} />
                 </Field>
                 <Field label={t("settings.operatingHours")}>
-                  <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.businessHours || ""} onChange={(event) => updateField("businessHours", event.target.value)} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <TimePickerSelect
+                      label={t("settings.openTime")}
+                      value={parsedHours.start}
+                      onChange={(newStart) => updateField("businessHours", `${newStart} - ${parsedHours.end}`)}
+                      options={TIME_OPTIONS}
+                    />
+                    <TimePickerSelect
+                      label={t("settings.closeTime")}
+                      value={parsedHours.end}
+                      onChange={(newEnd) => updateField("businessHours", `${parsedHours.start} - ${newEnd}`)}
+                      options={TIME_OPTIONS}
+                    />
+                  </div>
                 </Field>
                 <Field label={t("settings.hotline")}>
                   <Input className="h-10 border-slate-200 text-sm text-slate-800" value={form.storeHotline || ""} onChange={(event) => updateField("storeHotline", event.target.value)} />
@@ -336,7 +473,7 @@ export default function SettingsPage() {
                 <ToggleField label={t("settings.enableBarcodeScanner")} checked={form.enableBarcodeScanner} onChange={(value) => updateField("enableBarcodeScanner", value)} />
                 <ToggleField label={t("settings.confirmBeforeCheckout")} checked={form.confirmBeforeCheckout} onChange={(value) => updateField("confirmBeforeCheckout", value)} />
                 <ToggleField label={t("settings.compactPOS")} checked={form.compactPosMode} onChange={(value) => updateField("compactPosMode", value)} />
-                <ToggleField label="Bật thanh toán payOS" checked={form.enablePayOSPayment} onChange={(value) => updateField("enablePayOSPayment", value)} />
+                <ToggleField label={t("settings.enablePayos")} checked={form.enablePayOSPayment} onChange={(value) => updateField("enablePayOSPayment", value)} />
               </div>
             </SectionCard>
 
@@ -386,7 +523,7 @@ export default function SettingsPage() {
                     value={form.bankName || ""}
                     onChange={(event) => updateField("bankName", event.target.value)}
                   >
-                    <option value="">-- Chọn ngân hàng --</option>
+                    <option value="">{t("settings.chooseBank")}</option>
                     <option value="VCB">Vietcombank - Ngân hàng TMCP Ngoại Thương Việt Nam (VCB)</option>
                     <option value="CTG">VietinBank - Ngân hàng TMCP Công thương Việt Nam (CTG)</option>
                     <option value="BIDV">BIDV - Ngân hàng TMCP Đầu tư và Phát triển Việt Nam</option>
@@ -437,10 +574,10 @@ export default function SettingsPage() {
                 </Field>
                 <Field label={t("settings.vietQrTemplate")}>
                   <Select value={["compact2", "compact", "qr_only", "print"].includes(form.vietQrTemplate || "") ? (form.vietQrTemplate as string) : "compact2"} onChange={(event) => updateField("vietQrTemplate", event.target.value)}>
-                    <option value="compact2">compact2</option>
-                    <option value="compact">compact</option>
-                    <option value="qr_only">qr_only</option>
-                    <option value="print">print</option>
+                    <option value="compact2">{t("settings.templateCompact2")}</option>
+                    <option value="compact">{t("settings.templateCompact")}</option>
+                    <option value="qr_only">{t("settings.templateQrOnly")}</option>
+                    <option value="print">{t("settings.templatePrint")}</option>
                   </Select>
                   <p className="text-[10px] text-slate-500 mt-1">{t("settings.vietQrTemplateHelpCompact") || t("settings.vietQrTemplateHelp")}</p>
                 </Field>
@@ -449,7 +586,7 @@ export default function SettingsPage() {
                   <p className="text-[10px] text-slate-500 mt-1">{t("settings.transferContentHelp")}</p>
                 </Field>
                 <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-3 text-xs text-blue-800">
-                  <p className="font-bold">Cấu hình payOS đặt ở backend env, không nhập secret tại frontend.</p>
+                  <p className="font-bold">{t("settings.payosBackendNotice")}</p>
                   <div className="mt-2 grid gap-1 font-mono text-[11px]">
                     <span>PAYOS_CLIENT_ID</span>
                     <span>PAYOS_API_KEY</span>

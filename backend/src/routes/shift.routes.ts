@@ -177,7 +177,7 @@ router.post(
         });
       }
 
-      ensureWithinBusinessHours();
+      await ensureWithinBusinessHours();
       await ensureShiftCapacity(result.data.shiftType);
 
       const targetUserId = result.data.userId;

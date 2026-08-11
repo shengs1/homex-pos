@@ -40,6 +40,13 @@ app.get("/", (req, res) => {
   res.send("Homex POS Backend is running");
 });
 
+app.get("/mobile-scan", (req, res) => {
+  const sid = (req.query.sid as string) || "";
+  const frontendUrl = process.env.FRONTEND_URL || "https://disparate-sizable-brick.ngrok-free.dev";
+  const targetUrl = sid ? `${frontendUrl}/mobile-scan?sid=${encodeURIComponent(sid)}` : `${frontendUrl}/mobile-scan`;
+  return res.redirect(targetUrl);
+});
+
 app.get("/api/health/db", async (req, res) => {
   try {
     const roleCount = await prisma.role.count();
@@ -120,6 +127,34 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/invoices/public", publicInvoiceRoutes);
 app.use("/api/pos", remoteScanRoutes);
 app.use("/api/pos", salesAssistantRoutes);
+
+// Proxy public warranty & invoice pages to Next.js frontend (port 3000) when ngrok routes to backend (port 5000)
+app.use(async (req, res, next) => {
+  if (
+    req.path.startsWith("/tra-cuu-bao-hanh") ||
+    req.path.startsWith("/invoice") ||
+    req.path.startsWith("/_next")
+  ) {
+    try {
+      const targetUrl = `http://127.0.0.1:3000${req.originalUrl}`;
+      const response = await fetch(targetUrl);
+      
+      const contentType = response.headers.get("content-type");
+      if (contentType) {
+        res.setHeader("Content-Type", contentType);
+      }
+      
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      return res.status(response.status).send(buffer);
+    } catch (error) {
+      console.error("Proxy error to frontend:", error);
+      return res.status(500).send("Không thể kết nối đến giao diện máy chủ");
+    }
+  }
+  next();
+});
+
 app.use(errorMiddleware);
 
 const PORT = process.env.PORT || 5000;

@@ -30,7 +30,8 @@ export function resetRemoteBarcodeSessionId() {
 export function buildMobileScanUrl(sessionId: string) {
   if (!sessionId) return "";
 
-  const baseUrl = process.env.NEXT_PUBLIC_MOBILE_SCAN_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "");
+  let baseUrl = process.env.NEXT_PUBLIC_MOBILE_SCAN_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "");
+  baseUrl = baseUrl.replace(/\/+$/, "");
   return `${baseUrl}/mobile-scan?sid=${sessionId}`;
 }
 

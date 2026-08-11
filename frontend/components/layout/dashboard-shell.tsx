@@ -159,8 +159,10 @@ export function DashboardShell({ children, allowedRoles = DEFAULT_ALLOWED_ROLES 
 
   if (isChecking || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground shadow-sm">Checking authentication</div>
+      <div className="flex min-h-screen items-center justify-center bg-background" suppressHydrationWarning>
+        <div className="rounded-lg border bg-card p-6 text-sm text-muted-foreground shadow-sm" suppressHydrationWarning>
+          {t("app.loadingAuth")}
+        </div>
       </div>
     );
   }

@@ -436,6 +436,7 @@ export type SalesAssistantResponse = {
 };
 
 export interface SalesAssistantRequest {
+  language?: "vi" | "en";
   need?: string;
   budgetMin?: number;
   budgetMax?: number;
